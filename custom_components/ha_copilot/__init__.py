@@ -44,6 +44,7 @@ from .const import (
     STATIC_URL_BASE,
 )
 from .http_api import CopilotChatView, CopilotConfigView
+from .mcp_server import CopilotMCPView
 from .tools import dispatch as dispatch_tool
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,6 +84,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # HTTP API for the panel.
     hass.http.register_view(CopilotChatView(hass))
     hass.http.register_view(CopilotConfigView(hass))
+    # Native, public MCP endpoint (deep fusion + interface for any agent).
+    hass.http.register_view(CopilotMCPView(hass))
 
     # Serve the panel's static assets.
     panel_dir = os.path.join(os.path.dirname(__file__), "panel")
