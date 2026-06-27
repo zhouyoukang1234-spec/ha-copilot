@@ -23,6 +23,7 @@ const VIEWS = [
   { id: "editor", icon: "M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z", label: "配置编辑" },
   { id: "logs", icon: "M3 3h18v2H3zm0 4h18v2H3zm0 4h12v2H3zm0 4h18v2H3zm0 4h12v2H3z", label: "日志" },
   { id: "areas", icon: "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9z", label: "区域" },
+  { id: "templates", icon: "M3 3h18v4H3V3zm0 7h8v11H3V10zm10 0h8v11h-8V10z", label: "模板传感器" },
   { id: "integrations", icon: "M10 4h4v2h2a2 2 0 0 1 2 2v3h2v4h-2v3a2 2 0 0 1-2 2h-3v2h-4v-2H8a2 2 0 0 1-2-2v-3H4v-4h2V8a2 2 0 0 1 2-2h2V4z", label: "集成" },
 ];
 
@@ -277,6 +278,7 @@ class HaCopilotPanel extends HTMLElement {
       if (this._view === "editor") return this._viewEditor(host, actions);
       if (this._view === "logs") return this._viewLogs(host, actions);
       if (this._view === "areas") return this._viewAreas(host, actions);
+      if (this._view === "templates") return this._viewTemplates(host, actions);
       if (this._view === "integrations") return this._viewIntegrations(host, actions);
     } catch (e) {
       host.innerHTML = "";
@@ -874,6 +876,79 @@ class HaCopilotPanel extends HTMLElement {
     } catch (e) {
       list.innerHTML = "";
       list.appendChild(this._el("div", { class: "cp-empty", text: "无法读取区域: " + (e.message || e) }));
+    }
+  }
+
+  // ---- TEMPLATE SENSORS --------------------------------------------------
+  async _viewTemplates(host, actions) {
+    actions.appendChild(this._actionBtn("刷新", () => this._renderView()));
+    host.innerHTML = "";
+    host.appendChild(this._el("div", { class: "cp-note", text: "模板传感器管理。新建会先用实时状态校验 Jinja 模板再部署；删除走能力层 delete_template_sensor + 自动清理实体，与 MCP 同源。" }));
+
+    // Create row: name + Jinja state template + optional unit.
+    const createRow = this._el("div", { class: "cp-area-create" });
+    const nameInp = this._el("input", { class: "cp-input-text", type: "text", placeholder: "传感器名称，如 开灯数量" });
+    const tplInp = this._el("input", { class: "cp-input-text", type: "text", placeholder: "Jinja 状态模板，如 {{ states.light | selectattr('state','eq','on') | list | count }}" });
+    const unitInp = this._el("input", { class: "cp-input-text", type: "text", placeholder: "单位（可选）" });
+    const addBtn = this._el("button", { class: "cp-chip cp-chip-accent", text: "新建模板传感器" });
+    const doCreate = async () => {
+      const nm = nameInp.value.trim();
+      const tpl = tplInp.value.trim();
+      if (!nm || !tpl) return;
+      addBtn.disabled = true; addBtn.textContent = "校验并部署…";
+      const args = { name: nm, state: tpl };
+      if (unitInp.value.trim()) args.unit = unitInp.value.trim();
+      const r = await this._runTool("create_template_sensor", args);
+      if (r && r.error) {
+        addBtn.textContent = "失败"; addBtn.title = r.error;
+        setTimeout(() => { addBtn.textContent = "新建模板传感器"; addBtn.disabled = false; addBtn.title = ""; }, 2000);
+        return;
+      }
+      nameInp.value = ""; tplInp.value = ""; unitInp.value = "";
+      setTimeout(() => this._renderView(), 600);
+    };
+    addBtn.onclick = doCreate;
+    createRow.appendChild(nameInp); createRow.appendChild(tplInp);
+    createRow.appendChild(unitInp); createRow.appendChild(addBtn);
+    host.appendChild(createRow);
+
+    const list = this._el("div", { class: "cp-list", id: "cp-tpllist" });
+    host.appendChild(list);
+    list.appendChild(this._el("div", { class: "cp-empty", text: "加载中…" }));
+    try {
+      const r = await this._runTool("list_template_sensors");
+      const sensors = (r && r.template_sensors) || [];
+      list.innerHTML = "";
+      if (!sensors.length) {
+        list.appendChild(this._el("div", { class: "cp-empty", text: "还没有模板传感器。用上方表单新建一个。" }));
+        return;
+      }
+      sensors.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      for (const s of sensors) {
+        const row = this._el("div", { class: "cp-row" });
+        const left = this._el("div", { class: "cp-row-main" });
+        const stateTxt = s.current_state == null ? "（未渲染）" : s.current_state + (s.unit_of_measurement ? " " + s.unit_of_measurement : "");
+        left.appendChild(this._el("div", { class: "cp-row-name", text: s.name + "  ·  " + stateTxt }));
+        left.appendChild(this._el("div", { class: "cp-row-id", text: s.entity_id + "   " + (s.state_template || "") }));
+        row.appendChild(left);
+        const right = this._el("div", { class: "cp-row-ctrl" });
+        const delBtn = this._el("button", {
+          class: "cp-chip cp-chip-danger", text: "删除",
+          onclick: async () => {
+            if (!window.confirm(`删除模板传感器「${s.name}」(${s.entity_id})？`)) return;
+            delBtn.disabled = true; delBtn.textContent = "删除中…";
+            const rr = await this._runTool("delete_template_sensor", { name: s.name });
+            if (rr && rr.error) { delBtn.textContent = "失败"; setTimeout(() => { delBtn.textContent = "删除"; delBtn.disabled = false; }, 1200); return; }
+            setTimeout(() => this._renderView(), 600);
+          },
+        });
+        right.appendChild(delBtn);
+        row.appendChild(right);
+        list.appendChild(row);
+      }
+    } catch (e) {
+      list.innerHTML = "";
+      list.appendChild(this._el("div", { class: "cp-empty", text: "无法读取模板传感器: " + (e.message || e) }));
     }
   }
 

@@ -872,6 +872,44 @@ async def _delete_helper(
     return {"ok": True, "deleted": entity_id, "purged": purged}
 
 
+async def _list_template_sensors(hass: HomeAssistant) -> dict[str, Any]:
+    """List template sensors managed by ha_copilot (from the managed package).
+
+    Each entry includes the live state/availability so the UI can show whether the
+    sensor is currently rendering. This is the 'read' of the template-sensor lifecycle.
+    """
+    path = _managed_package_path(hass)
+
+    def _read() -> list[dict[str, Any]]:
+        doc = _load_managed_package(path)
+        out: list[dict[str, Any]] = []
+        for block in doc.get("template") or []:
+            sensors = block.get("sensor")
+            if not isinstance(sensors, list):
+                continue
+            for e in sensors:
+                if isinstance(e, dict) and e.get("name"):
+                    out.append(e)
+        return out
+
+    entries = await hass.async_add_executor_job(_read)
+    sensors = []
+    for e in entries:
+        name = e["name"]
+        slug = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_") or "sensor"
+        eid = f"sensor.{slug}"
+        st = hass.states.get(eid)
+        sensors.append({
+            "name": name,
+            "entity_id": eid,
+            "state_template": e.get("state"),
+            "unit_of_measurement": e.get("unit_of_measurement"),
+            "device_class": e.get("device_class"),
+            "current_state": st.state if st else None,
+        })
+    return {"template_sensors": sensors}
+
+
 async def _delete_template_sensor(hass: HomeAssistant, name: str) -> dict[str, Any]:
     """Remove a template sensor from the managed package by name, then reload."""
     path = _managed_package_path(hass)
@@ -1025,6 +1063,8 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _create_template_sensor(
                 hass, store, args["name"], args["state"], unit=args.get("unit"),
                 device_class=args.get("device_class"), icon=args.get("icon"))
+        if name == "list_template_sensors":
+            return await _list_template_sensors(hass)
         if name == "create_blueprint_automation":
             return await _create_blueprint_automation(
                 hass, args["alias"], args["blueprint_path"], args.get("inputs") or {})
@@ -1438,6 +1478,14 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 },
                 "required": ["name", "state"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_template_sensors",
+            "description": "List the template sensors managed by ha_copilot (from the managed package), each with its entity_id, state template, and current live state. This is the 'read' of the template-sensor lifecycle.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
