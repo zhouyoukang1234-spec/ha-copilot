@@ -376,6 +376,161 @@ async def _create_script(hass: HomeAssistant, alias: str, sequence: Any) -> dict
     return {"ok": True, "script_entity_id": f"script.{key}"}
 
 
+def _managed_package_path(hass: HomeAssistant) -> str:
+    return _safe_path(hass, "packages/ha_copilot_managed.yaml")
+
+
+def _load_managed_package(path: str) -> dict:
+    if os.path.isfile(path):
+        with open(path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def _dump_managed_package(path: str, doc: dict) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(doc, f, allow_unicode=True, sort_keys=False)
+
+
+async def _assign_entities_by_rules(
+    hass: HomeAssistant, rules: list, only_unassigned: bool = True
+) -> dict[str, Any]:
+    """Bulk-assign registry entities to areas by keyword rules (first hit wins).
+
+    rules: [[area_name, [keyword, ...]], ...]. Areas are created idempotently.
+    Replaces the tedious one-by-one area assignment in the UI for hundreds of entities.
+    """
+    ent_reg = er.async_get(hass)
+    area_reg = ar.async_get(hass)
+    norm = [(r[0], list(r[1])) for r in rules]
+    name_to_id = {a.name: a.id for a in area_reg.async_list_areas()}
+    stats: dict[str, int] = {}
+    for area_name, _ in norm:
+        if area_name not in name_to_id:
+            name_to_id[area_name] = area_reg.async_create(area_name).id
+        stats.setdefault(area_name, 0)
+    stats["_skipped"] = 0
+    stats["_unmatched"] = 0
+    for entry in list(ent_reg.entities.values()):
+        if only_unassigned and entry.area_id:
+            stats["_skipped"] += 1
+            continue
+        hay = f"{entry.entity_id} {entry.original_name or ''} {entry.name or ''}".lower()
+        placed = False
+        for area_name, keywords in norm:
+            if any(k.lower() in hay for k in keywords):
+                ent_reg.async_update_entity(entry.entity_id, area_id=name_to_id[area_name])
+                stats[area_name] += 1
+                placed = True
+                break
+        if not placed:
+            stats["_unmatched"] += 1
+    return {"ok": True, "stats": stats}
+
+
+async def _create_helper(
+    hass: HomeAssistant, store: dict, domain: str, object_id: str, config: dict
+) -> dict[str, Any]:
+    """Define a helper entity (input_boolean/number/text/select/datetime, timer, counter)."""
+    if not store.get(CONF_ALLOW_WRITE, True):
+        return {"error": "writes are disabled (allow_write: false)"}
+    allowed = {
+        "input_boolean", "input_number", "input_text", "input_select",
+        "input_datetime", "timer", "counter",
+    }
+    if domain not in allowed:
+        return {"error": f"unsupported helper domain '{domain}'; one of {sorted(allowed)}"}
+    path = _managed_package_path(hass)
+
+    def _write() -> None:
+        doc = _load_managed_package(path)
+        helpers = doc.get(domain) or {}
+        helpers[object_id] = config
+        doc[domain] = helpers
+        _dump_managed_package(path, doc)
+
+    await hass.async_add_executor_job(_write)
+    entity_id = f"{domain}.{object_id}"
+    # Some helper domains (e.g. counter, timer) expose no reload service in this
+    # HA version, so a freshly-added entity only appears after a restart. Be
+    # honest about whether it is live now rather than claiming success blindly.
+    if hass.services.has_service(domain, "reload"):
+        await hass.services.async_call(domain, "reload", {}, blocking=True)
+    live = hass.states.get(entity_id) is not None
+    result: dict[str, Any] = {"ok": True, "entity_id": entity_id, "live": live}
+    if not live:
+        result["note"] = (
+            f"'{domain}' has no working reload in this HA version; the helper is "
+            "written to packages/ha_copilot_managed.yaml and will appear after a restart."
+        )
+    return result
+
+
+async def _create_template_sensor(
+    hass: HomeAssistant, store: dict, name: str, state: str, *,
+    unit: str | None = None, device_class: str | None = None, icon: str | None = None,
+) -> dict[str, Any]:
+    """Validate a Jinja state template against live state, then deploy it as a template sensor."""
+    if not store.get(CONF_ALLOW_WRITE, True):
+        return {"error": "writes are disabled (allow_write: false)"}
+    try:
+        Template(state, hass).async_render()
+    except Exception as err:  # noqa: BLE001 - template errors are user-facing
+        return {"error": f"state template failed validation: {type(err).__name__}: {err}"}
+    entry: dict[str, Any] = {"name": name, "state": state}
+    if unit:
+        entry["unit_of_measurement"] = unit
+    if device_class:
+        entry["device_class"] = device_class
+    if icon:
+        entry["icon"] = icon
+    path = _managed_package_path(hass)
+
+    def _write() -> None:
+        doc = _load_managed_package(path)
+        blocks = doc.get("template") or []
+        target = next((b for b in blocks if "sensor" in b), None)
+        if target is None:
+            target = {"sensor": []}
+            blocks.append(target)
+        target["sensor"] = [e for e in target["sensor"] if e.get("name") != name] + [entry]
+        doc["template"] = blocks
+        _dump_managed_package(path, doc)
+
+    await hass.async_add_executor_job(_write)
+    await _reload(hass, "template")
+    return {"ok": True, "name": name}
+
+
+async def _create_blueprint_automation(
+    hass: HomeAssistant, alias: str, blueprint_path: str, inputs: dict
+) -> dict[str, Any]:
+    """Instantiate an automation from a blueprint (use_blueprint + inputs) and reload."""
+    path = _safe_path(hass, "automations.yaml")
+
+    def _append() -> str:
+        existing: list = []
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+                if isinstance(loaded, list):
+                    existing = loaded
+        auto_id = f"copilot_bp_{len(existing) + 1}_{abs(hash(alias)) % 100000}"
+        existing.append({
+            "id": auto_id, "alias": alias,
+            "use_blueprint": {"path": blueprint_path, "input": inputs},
+        })
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(existing, f, allow_unicode=True, sort_keys=False)
+        return auto_id
+
+    auto_id = await hass.async_add_executor_job(_append)
+    if hass.services.has_service("automation", "reload"):
+        await hass.services.async_call("automation", "reload", {}, blocking=True)
+    return {"ok": True, "automation_id": auto_id}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -438,6 +593,19 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if seq is None:
                 seq = args.get("action")
             return await _create_script(hass, args["alias"], seq)
+        if name == "assign_entities_by_rules":
+            return await _assign_entities_by_rules(
+                hass, args["rules"], bool(args.get("only_unassigned", True)))
+        if name == "create_helper":
+            return await _create_helper(
+                hass, store, args["domain"], args["object_id"], args.get("config") or {})
+        if name == "create_template_sensor":
+            return await _create_template_sensor(
+                hass, store, args["name"], args["state"], unit=args.get("unit"),
+                device_class=args.get("device_class"), icon=args.get("icon"))
+        if name == "create_blueprint_automation":
+            return await _create_blueprint_automation(
+                hass, args["alias"], args["blueprint_path"], args.get("inputs") or {})
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -723,6 +891,71 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "sequence": {"type": "array", "description": "List of action steps"},
                 },
                 "required": ["alias", "sequence"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_entities_by_rules",
+            "description": "Bulk-assign registry entities to areas by keyword rules (first hit wins); areas are created if missing. Replaces clicking through hundreds of entities in the UI. rules is a list of [area_name, [keyword, ...]].",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rules": {"type": "array", "description": "[[area_name, [keyword, ...]], ...]"},
+                    "only_unassigned": {"type": "boolean", "description": "Only touch entities not already in an area (default true)"},
+                },
+                "required": ["rules"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_helper",
+            "description": "Define a helper entity (input_boolean/input_number/input_text/input_select/input_datetime/timer/counter) and reload it. Requires packages to be included from configuration.yaml.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string", "description": "Helper domain, e.g. 'input_boolean'"},
+                    "object_id": {"type": "string", "description": "Helper object id (slug)"},
+                    "config": {"type": "object", "description": "Helper config, e.g. {name: '...'}"},
+                },
+                "required": ["domain", "object_id", "config"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_template_sensor",
+            "description": "Validate a Jinja state template against live state, then deploy it as a template sensor and reload. Rejects templates that fail to render so you never deploy a broken sensor.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "state": {"type": "string", "description": "Jinja state template"},
+                    "unit": {"type": "string"},
+                    "device_class": {"type": "string"},
+                    "icon": {"type": "string"},
+                },
+                "required": ["name", "state"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_blueprint_automation",
+            "description": "Instantiate an automation from a blueprint by appending use_blueprint+inputs to automations.yaml and reloading. Use list_blueprints/blueprint inputs to discover blueprint_path and required inputs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "alias": {"type": "string"},
+                    "blueprint_path": {"type": "string", "description": "e.g. 'homeassistant/motion_light.yaml'"},
+                    "inputs": {"type": "object", "description": "Blueprint input values"},
+                },
+                "required": ["alias", "blueprint_path", "inputs"],
             },
         },
     },
