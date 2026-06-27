@@ -1,0 +1,12 @@
+automation:
+- id: devin_devin_7a895947
+  alias: Devin · 联动:占用即开灯 (编程授作)
+  mode: single
+  trigger:
+  - platform: state
+    entity_id: binary_sensor.xiaomi_cn_blt_3_1kd2sgr5oco00_03_occupancy_status_p_2_1078
+    to: 'on'
+  action:
+  - service: light.turn_on
+    target:
+      entity_id: light.san_hao_deng
