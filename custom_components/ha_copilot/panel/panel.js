@@ -532,6 +532,20 @@ class HaCopilotPanel extends HTMLElement {
       });
       sw.appendChild(this._el("span", { class: "cp-knob" }));
       right.appendChild(sw);
+      const del = this._el("button", {
+        class: "cp-chip cp-chip-danger", text: "删除",
+        onclick: async () => {
+          const label = s.attributes.friendly_name || s.entity_id;
+          if (!window.confirm(`删除自动化「${label}」？将从 automations.yaml 移除（保留备份）。`)) return;
+          del.textContent = "删除中…"; del.disabled = true;
+          try {
+            const r = await this._runTool("delete_automation", { identifier: s.attributes.id || label });
+            if (r && r.error) { del.textContent = "失败"; del.disabled = false; return; }
+          } catch (e) { del.textContent = "失败"; del.disabled = false; return; }
+          setTimeout(() => this._renderView(), 600);
+        },
+      });
+      right.appendChild(del);
       row.appendChild(right);
       list.appendChild(row);
     }
@@ -897,6 +911,8 @@ class HaCopilotPanel extends HTMLElement {
     .cp-view{flex:1;overflow-y:auto;padding:16px;}
     .cp-chip{border:1px solid var(--divider-color,#3c3c3c);background:var(--secondary-background-color,#2d2d2d);color:inherit;border-radius:7px;padding:5px 12px;font-size:13px;cursor:pointer;}
     .cp-chip:hover{border-color:var(--primary-color,#03a9f4);color:var(--primary-color,#03a9f4);}
+    .cp-chip-danger:hover{border-color:var(--error-color,#db4437);color:var(--error-color,#db4437);}
+    .cp-chip[disabled]{opacity:.5;cursor:default;}
     .cp-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
     .cp-card{background:var(--card-background-color,#252526);border:1px solid var(--divider-color,#333);border-radius:12px;padding:16px;}
     .cp-card-v{font-size:30px;font-weight:700;color:var(--primary-color,#03a9f4);}
