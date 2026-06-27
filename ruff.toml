@@ -1,0 +1,4 @@
+# The snapshot/ directory is an archived, sanitized copy of the user's real
+# Home Assistant config plus throwaway operator/twin helper scripts. It is
+# reference material, not maintained source, so it is excluded from linting.
+extend-exclude = ["snapshot"]
