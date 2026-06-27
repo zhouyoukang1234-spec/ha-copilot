@@ -251,6 +251,19 @@ async def _create_area(hass: HomeAssistant, name: str) -> dict[str, Any]:
     return {"ok": True, "area_id": area.id, "name": area.name}
 
 
+async def _rename_area(hass: HomeAssistant, identifier: str, new_name: str) -> dict[str, Any]:
+    """Rename an area (the area-registry 'update'), resolving by area_id or current name."""
+    area_id = _resolve_area_id(hass, identifier)
+    if area_id is None:
+        return {"error": f"no area matched id/name '{identifier}'"}
+    reg = ar.async_get(hass)
+    clash = next((a for a in reg.async_list_areas() if a.name == new_name and a.id != area_id), None)
+    if clash is not None:
+        return {"error": f"another area already named '{new_name}'"}
+    area = reg.async_update(area_id, name=new_name)
+    return {"ok": True, "area_id": area.id, "name": area.name}
+
+
 def _resolve_area_id(hass: HomeAssistant, area: str) -> str | None:
     reg = ar.async_get(hass)
     if reg.async_get_area(area) is not None:
@@ -911,6 +924,14 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _read_logs(hass, args.get("lines", 60))
         if name == "create_area":
             return await _create_area(hass, args["name"])
+        if name == "rename_area":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            ident = args.get("identifier") or args.get("area_id") or args.get("name")
+            new_name = args.get("new_name") or args.get("to")
+            if not ident or not new_name:
+                return {"error": "missing required arguments: identifier + new_name"}
+            return await _rename_area(hass, ident, new_name)
         if name == "rename_entity":
             return await _update_entity(hass, args["entity_id"], name=args["name"])
         if name == "assign_entity_area":
@@ -1174,6 +1195,21 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"name": {"type": "string", "description": "Area name"}},
                 "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rename_area",
+            "description": "Rename an existing area (the area 'update'). Resolves the target by area_id or current name; rejects a name already used by another area.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "identifier": {"type": "string", "description": "Current area_id or name"},
+                    "new_name": {"type": "string", "description": "New area name"},
+                },
+                "required": ["identifier", "new_name"],
             },
         },
     },
