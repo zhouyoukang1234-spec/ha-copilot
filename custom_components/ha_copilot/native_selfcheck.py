@@ -230,7 +230,7 @@ def main() -> int:
         return r.get("script_entity_id", "ok")
     guard("script: create + persist", t_script)
 
-    # restore yaml files exactly + reload
+    # restore yaml files exactly + reload, then purge orphaned registry entities
     def t_restore():
         for fname, content in snaps.items():
             call("write_config_file", path=fname, content=content)
@@ -239,8 +239,26 @@ def main() -> int:
                 call("reload", domain=dom)
             except Exception:
                 pass
-        return "yaml restored"
-    guard("cleanup: restore yaml + reload", t_restore)
+        # Reloading drops the yaml configs, but the entities they registered
+        # linger as "unavailable" registry orphans. Sweep them by name pattern
+        # (scene entity_ids are sticky to first creation, so don't key off the
+        # current suffix) so the run is truly idempotent and leaves zero residue.
+        marks = ("mcp_auto_", "mcp_scene_", "mcp_script_")
+        reg = call("ha_ws", command_type="config/entity_registry/list")
+        orphans = [
+            e["entity_id"] for e in reg
+            if any(m in e["entity_id"] for m in marks)
+        ]
+        removed = 0
+        for eid in orphans:
+            try:
+                call("ha_ws", command_type="config/entity_registry/remove",
+                     payload={"entity_id": eid})
+                removed += 1
+            except Exception:
+                pass
+        return f"yaml restored, {removed} orphan(s) purged"
+    guard("cleanup: restore yaml + reload + purge orphans", t_restore)
 
     # --- users / config entries / system health / universal ws ---
     guard("users: list", lambda: f"{len(call('list_users'))} users")
