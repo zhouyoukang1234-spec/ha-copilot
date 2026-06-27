@@ -149,7 +149,7 @@ async def render_template(template: str) -> str:
 # History, logbook, logs
 # ====================================================================== #
 @mcp.tool()
-async def get_history(entity_id: str, hours: int = 24) -> list:
+async def get_history(entity_id: str, hours: int = 24) -> list[list]:
     """Recorded state changes for an entity over the last ``hours``."""
     import datetime
     start = (datetime.datetime.utcnow() - datetime.timedelta(hours=hours)).isoformat()
@@ -159,7 +159,7 @@ async def get_history(entity_id: str, hours: int = 24) -> list:
 
 
 @mcp.tool()
-async def get_logbook(hours: int = 24, entity_id: str = "") -> list:
+async def get_logbook(hours: int = 24, entity_id: str = "") -> list[dict]:
     """Human-readable logbook of what happened over the last ``hours`` (optionally
     for one entity)."""
     import datetime
@@ -180,7 +180,7 @@ async def get_error_log() -> str:
 # Area / floor / device / entity / label registries (WebSocket)
 # ====================================================================== #
 @mcp.tool()
-async def list_areas() -> list:
+async def list_areas() -> list[dict]:
     """All areas (rooms/zones) with their ids, names, floors and labels."""
     return await client().ws("config/area_registry/list")
 
@@ -207,7 +207,7 @@ async def delete_area(area_id: str) -> Any:
 
 
 @mcp.tool()
-async def list_floors() -> list:
+async def list_floors() -> list[dict]:
     """All floors (groupings of areas)."""
     return await client().ws("config/floor_registry/list")
 
@@ -219,7 +219,7 @@ async def create_floor(name: str, level: int = 0) -> Any:
 
 
 @mcp.tool()
-async def list_devices() -> list:
+async def list_devices() -> list[dict]:
     """All devices in the device registry (id, name, manufacturer, area, model)."""
     devices = await client().ws("config/device_registry/list")
     return [
@@ -241,7 +241,7 @@ async def update_device(device_id: str, changes: str) -> Any:
 
 
 @mcp.tool()
-async def list_entities(domain: str = "") -> list:
+async def list_entities(domain: str = "") -> list[dict]:
     """Entity-registry entries (the persistent identity behind each entity:
     unique_id, area, labels, enabled/hidden state). Optional ``domain`` filter."""
     ents = await client().ws("config/entity_registry/list")
@@ -271,7 +271,7 @@ async def remove_entity(entity_id: str) -> Any:
 
 
 @mcp.tool()
-async def list_labels() -> list:
+async def list_labels() -> list[dict]:
     """All labels (cross-cutting tags applied to entities/devices/areas)."""
     return await client().ws("config/label_registry/list")
 
@@ -291,7 +291,7 @@ async def create_label(name: str, color: str = "", icon: str = "") -> Any:
 # Automations / scenes / scripts (config API)
 # ====================================================================== #
 @mcp.tool()
-async def list_automations() -> list:
+async def list_automations() -> list[dict]:
     """All automations with their numeric config id, entity_id and on/off state."""
     states = await client().rest("GET", "/api/states")
     out = []
@@ -358,7 +358,7 @@ async def save_script(object_id: str, config: str) -> Any:
 # Helpers (input_*, timer, counter, ...) via WS storage collections
 # ====================================================================== #
 @mcp.tool()
-async def list_helpers(helper_domain: str) -> list:
+async def list_helpers(helper_domain: str) -> list[dict]:
     """List helpers of a domain, e.g. 'input_boolean', 'input_number', 'counter',
     'timer', 'input_select', 'input_text', 'input_datetime'."""
     return await client().ws(f"{helper_domain}/list")
@@ -375,7 +375,7 @@ async def create_helper(helper_domain: str, config: str) -> Any:
 # Lovelace dashboards
 # ====================================================================== #
 @mcp.tool()
-async def list_dashboards() -> list:
+async def list_dashboards() -> list[dict]:
     """All Lovelace dashboards registered in storage mode."""
     return await client().ws("lovelace/dashboards/list")
 
@@ -402,13 +402,13 @@ async def save_dashboard(config: str, url_path: str = "") -> Any:
 # Users / integrations / system
 # ====================================================================== #
 @mcp.tool()
-async def list_users() -> list:
+async def list_users() -> list[dict]:
     """All Home Assistant users (id, name, owner/admin flags, active)."""
     return await client().ws("config/auth/list")
 
 
 @mcp.tool()
-async def list_config_entries() -> list:
+async def list_config_entries() -> list[dict]:
     """All configured integrations (config entries) with domain, title and state."""
     return await client().ws("config_entries/get")
 
