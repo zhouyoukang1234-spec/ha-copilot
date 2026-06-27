@@ -45,6 +45,33 @@ All **30** of the user's automations enabled. Several show `Last triggered`
 
 ![30 automations](docs/evidence/04_automations_30_enabled.png)
 
+### 5. Both MCP routes proven on the real config
+
+Same real deployment, exercised through both routes end-to-end:
+
+- **Route B (native, in-process)** — `native_selfcheck.py` against
+  `/api/ha_copilot/mcp`: **21/21** (states, services, template, history,
+  registry, areas/labels/floors, dashboards, helpers, automation/scene/script
+  CRUD with yaml restore, users, config_entries, system_health, universal ws).
+- **Route A (external bridge)** — `ha_mcp.selfcheck` spawning the bridge as a
+  subprocess and driving the live HA: **29/29** (after a fix — see below).
+
+### 6. User's real protection automation fired end-to-end
+
+Drove the chain on the user's own logic, no special-casing:
+injected an >800W spike on one plug's power sensor via MQTT →
+`sensor.sonoff_total_power_usage` = 876W → the user's template-trigger
+automation `功率超600关闭户外电源插头` fired (`last_triggered` None→`12:02:04`)
+→ `switch.sonoff_100235142b_1` (outdoor power) auto-turned **off**. Cleared the
+spike; total self-healed back to ~25W via the twin's jitter loop.
+
+```
+MQTT 850W ─▶ twin/sonoff_..._power/state
+          ─▶ template sensor sonoff_total_power_usage = 876W
+          ─▶ template trigger (> 600)  ─▶ automation
+          ─▶ switch.turn_off outdoor plug  ✓ (plug = off, last_triggered set)
+```
+
 ## Defects found & fixed
 
 | # | Defect | Fix |
@@ -54,3 +81,4 @@ All **30** of the user's automations enabled. Several show `Last triggered`
 | 3 | Riemann sensors never ticked: jitter rounded standby power to 1dp so state never changed | Round to 2dp, widen variance to ±15% |
 | 4 | 13 registry orphans (UI-created, no YAML) | Purge via MCP |
 | 5 | Mobile dashboard failed to load: missing mushroom/card-mod JS + broken `!include` | Materialize vendor JS, remap `/hacsfiles/`→`/local/community/`, add missing twin sensors |
+| 6 | `ha_mcp` bridge selfcheck intermittently failed `light.turn_off`: read state once immediately, racing the MQTT command echo | Poll for state convergence (up to 5s) like the native selfcheck — 29/29 stable |
