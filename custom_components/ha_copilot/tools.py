@@ -531,6 +531,81 @@ async def _create_blueprint_automation(
     return {"ok": True, "automation_id": auto_id}
 
 
+async def _list_blueprints(hass: HomeAssistant, domain: str = "automation") -> dict[str, Any]:
+    """List installed blueprints for a domain (automation|script) with their inputs."""
+    # Component internals are version-sensitive; import lazily so a version skew
+    # degrades to a clean tool error instead of breaking component load.
+    if domain == "automation":
+        from homeassistant.components.automation.helpers import async_get_blueprints
+    elif domain == "script":
+        from homeassistant.components.script.helpers import async_get_blueprints
+    else:
+        return {"error": f"unsupported blueprint domain '{domain}' (automation|script)"}
+    domain_bps = async_get_blueprints(hass)
+    results = await domain_bps.async_get_blueprints()
+    out: list[dict[str, Any]] = []
+    for path, bp in results.items():
+        if isinstance(bp, Exception):
+            continue
+        meta = bp.metadata or {}
+        out.append({
+            "path": path,
+            "name": meta.get("name"),
+            "inputs": list((meta.get("input") or {}).keys()),
+        })
+    return {"domain": domain, "count": len(out), "blueprints": out}
+
+
+async def _list_backups(hass: HomeAssistant) -> dict[str, Any]:
+    from homeassistant.components.backup.const import DATA_MANAGER
+    manager = hass.data.get(DATA_MANAGER)
+    if manager is None:
+        return {"error": "the backup integration is not available"}
+    backups, _agent_errors = await manager.async_get_backups()
+    items = [
+        {
+            "backup_id": b.backup_id,
+            "name": b.name,
+            "date": b.date,
+            "database_included": b.database_included,
+            "ha_version": b.homeassistant_version,
+        }
+        for b in sorted(backups.values(), key=lambda b: b.date or "", reverse=True)
+    ]
+    return {"count": len(items), "backups": items}
+
+
+async def _create_backup(hass: HomeAssistant, name: str) -> dict[str, Any]:
+    """Trigger a local backup (snapshot before risky changes). Runs asynchronously."""
+    from homeassistant.components.backup.const import DATA_MANAGER
+    manager = hass.data.get(DATA_MANAGER)
+    if manager is None:
+        return {"error": "the backup integration is not available"}
+    new = await manager.async_create_backup(
+        agent_ids=["backup.local"],
+        include_addons=None,
+        include_all_addons=False,
+        include_database=True,
+        include_folders=None,
+        include_homeassistant=True,
+        name=name,
+        password=None,
+    )
+    return {"ok": True, "backup_job_id": new.backup_job_id,
+            "note": "backup runs asynchronously; poll list_backups for completion"}
+
+
+async def _delete_backup(hass: HomeAssistant, backup_id: str) -> dict[str, Any]:
+    from homeassistant.components.backup.const import DATA_MANAGER
+    manager = hass.data.get(DATA_MANAGER)
+    if manager is None:
+        return {"error": "the backup integration is not available"}
+    errors = await manager.async_delete_backup(backup_id)
+    if errors:
+        return {"ok": False, "errors": {k: str(v) for k, v in errors.items()}}
+    return {"ok": True, "deleted": backup_id}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -606,6 +681,14 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "create_blueprint_automation":
             return await _create_blueprint_automation(
                 hass, args["alias"], args["blueprint_path"], args.get("inputs") or {})
+        if name == "list_blueprints":
+            return await _list_blueprints(hass, args.get("domain", "automation"))
+        if name == "list_backups":
+            return await _list_backups(hass)
+        if name == "create_backup":
+            return await _create_backup(hass, args.get("name", "HA-Copilot snapshot"))
+        if name == "delete_backup":
+            return await _delete_backup(hass, args["backup_id"])
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -956,6 +1039,48 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "inputs": {"type": "object", "description": "Blueprint input values"},
                 },
                 "required": ["alias", "blueprint_path", "inputs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_blueprints",
+            "description": "List installed blueprints for a domain ('automation' or 'script') with their declared inputs. Use to discover blueprint_path/inputs for create_blueprint_automation.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string", "description": "'automation' (default) or 'script'"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_backups",
+            "description": "List existing Home Assistant backups (id, name, date, whether the database is included).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_backup",
+            "description": "Create a local Home Assistant backup (a safety snapshot before risky changes). Runs asynchronously; poll list_backups for completion.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "Backup name"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_backup",
+            "description": "Delete a backup by its backup_id (get ids from list_backups).",
+            "parameters": {
+                "type": "object",
+                "properties": {"backup_id": {"type": "string"}},
+                "required": ["backup_id"],
             },
         },
     },
