@@ -26,6 +26,10 @@ const VIEWS = [
 ];
 
 const TOGGLE_DOMAINS = ["light", "switch", "input_boolean", "fan", "siren", "humidifier"];
+const DELETABLE_DOMAINS = [
+  "scene", "script", "input_boolean", "input_number", "input_text",
+  "input_select", "input_datetime", "timer", "counter",
+];
 const DOMAIN_LABELS = {
   light: "灯光", switch: "开关", input_boolean: "布尔量", input_number: "数值",
   fan: "风扇", sensor: "传感器", binary_sensor: "二元传感器", climate: "温控",
@@ -492,9 +496,29 @@ class HaCopilotPanel extends HTMLElement {
     ftr.appendChild(this._actionBtn("复制 entity_id", () => {
       this._copy(entity_id);
     }));
+    const domain = entity_id.split(".")[0];
+    if (DELETABLE_DOMAINS.includes(domain)) {
+      const delBtn = this._actionBtn("删除", async () => {
+        const label = s.attributes.friendly_name || entity_id;
+        if (!window.confirm(`删除「${label}」(${entity_id})？此操作将从配置中移除并清理残留。`)) return;
+        delBtn.textContent = "删除中…"; delBtn.disabled = true;
+        const r = await this._deleteEntity(entity_id, domain, label);
+        if (r && r.error) { delBtn.textContent = "失败: " + r.error; delBtn.disabled = false; return; }
+        back.remove();
+        this._renderView();
+      });
+      delBtn.classList.add("cp-btn-danger");
+      ftr.appendChild(delBtn);
+    }
     modal.appendChild(ftr);
     back.appendChild(modal);
     this.querySelector(".cp-root").appendChild(back);
+  }
+
+  async _deleteEntity(entity_id, domain, label) {
+    if (domain === "scene") return this._runTool("delete_scene", { identifier: label });
+    if (domain === "script") return this._runTool("delete_script", { identifier: entity_id });
+    return this._runTool("delete_helper", { entity_id });
   }
 
   // ---- AUTOMATIONS -------------------------------------------------------
@@ -997,7 +1021,9 @@ class HaCopilotPanel extends HTMLElement {
     .cp-modal-head{display:flex;justify-content:space-between;align-items:center;font-size:15px;}
     .cp-modal-sub{font-size:12px;color:var(--secondary-text-color,#9e9e9e);font-family:var(--code-font-family,monospace);margin:6px 0;}
     .cp-json{flex:1;overflow:auto;background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:12px;font-size:12px;}
-    .cp-modal-ftr{display:flex;justify-content:flex-end;margin-top:10px;}
+    .cp-modal-ftr{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
+    .cp-btn-danger{border-color:var(--error-color,#db4437)!important;color:var(--error-color,#db4437)!important;}
+    .cp-btn-danger:hover{background:var(--error-color,#db4437)!important;color:#fff!important;}
     `;
   }
 }
