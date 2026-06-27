@@ -93,13 +93,22 @@ async def run(b: Bridge) -> None:
     eid = lights[0]["entity_id"] if lights else None
     _record(bool(eid), "list_states(light)", f"{len(lights)} lights")
     if eid:
-        async def turn(service):
+        async def turn(service, want):
             await b.call("call_service", domain="light", service=service,
                          target=json.dumps({"entity_id": eid}))
-            return (await b.call("get_state", entity_id=eid))["state"]
-        await guard("call_service light.turn_on", turn("turn_on"),
+            # MQTT-backed entities echo their new state asynchronously, so poll
+            # for convergence instead of reading once immediately (which races
+            # the command round-trip and yields the stale state).
+            state = None
+            for _ in range(20):
+                state = (await b.call("get_state", entity_id=eid))["state"]
+                if state == want:
+                    break
+                await asyncio.sleep(0.25)
+            return state
+        await guard("call_service light.turn_on", turn("turn_on", "on"),
                     lambda s: s == "on", lambda s: f"{eid}={s}")
-        await guard("call_service light.turn_off", turn("turn_off"),
+        await guard("call_service light.turn_off", turn("turn_off", "off"),
                     lambda s: s == "off", lambda s: f"{eid}={s}")
 
     # ---- template / set_state / history / error log
