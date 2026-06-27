@@ -24,6 +24,39 @@
       "purpose": "审计配置中引用但缺失的实体/服务 — 主动暴露缺陷",
       "verified": "config_flow 创建条目 loaded; watchman.report 审计孪生 -> 见 AUDIT.md",
       "config": "config_flow (无 YAML)"
+    },
+    {
+      "domain": "feedparser",
+      "source": "custom-components/feedparser",
+      "version": "0.1.11",
+      "purpose": "RSS/Atom 订阅传感器",
+      "verified": "sensor.devin_ha_fa_bu_dong_tai_feedparserji_cheng = 20 (实时抓取 home-assistant.io/atom.xml)",
+      "config": "packages/lab_deployed.yaml"
+    },
+    {
+      "domain": "sun2",
+      "source": "pnbruckner/ha-sun2",
+      "version": "3.4.3",
+      "purpose": "扩展太阳位置/相位传感器",
+      "verified": "config_flow (use_home) 创建条目 loaded; sensor.*_sun_solar_midnight 等上线",
+      "config": "config_flow (无 YAML)"
+    },
+    {
+      "domain": "adaptive_lighting",
+      "source": "basnijholt/adaptive-lighting",
+      "version": "1.30.1",
+      "purpose": "随日照自适应调光",
+      "verified": "引擎部署成功 (50 文件, requirement ulid-transform 安装); config_flow 可启用",
+      "config": "config_flow (按需启用)"
+    },
+    {
+      "domain": "scheduler",
+      "source": "nielsfaber/scheduler-component",
+      "version": "v0.0.0",
+      "purpose": "可视化定时调度器 (配 scheduler-card)",
+      "verified": "引擎部署成功 (deps: http/websocket_api); config_flow 可启用",
+      "config": "config_flow (按需启用)"
     }
-  ]
+  ],
+  "_engine_stress": "另测 jazzyisj/unavailable_entities -> 引擎以清晰错误失败 (该名为蓝图非仓库, 不存在 custom_components), 验证错误处理健壮。"
 }
