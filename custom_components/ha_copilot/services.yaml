@@ -1,0 +1,22 @@
+run_tool:
+  name: Run a copilot tool
+  description: >-
+    Directly execute one HA-Copilot tool by name against Home Assistant. This is
+    the deterministic capability-layer entry point — no model is involved. Useful
+    for automations/scripts and for external agents that know exactly which
+    low-level operation they want.
+  fields:
+    tool:
+      name: Tool
+      description: Tool name, e.g. list_states, call_service, create_area, render_template.
+      required: true
+      example: render_template
+      selector:
+        text:
+    args:
+      name: Arguments
+      description: Object of arguments for the tool.
+      required: false
+      example: '{"template": "{{ states.light | selectattr(''state'',''eq'',''on'') | list | count }}"}'
+      selector:
+        object:
