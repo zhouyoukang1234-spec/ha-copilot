@@ -1,0 +1,15 @@
+ask:
+  name: Ask HA-Copilot
+  description: >-
+    Send a natural-language instruction to HA-Copilot. The agent may inspect and
+    modify Home Assistant using its tools, and returns a reply plus the trace of
+    operations it performed.
+  fields:
+    message:
+      name: Message
+      description: The instruction or question for the copilot.
+      required: true
+      example: "创建一个自动化：每天日落时打开客厅灯"
+      selector:
+        text:
+          multiline: true
