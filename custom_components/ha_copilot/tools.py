@@ -706,6 +706,72 @@ async def _delete_automation(hass: HomeAssistant, identifier: str) -> dict[str, 
     return {"ok": True, "removed": removed, "remaining": before - removed, "purged": purged}
 
 
+async def _update_automation(hass: HomeAssistant, identifier: str, new_alias: str) -> dict[str, Any]:
+    """Rename an automation's alias in automations.yaml by id or current alias, then reload.
+
+    The entity_id is derived from the automation's ``id`` (not its alias), so a
+    rename changes only the friendly name and leaves the entity_id stable.
+    """
+    path = _safe_path(hass, "automations.yaml")
+
+    def _rename() -> tuple[bool, str | None]:
+        if not os.path.isfile(path):
+            return (False, None)
+        with open(path, encoding="utf-8") as f:
+            existing = yaml.safe_load(f) or []
+        if not isinstance(existing, list):
+            return (False, None)
+        target = next(
+            (a for a in existing
+             if isinstance(a, dict)
+             and (str(a.get("id")) == str(identifier) or a.get("alias") == identifier)),
+            None,
+        )
+        if target is None:
+            return (False, None)
+        target["alias"] = new_alias
+        _backup_then_write(path, existing)
+        return (True, str(target.get("id")) if target.get("id") is not None else None)
+
+    ok, aid = await hass.async_add_executor_job(_rename)
+    if not ok:
+        return {"error": f"no automation matched id/alias '{identifier}'"}
+    if hass.services.has_service("automation", "reload"):
+        await hass.services.async_call("automation", "reload", {}, blocking=True)
+    return {"ok": True, "id": aid, "alias": new_alias}
+
+
+async def _update_script(hass: HomeAssistant, identifier: str, new_alias: str) -> dict[str, Any]:
+    """Rename a script's alias in scripts.yaml by key or 'script.<key>', then reload.
+
+    The entity_id is the script's dict key, so renaming the alias updates only the
+    friendly name and keeps the entity_id stable.
+    """
+    key = identifier.split(".", 1)[1] if identifier.startswith("script.") else identifier
+    path = _safe_path(hass, "scripts.yaml")
+
+    def _rename() -> bool:
+        if not os.path.isfile(path):
+            return False
+        with open(path, encoding="utf-8") as f:
+            existing = yaml.safe_load(f) or {}
+        if not isinstance(existing, dict) or key not in existing:
+            return False
+        body = existing[key]
+        if not isinstance(body, dict):
+            return False
+        body["alias"] = new_alias
+        _backup_then_write(path, existing)
+        return True
+
+    ok = await hass.async_add_executor_job(_rename)
+    if not ok:
+        return {"error": f"no script matched '{identifier}'"}
+    if hass.services.has_service("script", "reload"):
+        await hass.services.async_call("script", "reload", {}, blocking=True)
+    return {"ok": True, "script_entity_id": f"script.{key}", "alias": new_alias}
+
+
 async def _delete_scene(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
     """Remove scene(s) from scenes.yaml by id or name, then reload."""
     path = _safe_path(hass, "scenes.yaml")
@@ -970,6 +1036,16 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _create_backup(hass, args.get("name", "HA-Copilot snapshot"))
         if name == "delete_backup":
             return await _delete_backup(hass, args["backup_id"])
+        if name in ("update_automation", "update_script"):
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            ident = args.get("identifier") or args.get("id") or args.get("alias") or args.get("entity_id")
+            new_alias = args.get("new_alias") or args.get("alias_new") or args.get("name")
+            if not ident or not new_alias:
+                return {"error": "missing required arguments: identifier + new_alias"}
+            if name == "update_automation":
+                return await _update_automation(hass, ident, new_alias)
+            return await _update_script(hass, ident, new_alias)
         if name in ("delete_automation", "delete_scene", "delete_script"):
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -1419,6 +1495,36 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"backup_id": {"type": "string"}},
                 "required": ["backup_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_automation",
+            "description": "Rename an automation's alias (friendly name) in automations.yaml by id or current alias, then reload. The entity_id is derived from the automation id, so it stays stable across the rename.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "identifier": {"type": "string", "description": "Automation id or current alias"},
+                    "new_alias": {"type": "string", "description": "New alias (friendly name)"},
+                },
+                "required": ["identifier", "new_alias"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_script",
+            "description": "Rename a script's alias (friendly name) in scripts.yaml by key or 'script.<key>', then reload. The entity_id is the script key, so it stays stable across the rename.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "identifier": {"type": "string", "description": "Script key or 'script.<key>' entity_id"},
+                    "new_alias": {"type": "string", "description": "New alias (friendly name)"},
+                },
+                "required": ["identifier", "new_alias"],
             },
         },
     },

@@ -554,6 +554,19 @@ class HaCopilotPanel extends HTMLElement {
     } else if (domain === "script") {
       const b = this._actionBtn("运行脚本", () => callAndShow(b, "script", "turn_on", null, "运行中…"));
       b.classList.add("cp-chip-accent"); ctl.appendChild(b);
+      const ren = this._actionBtn("重命名", async () => {
+        const cur = s.attributes.friendly_name || entity_id;
+        const nn = window.prompt(`重命名脚本「${cur}」为：`, cur);
+        if (!nn || nn.trim() === "" || nn.trim() === cur) return;
+        ren.textContent = "…"; ren.disabled = true;
+        const r = await this._runTool("update_script", { identifier: entity_id, new_alias: nn.trim() });
+        if (r && r.error) { ren.textContent = "失败"; setTimeout(() => { ren.textContent = "重命名"; ren.disabled = false; }, 1200); return; }
+        const sub = modal.querySelector(".cp-modal-sub");
+        const ns = this._hass.states[entity_id];
+        if (sub && ns) sub.textContent = entity_id + "  ·  " + this._fmtState(ns);
+        ren.textContent = "已重命名"; setTimeout(() => { ren.textContent = "重命名"; ren.disabled = false; }, 900);
+      });
+      ctl.appendChild(ren);
     } else if (TOGGLE_DOMAINS.includes(domain)) {
       const on = s.state === "on";
       const b = this._actionBtn(on ? "关闭" : "打开",
@@ -614,6 +627,21 @@ class HaCopilotPanel extends HTMLElement {
       });
       sw.appendChild(this._el("span", { class: "cp-knob" }));
       right.appendChild(sw);
+      const ren = this._el("button", {
+        class: "cp-chip", text: "重命名",
+        onclick: async () => {
+          const cur = s.attributes.friendly_name || s.entity_id;
+          const nn = window.prompt(`重命名自动化「${cur}」为：`, cur);
+          if (!nn || nn.trim() === "" || nn.trim() === cur) return;
+          ren.textContent = "…"; ren.disabled = true;
+          try {
+            const r = await this._runTool("update_automation", { identifier: s.attributes.id || cur, new_alias: nn.trim() });
+            if (r && r.error) { ren.textContent = "失败"; setTimeout(() => { ren.textContent = "重命名"; ren.disabled = false; }, 1200); return; }
+          } catch (e) { ren.textContent = "失败"; ren.disabled = false; return; }
+          setTimeout(() => this._renderView(), 600);
+        },
+      });
+      right.appendChild(ren);
       const del = this._el("button", {
         class: "cp-chip cp-chip-danger", text: "删除",
         onclick: async () => {
