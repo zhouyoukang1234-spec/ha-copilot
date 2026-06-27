@@ -29,8 +29,9 @@
 | `list_services` / `call_service` | 列出并调用**任意** HA 服务 |
 | `list_dir` / `read_config_file` / `write_config_file` | 浏览与读写 config 目录内的文件（写入自动备份 `.copilot.bak`，限制在 config 目录内） |
 | `check_config` | 校验配置是否有效 |
-| `create_automation` | 追加自动化到 `automations.yaml` 并重载 |
-| `create_scene` / `create_script` | 追加场景到 `scenes.yaml` / 脚本到 `scripts.yaml` 并重载 |
+| `create_automation` / `delete_automation` | 追加自动化到 `automations.yaml`（按 id/alias 删除）并重载 |
+| `create_scene` / `delete_scene` / `create_script` / `delete_script` | 追加/删除场景（`scenes.yaml`）与脚本（`scripts.yaml`）并重载 |
+| `list_config_entries` / `reload_config_entry` | 列出已配置集成条目（域/标题/加载状态），按 entry_id 重载某集成（不重启 HA） |
 | `create_area` | 在区域注册表中新建房间/区域（幂等） |
 | `rename_entity` / `assign_entity_area` / `set_entity_enabled` | 实体注册表写操作：改显示名 / 分配区域 / 启用·禁用 |
 | `render_template` | 针对实时状态渲染 Jinja2 模板 |

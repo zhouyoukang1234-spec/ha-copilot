@@ -687,23 +687,45 @@ class HaCopilotPanel extends HTMLElement {
     host.appendChild(list);
     list.appendChild(this._el("div", { class: "cp-empty", text: "加载中…" }));
     try {
-      const entries = await this._ws({ type: "config_entries/get" });
+      // Drive through the same capability layer that MCP exposes, so the panel
+      // and external operators see identical integration state.
+      const r = await this._runTool("list_config_entries");
+      const entries = (r && r.entries) || [];
       list.innerHTML = "";
-      if (!entries || !entries.length) {
+      if (!entries.length) {
         list.appendChild(this._el("div", { class: "cp-empty", text: "暂无集成条目" }));
         return;
       }
-      for (const en of entries.sort((a, b) => a.domain.localeCompare(b.domain))) {
+      for (const en of entries) {
         const row = this._el("div", { class: "cp-row" });
         const left = this._el("div", { class: "cp-row-main" });
         left.appendChild(this._el("div", { class: "cp-row-name", text: en.title || en.domain }));
         left.appendChild(this._el("div", { class: "cp-row-id", text: en.domain }));
         row.appendChild(left);
+        const right = this._el("div", { class: "cp-row-ctrl" });
         const st = (en.state || "").toLowerCase();
-        row.appendChild(this._el("span", {
+        right.appendChild(this._el("span", {
           class: "cp-pill " + (st === "loaded" ? "ok" : st ? "warn" : ""),
           text: en.state || "—",
         }));
+        if (en.entry_id) {
+          right.appendChild(this._el("button", {
+            class: "cp-chip", text: "重载", title: "重载该集成（不重启 HA）",
+            onclick: async (e) => {
+              const btn = e.currentTarget;
+              btn.disabled = true;
+              btn.textContent = "重载中…";
+              try {
+                const rr = await this._runTool("reload_config_entry", { entry_id: en.entry_id });
+                btn.textContent = rr && rr.ok ? "已重载" : "失败";
+              } catch (err) {
+                btn.textContent = "失败";
+              }
+              setTimeout(() => this._renderView(), 800);
+            },
+          }));
+        }
+        row.appendChild(right);
         list.appendChild(row);
       }
     } catch (e) {

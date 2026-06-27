@@ -606,6 +606,140 @@ async def _delete_backup(hass: HomeAssistant, backup_id: str) -> dict[str, Any]:
     return {"ok": True, "deleted": backup_id}
 
 
+def _backup_then_write(target: str, dump: Any) -> None:
+    """Persist YAML, keeping a .copilot.bak of the previous content."""
+    if os.path.isfile(target):
+        with open(target, encoding="utf-8") as f:
+            prev = f.read()
+        with open(target + ".copilot.bak", "w", encoding="utf-8") as f:
+            f.write(prev)
+    with open(target, "w", encoding="utf-8") as f:
+        yaml.safe_dump(dump, f, allow_unicode=True, sort_keys=False)
+
+
+async def _delete_automation(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Remove automation(s) from automations.yaml by id or alias, then reload."""
+    path = _safe_path(hass, "automations.yaml")
+
+    def _remove() -> tuple[int, int]:
+        if not os.path.isfile(path):
+            return (0, 0)
+        with open(path, encoding="utf-8") as f:
+            existing = yaml.safe_load(f) or []
+        if not isinstance(existing, list):
+            return (0, 0)
+        before = len(existing)
+        kept = [
+            a for a in existing
+            if not (str(a.get("id")) == str(identifier) or a.get("alias") == identifier)
+        ]
+        if len(kept) != before:
+            _backup_then_write(path, kept)
+        return (before, before - len(kept))
+
+    before, removed = await hass.async_add_executor_job(_remove)
+    if removed == 0:
+        return {"error": f"no automation matched id/alias '{identifier}'"}
+    if hass.services.has_service("automation", "reload"):
+        await hass.services.async_call("automation", "reload", {}, blocking=True)
+    return {"ok": True, "removed": removed, "remaining": before - removed}
+
+
+async def _delete_scene(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Remove scene(s) from scenes.yaml by id or name, then reload."""
+    path = _safe_path(hass, "scenes.yaml")
+
+    def _remove() -> tuple[int, int]:
+        if not os.path.isfile(path):
+            return (0, 0)
+        with open(path, encoding="utf-8") as f:
+            existing = yaml.safe_load(f) or []
+        if not isinstance(existing, list):
+            return (0, 0)
+        before = len(existing)
+        kept = [
+            s for s in existing
+            if not (str(s.get("id")) == str(identifier) or s.get("name") == identifier)
+        ]
+        if len(kept) != before:
+            _backup_then_write(path, kept)
+        return (before, before - len(kept))
+
+    before, removed = await hass.async_add_executor_job(_remove)
+    if removed == 0:
+        return {"error": f"no scene matched id/name '{identifier}'"}
+    if hass.services.has_service("scene", "reload"):
+        await hass.services.async_call("scene", "reload", {}, blocking=True)
+    return {"ok": True, "removed": removed, "remaining": before - removed}
+
+
+async def _delete_script(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Remove a script from scripts.yaml by key or 'script.<key>' entity_id, then reload."""
+    key = identifier.split(".", 1)[1] if identifier.startswith("script.") else identifier
+    path = _safe_path(hass, "scripts.yaml")
+
+    def _remove() -> bool:
+        if not os.path.isfile(path):
+            return False
+        with open(path, encoding="utf-8") as f:
+            existing = yaml.safe_load(f) or {}
+        if not isinstance(existing, dict) or key not in existing:
+            return False
+        existing.pop(key)
+        _backup_then_write(path, existing)
+        return True
+
+    removed = await hass.async_add_executor_job(_remove)
+    if not removed:
+        return {"error": f"no script matched '{identifier}'"}
+    if hass.services.has_service("script", "reload"):
+        await hass.services.async_call("script", "reload", {}, blocking=True)
+    return {"ok": True, "deleted": f"script.{key}"}
+
+
+def _entry_state(entry: Any) -> str:
+    state = getattr(entry, "state", None)
+    return getattr(state, "value", str(state)) if state is not None else "unknown"
+
+
+async def _list_config_entries(hass: HomeAssistant, domain: str | None = None) -> dict[str, Any]:
+    """List integration config entries (the 'Integrations' settings page) with their load state."""
+    entries = (
+        hass.config_entries.async_entries(domain)
+        if domain
+        else hass.config_entries.async_entries()
+    )
+    items = [
+        {
+            "entry_id": e.entry_id,
+            "domain": e.domain,
+            "title": e.title,
+            "state": _entry_state(e),
+            "source": e.source,
+        }
+        for e in sorted(entries, key=lambda e: (e.domain, e.title or ""))
+    ]
+    return {"count": len(items), "entries": items}
+
+
+async def _reload_config_entry(hass: HomeAssistant, entry_id: str) -> dict[str, Any]:
+    """Reload a single integration config entry by entry_id (operate integrations live)."""
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None:
+        return {
+            "error": f"config entry '{entry_id}' not found. "
+            "Call list_config_entries to get exact entry_ids.",
+        }
+    await hass.config_entries.async_reload(entry_id)
+    state = _entry_state(entry)
+    return {
+        "ok": not state.startswith("failed"),
+        "entry_id": entry_id,
+        "domain": entry.domain,
+        "state": state,
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -689,6 +823,23 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _create_backup(hass, args.get("name", "HA-Copilot snapshot"))
         if name == "delete_backup":
             return await _delete_backup(hass, args["backup_id"])
+        if name in ("delete_automation", "delete_scene", "delete_script"):
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            ident = args.get("identifier") or args.get("id") or args.get("name")
+            if name == "delete_script":
+                ident = ident or args.get("entity_id")
+            if not ident:
+                return {"error": "missing required argument: identifier"}
+            if name == "delete_automation":
+                return await _delete_automation(hass, ident)
+            if name == "delete_scene":
+                return await _delete_scene(hass, ident)
+            return await _delete_script(hass, ident)
+        if name == "list_config_entries":
+            return await _list_config_entries(hass, args.get("domain"))
+        if name == "reload_config_entry":
+            return await _reload_config_entry(hass, args["entry_id"])
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -1081,6 +1232,65 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"backup_id": {"type": "string"}},
                 "required": ["backup_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_automation",
+            "description": "Delete an automation from automations.yaml by its id or alias, then reload. Completes the automation lifecycle (create_automation creates them). A .copilot.bak backup is kept.",
+            "parameters": {
+                "type": "object",
+                "properties": {"identifier": {"type": "string", "description": "Automation id or alias"}},
+                "required": ["identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_scene",
+            "description": "Delete a scene from scenes.yaml by its id or name, then reload. A .copilot.bak backup is kept.",
+            "parameters": {
+                "type": "object",
+                "properties": {"identifier": {"type": "string", "description": "Scene id or name"}},
+                "required": ["identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_script",
+            "description": "Delete a script from scripts.yaml by its key or 'script.<key>' entity_id, then reload. A .copilot.bak backup is kept.",
+            "parameters": {
+                "type": "object",
+                "properties": {"identifier": {"type": "string", "description": "Script key or script.<key> entity_id"}},
+                "required": ["identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_config_entries",
+            "description": "List integration config entries (the Settings > Integrations page): entry_id, domain, title and load state. Optionally filter by domain. This is how the operator sees which integrations/accounts are configured.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string", "description": "Optional integration domain filter, e.g. 'mqtt'"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_config_entry",
+            "description": "Reload a single integration config entry by entry_id (re-apply a changed account/config without restarting HA). Get entry_ids from list_config_entries.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
             },
         },
     },
