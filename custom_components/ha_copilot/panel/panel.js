@@ -492,11 +492,12 @@ class HaCopilotPanel extends HTMLElement {
     modal.appendChild(this._el("div", { class: "cp-modal-sub", text: entity_id + "  ·  " + this._fmtState(s) }));
     const attrs = this._el("pre", { class: "cp-json", text: JSON.stringify(s.attributes, null, 2) });
     modal.appendChild(attrs);
+    const domain = entity_id.split(".")[0];
+    this._appendControls(modal, s, entity_id, domain, back);
     const ftr = this._el("div", { class: "cp-modal-ftr" });
     ftr.appendChild(this._actionBtn("复制 entity_id", () => {
       this._copy(entity_id);
     }));
-    const domain = entity_id.split(".")[0];
     if (DELETABLE_DOMAINS.includes(domain)) {
       const delBtn = this._actionBtn("删除", async () => {
         const label = s.attributes.friendly_name || entity_id;
@@ -519,6 +520,61 @@ class HaCopilotPanel extends HTMLElement {
     if (domain === "scene") return this._runTool("delete_scene", { identifier: label });
     if (domain === "script") return this._runTool("delete_script", { identifier: entity_id });
     return this._runTool("delete_helper", { entity_id });
+  }
+
+  // Domain-specific control affordances inside the entity-detail modal.
+  // These call HA services directly and read state back so the user can
+  // operate devices end-to-end without leaving the panel.
+  _appendControls(modal, s, entity_id, domain, back) {
+    const ctl = this._el("div", { class: "cp-modal-ctl" });
+    const refresh = () => {
+      const ns = this._hass.states[entity_id];
+      if (ns) {
+        const sub = modal.querySelector(".cp-modal-sub");
+        if (sub) sub.textContent = entity_id + "  ·  " + this._fmtState(ns);
+      }
+    };
+    const callAndShow = async (btn, dom, service, data, busyText) => {
+      const orig = btn.textContent;
+      btn.textContent = busyText || "执行中…"; btn.disabled = true;
+      try {
+        await this._hass.callService(dom, service, { entity_id, ...(data || {}) });
+        setTimeout(refresh, 400);
+        btn.textContent = "已执行"; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 900);
+      } catch (e) {
+        btn.textContent = "失败"; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
+      }
+    };
+
+    if (domain === "scene") {
+      const b = this._actionBtn("激活场景", () => callAndShow(b, "scene", "turn_on", null, "激活中…"));
+      b.classList.add("cp-chip-accent"); ctl.appendChild(b);
+    } else if (domain === "script") {
+      const b = this._actionBtn("运行脚本", () => callAndShow(b, "script", "turn_on", null, "运行中…"));
+      b.classList.add("cp-chip-accent"); ctl.appendChild(b);
+    } else if (TOGGLE_DOMAINS.includes(domain)) {
+      const on = s.state === "on";
+      const b = this._actionBtn(on ? "关闭" : "打开",
+        () => callAndShow(b, domain, s.state === "on" ? "turn_off" : "turn_on"));
+      b.classList.add("cp-chip-accent"); ctl.appendChild(b);
+      // Brightness for lights that support it.
+      if (domain === "light" && (s.attributes.supported_color_modes || []).some(
+        (m) => ["brightness", "color_temp", "hs", "xy", "rgb", "rgbw", "rgbww"].includes(m))) {
+        const pct = s.attributes.brightness != null ? Math.round((s.attributes.brightness / 255) * 100) : 100;
+        const wrap = this._el("label", { class: "cp-slider-wrap", text: "亮度 " });
+        const val = this._el("span", { class: "cp-slider-val", text: pct + "%" });
+        const sl = this._el("input", {
+          class: "cp-slider", type: "range", min: 1, max: 100, value: pct,
+          oninput: (e) => { val.textContent = e.target.value + "%"; },
+          onchange: (e) => {
+            this._hass.callService("light", "turn_on", { entity_id, brightness_pct: Number(e.target.value) });
+            setTimeout(refresh, 400);
+          },
+        });
+        wrap.appendChild(sl); wrap.appendChild(val); ctl.appendChild(wrap);
+      }
+    }
+    if (ctl.children.length) modal.appendChild(ctl);
   }
 
   // ---- AUTOMATIONS -------------------------------------------------------
@@ -1024,6 +1080,12 @@ class HaCopilotPanel extends HTMLElement {
     .cp-modal-ftr{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
     .cp-btn-danger{border-color:var(--error-color,#db4437)!important;color:var(--error-color,#db4437)!important;}
     .cp-btn-danger:hover{background:var(--error-color,#db4437)!important;color:#fff!important;}
+    .cp-modal-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--divider-color,#3c3c3c);}
+    .cp-chip-accent{border-color:var(--primary-color,#03a9f4)!important;color:var(--primary-color,#03a9f4)!important;}
+    .cp-chip-accent:hover{background:var(--primary-color,#03a9f4)!important;color:#fff!important;}
+    .cp-slider-wrap{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--secondary-text-color,#9b9b9b);}
+    .cp-slider{vertical-align:middle;}
+    .cp-slider-val{min-width:38px;text-align:right;color:inherit;}
     `;
   }
 }
