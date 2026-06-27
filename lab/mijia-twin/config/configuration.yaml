@@ -41,6 +41,12 @@ lovelace:
       icon: mdi:console
       show_in_sidebar: true
       filename: devin_ops_dashboard.yaml
+    devin-areas:
+      mode: yaml
+      title: Devin 区域总台
+      icon: mdi:home-group
+      show_in_sidebar: true
+      filename: devin_area_dashboard.yaml
 
 # 日志
 logger:
