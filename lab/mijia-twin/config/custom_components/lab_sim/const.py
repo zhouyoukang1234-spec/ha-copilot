@@ -13,4 +13,5 @@ PLATFORMS = [
     "select",
     "lock",
     "camera",
+    "text",
 ]

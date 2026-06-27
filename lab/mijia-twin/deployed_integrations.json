@@ -16,6 +16,14 @@
       "purpose": "可读写变量实体 (var.set 服务)",
       "verified": "var.devin_deploy_count: 2 -> var.set -> 3 (写入生效)",
       "config": "packages/lab_deployed.yaml"
+    },
+    {
+      "domain": "watchman",
+      "source": "dummylabs/thewatchman",
+      "version": "0.8.6",
+      "purpose": "审计配置中引用但缺失的实体/服务 — 主动暴露缺陷",
+      "verified": "config_flow 创建条目 loaded; watchman.report 审计孪生 -> 见 AUDIT.md",
+      "config": "config_flow (无 YAML)"
     }
   ]
 }
