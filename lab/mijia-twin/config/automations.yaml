@@ -61,7 +61,6 @@
         condition: numeric_state
         entity_id: sensor.de_2dian_yuan_battery_level
   description: 夜间定时开启(23:00) + 低功率低电量条件开启。eWeLink云端定时器为主，HA为备份。
-  enabled: true
   id: '1732715640582'
   mode: single
   triggers:

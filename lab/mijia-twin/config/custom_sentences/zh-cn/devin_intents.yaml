@@ -1,0 +1,18 @@
+# Devin 重写：用 HA 真实的 custom_sentences 机制实现中文语音意图，
+# 取代原 packages/conversation.yaml 里无效的顶层 `intents:`（非真实集成）。
+language: "zh-cn"
+intents:
+  HassTurnOn:
+    data:
+      - sentences:
+          - "(开启|打开|启动|开)[一下]{name}"
+  HassTurnOff:
+    data:
+      - sentences:
+          - "(关闭|关掉|停止|关)[一下]{name}"
+  HassLightSet:
+    data:
+      - sentences:
+          - "(把|将){name}亮度(调到|设为|设置为){brightness}[%|％]"
+        slots:
+          domain: light
