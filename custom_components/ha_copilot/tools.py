@@ -327,23 +327,33 @@ async def _create_scene(hass: HomeAssistant, name: str, entities: dict) -> dict[
     """Append a scene to scenes.yaml and reload."""
     path = _safe_path(hass, "scenes.yaml")
 
-    def _append() -> int:
+    def _append() -> tuple[int, str]:
         existing: list = []
         if os.path.isfile(path):
             with open(path, encoding="utf-8") as f:
                 loaded = yaml.safe_load(f)
                 if isinstance(loaded, list):
                     existing = loaded
-        scene = {"id": f"copilot_scene_{len(existing) + 1}", "name": name, "entities": entities}
+        # Derive a stable unique id from the name slug so the scene's entity_id
+        # is predictable and never reuses a deleted scene's id (which would make
+        # HA's registry hand back a stale entity_id for the new scene).
+        used = {s.get("id") for s in existing if isinstance(s, dict)}
+        base = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_") or "copilot_scene"
+        scene_id = base
+        suffix = 2
+        while scene_id in used:
+            scene_id = f"{base}_{suffix}"
+            suffix += 1
+        scene = {"id": scene_id, "name": name, "entities": entities}
         existing.append(scene)
         with open(path, "w", encoding="utf-8") as f:
             yaml.safe_dump(existing, f, allow_unicode=True, sort_keys=False)
-        return len(existing)
+        return len(existing), scene_id
 
-    total = await hass.async_add_executor_job(_append)
+    total, scene_id = await hass.async_add_executor_job(_append)
     if hass.services.has_service("scene", "reload"):
         await hass.services.async_call("scene", "reload", {}, blocking=True)
-    return {"ok": True, "name": name, "total_scenes": total}
+    return {"ok": True, "name": name, "id": scene_id, "total_scenes": total}
 
 
 async def _create_script(hass: HomeAssistant, alias: str, sequence: Any) -> dict[str, Any]:
