@@ -14,8 +14,10 @@ mechanism, total reach: 无为而无不为.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
+from types import SimpleNamespace
 from typing import Any
 
 from homeassistant.auth.models import User
@@ -83,9 +85,22 @@ async def async_ws_execute(
             return
         future.set_result(data)
 
-    connection = ActiveConnection(
-        _LOGGER, hass, _send, user, refresh_token=None, remote=None
-    )
+    # ActiveConnection's signature drifts across HA versions (e.g. 'remote' was
+    # removed and 'refresh_token' became required in 2026.x). Build kwargs from
+    # the actual signature so this works across versions.
+    _ac_params = inspect.signature(ActiveConnection.__init__).parameters
+    _ac_kwargs: dict[str, Any] = {}
+    if "refresh_token" in _ac_params:
+        # 2026.x stores ``refresh_token.id`` in __init__, so it can't be None.
+        # Reuse one of the user's real tokens; fall back to a minimal stand-in
+        # (only ``.id`` is dereferenced) so in-process exec never needs auth.
+        rt = next(iter(getattr(user, "refresh_tokens", {}).values()), None)
+        if rt is None:
+            rt = SimpleNamespace(id="ha_copilot_inproc")
+        _ac_kwargs["refresh_token"] = rt
+    if "remote" in _ac_params:
+        _ac_kwargs["remote"] = None
+    connection = ActiveConnection(_LOGGER, hass, _send, user, **_ac_kwargs)
 
     result = handler(hass, connection, msg)
     if asyncio.iscoroutine(result):
