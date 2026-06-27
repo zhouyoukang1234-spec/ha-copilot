@@ -10,6 +10,15 @@ automation:
   - service: light.turn_on
     target:
       entity_id: light.san_hao_deng
+- id: devin_devin_acbf7896
+  alias: Devin 蓝图·人来灯亮
+  use_blueprint:
+    path: homeassistant/motion_light.yaml
+    input:
+      motion_entity: binary_sensor.f22078f9c82516c9e8d4e563176a1ca7_smart_motion_human
+      light_target:
+        entity_id: light.b650m_aorus_elite_ax_0_led_2
+      no_motion_wait: 120
 input_boolean:
   devin_demo_mode:
     name: Devin 演示模式

@@ -86,6 +86,20 @@ class Authoring:
             yaml.safe_dump(doc, handle, allow_unicode=True, sort_keys=False)
         return entry
 
+    def create_blueprint_automation(self, alias: str, blueprint_path: str,
+                                    inputs: dict, auto_id: str | None = None) -> dict:
+        """Instantiate an automation from a blueprint (use_blueprint + inputs)."""
+        doc = self._load_managed()
+        autos = doc.get("automation") or []
+        auto_id = auto_id or f"devin_{_slug(alias)}"
+        entry = {"id": auto_id, "alias": alias,
+                 "use_blueprint": {"path": blueprint_path, "input": inputs}}
+        autos = [a for a in autos if a.get("id") != auto_id]
+        autos.append(entry)
+        doc["automation"] = autos
+        self._save_managed(doc)
+        return entry
+
     def _save_managed(self, doc: dict) -> None:
         os.makedirs(os.path.dirname(self._managed_path()), exist_ok=True)
         with open(self._managed_path(), "w", encoding="utf-8") as handle:
