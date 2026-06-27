@@ -86,8 +86,52 @@ class Authoring:
             yaml.safe_dump(doc, handle, allow_unicode=True, sort_keys=False)
         return entry
 
+    def _save_managed(self, doc: dict) -> None:
+        os.makedirs(os.path.dirname(self._managed_path()), exist_ok=True)
+        with open(self._managed_path(), "w", encoding="utf-8") as handle:
+            yaml.safe_dump(doc, handle, allow_unicode=True, sort_keys=False)
+
     def reload_automations(self) -> None:
         self._api("POST", "/api/services/automation/reload", {})
+
+    def reload(self, domain: str) -> None:
+        """Reload a config-driven domain in place (no restart)."""
+        self._api("POST", f"/api/services/{domain}/reload", {})
+
+    # ---- scenes ----
+    def create_scene(self, name: str, entities: dict, scene_id: str | None = None) -> dict:
+        """Append/replace a scene (snapshot of entity states) in the managed package."""
+        doc = self._load_managed()
+        scenes = doc.get("scene") or []
+        scene_id = scene_id or f"devin_{_slug(name)}"
+        entry = {"id": scene_id, "name": name, "entities": entities}
+        scenes = [s for s in scenes if s.get("id") != scene_id]
+        scenes.append(entry)
+        doc["scene"] = scenes
+        self._save_managed(doc)
+        return entry
+
+    # ---- scripts ----
+    def create_script(self, alias: str, sequence: list, script_id: str | None = None,
+                      mode: str = "single") -> dict:
+        """Append/replace a script (named action sequence) in the managed package."""
+        doc = self._load_managed()
+        scripts = doc.get("script") or {}
+        script_id = script_id or _slug(alias)
+        scripts[script_id] = {"alias": alias, "mode": mode, "sequence": sequence}
+        doc["script"] = scripts
+        self._save_managed(doc)
+        return {"script_id": script_id, **scripts[script_id]}
+
+    # ---- helpers (input_*, timer, counter) ----
+    def create_helper(self, domain: str, object_id: str, config: dict) -> dict:
+        """Define a helper entity (input_boolean/number/text/select/datetime, timer, counter)."""
+        doc = self._load_managed()
+        helpers = doc.get(domain) or {}
+        helpers[object_id] = config
+        doc[domain] = helpers
+        self._save_managed(doc)
+        return {"entity_id": f"{domain}.{object_id}", **config}
 
     def list_automations(self) -> list[str]:
         states = self._api("GET", "/api/states")

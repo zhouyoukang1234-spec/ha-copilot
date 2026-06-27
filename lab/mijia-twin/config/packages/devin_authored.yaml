@@ -10,3 +10,42 @@ automation:
   - service: light.turn_on
     target:
       entity_id: light.san_hao_deng
+input_boolean:
+  devin_demo_mode:
+    name: Devin 演示模式
+    icon: mdi:test-tube
+counter:
+  devin_action_counter:
+    name: Devin 操作计数
+    initial: 0
+    step: 1
+timer:
+  devin_demo_timer:
+    name: Devin 演示计时
+    duration: 00:05:00
+input_number:
+  devin_target_temp:
+    name: Devin 目标温度
+    min: 16
+    max: 30
+    step: 0.5
+    initial: 24
+    unit_of_measurement: °C
+scene:
+- id: devin_devin_39e1e311
+  name: Devin 影院模式
+  entities:
+    light.ke_ting_deng:
+      state: 'on'
+      brightness: 40
+script:
+  devin_db3cd1ad:
+    alias: Devin 一键晚安
+    mode: single
+    sequence:
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.devin_demo_mode
+    - service: counter.increment
+      target:
+        entity_id: counter.devin_action_counter
