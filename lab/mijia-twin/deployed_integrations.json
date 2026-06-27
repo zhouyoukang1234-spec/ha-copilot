@@ -1,0 +1,21 @@
+{
+  "_comment": "由 lab/tools/deploy_integration.py 部署到孪生的社区集成登记表。可复现: 对每条执行 `python lab/tools/deploy_integration.py <source> --config <twin-config>`。第三方代码不入库, 仅登记来源/版本, 部署引擎按需拉取。",
+  "deployments": [
+    {
+      "domain": "average",
+      "source": "Limych/ha-average",
+      "version": "2.4.1-alpha",
+      "purpose": "区间/滑动平均传感器",
+      "verified": "sensor.devin_shi_wen_ping_jun_averageji_cheng = 23.13 (3 个米家温度传感器均值)",
+      "config": "packages/lab_deployed.yaml"
+    },
+    {
+      "domain": "var",
+      "source": "snarky-snark/home-assistant-variables",
+      "version": "0.15.5",
+      "purpose": "可读写变量实体 (var.set 服务)",
+      "verified": "var.devin_deploy_count: 2 -> var.set -> 3 (写入生效)",
+      "config": "packages/lab_deployed.yaml"
+    }
+  ]
+}

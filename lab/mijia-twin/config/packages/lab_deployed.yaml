@@ -1,0 +1,17 @@
+# 由 Devin 集成部署引擎 (lab/tools/deploy_integration.py) 部署的社区集成的实测配置。
+# average  <- Limych/ha-average      (滑动/区间平均传感器)
+# var      <- snarky-snark/home-assistant-variables (可读写变量实体)
+
+sensor:
+  - platform: average
+    name: "Devin 室温平均 (average集成)"
+    entities:
+      - sensor.miaomiaoce_t9_0582_temperature
+      - sensor.miaomiaoc_temperature
+      - sensor.miaomiaoc_cn_blt_3_1ioerl71o4g02_t9_temperature_p_3_1001
+
+var:
+  devin_deploy_count:
+    friendly_name: "Devin 已部署社区集成数 (var集成)"
+    initial_value: 2
+    icon: mdi:package-variant-closed
