@@ -53,10 +53,65 @@ async def _list_states(hass: HomeAssistant, domain: str | None = None) -> dict[s
     return {"count": len(items), "entities": items[:400]}
 
 
+def _resolve_entity_id(
+    hass: HomeAssistant, query: str, domain_hint: str | None = None
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """Best-effort resolve an LLM/user entity reference to a real entity_id.
+
+    Small models routinely pass a friendly name ("客厅灯") or a half-built id
+    ("light.客厅") instead of the exact entity_id. Rather than bounce every such
+    call back, resolve it: returns ``(entity_id, [])`` on an unambiguous match,
+    or ``(None, candidates)`` with plausible suggestions for the agent to retry.
+    """
+    if hass.states.get(query) is not None:
+        return query, []
+    q = query.strip()
+    prefix_domain: str | None = None
+    token = q
+    if "." in q:
+        maybe_domain, rest = q.split(".", 1)
+        if maybe_domain.replace("_", "").isalnum() and maybe_domain.isascii():
+            prefix_domain, token = maybe_domain, rest
+    domain = prefix_domain or domain_hint
+    states = hass.states.async_all(domain) if domain else hass.states.async_all()
+    ql = token.lower().strip()
+
+    def _name(s: Any) -> str:
+        return (s.attributes.get("friendly_name") or "").lower()
+
+    # 1) exact entity_id, case-insensitive.
+    for s in states:
+        if s.entity_id.lower() == q.lower():
+            return s.entity_id, []
+    # 2) exact friendly name.
+    exact = [s for s in states if _name(s) == ql]
+    if len(exact) == 1:
+        return exact[0].entity_id, []
+    # 3) substring either direction on name, or on the id's object part.
+    subs = [
+        s
+        for s in states
+        if ql
+        and (ql in _name(s) or (_name(s) and _name(s) in ql) or ql in s.entity_id.split(".")[-1])
+    ]
+    if len(subs) == 1:
+        return subs[0].entity_id, []
+    pool = exact or subs or list(states)
+    candidates = [
+        {"entity_id": s.entity_id, "name": s.attributes.get("friendly_name")}
+        for s in sorted(pool, key=lambda s: s.entity_id)[:10]
+    ]
+    return None, candidates
+
+
 async def _get_state(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
     s = hass.states.get(entity_id)
     if s is None:
-        return {"error": f"entity '{entity_id}' not found"}
+        resolved, candidates = _resolve_entity_id(hass, entity_id)
+        if resolved:
+            s = hass.states.get(resolved)
+        else:
+            return {"error": f"entity '{entity_id}' not found", "candidates": candidates}
     return {
         "entity_id": s.entity_id,
         "state": s.state,
@@ -78,25 +133,43 @@ async def _call_service(
     if not hass.services.has_service(domain, service):
         return {"error": f"service '{domain}.{service}' does not exist"}
     data = dict(data or {})
-    # Validate any referenced entity_ids so the agent gets corrective feedback
-    # instead of silently calling a service against a non-existent entity.
+    # Validate/resolve any referenced entity_ids so the agent gets corrective
+    # feedback - or an automatic correction - instead of silently calling a
+    # service against a non-existent entity.
     raw = data.get("entity_id")
     ids: list[str] = []
     if isinstance(raw, str):
         ids = [raw]
     elif isinstance(raw, (list, tuple)):
         ids = [str(e) for e in raw]
-    missing = [e for e in ids if hass.states.get(e) is None]
-    if missing:
-        return {
-            "error": f"unknown entity_id(s): {missing}. "
-            "Call list_states to get exact entity_ids and retry.",
-        }
+
+    resolved_ids: list[str] = []
+    corrections: dict[str, str] = {}
+    for e in ids:
+        if hass.states.get(e) is not None:
+            resolved_ids.append(e)
+            continue
+        rid, candidates = _resolve_entity_id(hass, e, domain_hint=domain)
+        if rid is None:
+            return {
+                "error": f"unknown entity_id '{e}'. Pick the exact entity_id from "
+                "the candidates below (or call list_states) and retry.",
+                "candidates": candidates,
+            }
+        resolved_ids.append(rid)
+        if rid != e:
+            corrections[e] = rid
+    if ids:
+        data["entity_id"] = resolved_ids if isinstance(raw, (list, tuple)) else resolved_ids[0]
+        ids = resolved_ids
+
     await hass.services.async_call(domain, service, data, blocking=True)
     # Let derived entities (e.g. template lights) re-render from their source
     # before we read back the resulting state, so feedback isn't stale.
     await asyncio.sleep(0.2)
     result: dict[str, Any] = {"ok": True, "called": f"{domain}.{service}", "data": data}
+    if corrections:
+        result["resolved"] = corrections
     if ids:
         result["states"] = {
             e: (s.state if (s := hass.states.get(e)) else None) for e in ids
@@ -281,6 +354,11 @@ async def _get_history(hass: HomeAssistant, entity_id: str, hours: int = 24) -> 
     """Return recorded state changes for an entity over the last N hours."""
     if "recorder" not in hass.config.components:
         return {"error": "the recorder integration is not enabled, so no history is available"}
+    if hass.states.get(entity_id) is None:
+        resolved, candidates = _resolve_entity_id(hass, entity_id)
+        if resolved is None:
+            return {"error": f"entity '{entity_id}' not found", "candidates": candidates}
+        entity_id = resolved
     start = dt_util.utcnow() - timedelta(hours=int(hours))
 
     def _query() -> dict:
