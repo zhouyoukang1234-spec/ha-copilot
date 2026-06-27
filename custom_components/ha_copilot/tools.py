@@ -617,60 +617,102 @@ def _backup_then_write(target: str, dump: Any) -> None:
         yaml.safe_dump(dump, f, allow_unicode=True, sort_keys=False)
 
 
+def _purge_restored_entities(
+    hass: HomeAssistant,
+    domain: str,
+    *,
+    ids: set[str] | None = None,
+    names: set[str] | None = None,
+    entity_ids: set[str] | None = None,
+) -> list[str]:
+    """Remove now-orphaned `unavailable`/restored registry entries left after a reload.
+
+    HA keeps a deleted YAML object as a `restored` (state=unavailable) entity until a full
+    restart; this drops that residue so a delete leaves no trace. Matches by config `id`
+    attribute, friendly_name, or explicit entity_id.
+    """
+    reg = er.async_get(hass)
+    purged: list[str] = []
+    for st in hass.states.async_all(domain):
+        if st.state != "unavailable":
+            continue
+        attr_id = st.attributes.get("id")
+        attr_name = st.attributes.get("friendly_name")
+        if (
+            (ids and attr_id is not None and str(attr_id) in ids)
+            or (names and attr_name in names)
+            or (entity_ids and st.entity_id in entity_ids)
+        ):
+            if reg.async_get(st.entity_id) is not None:
+                reg.async_remove(st.entity_id)
+            else:
+                hass.states.async_remove(st.entity_id)
+            purged.append(st.entity_id)
+    return purged
+
+
 async def _delete_automation(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
     """Remove automation(s) from automations.yaml by id or alias, then reload."""
     path = _safe_path(hass, "automations.yaml")
 
-    def _remove() -> tuple[int, int]:
+    def _remove() -> tuple[int, int, set[str], set[str]]:
         if not os.path.isfile(path):
-            return (0, 0)
+            return (0, 0, set(), set())
         with open(path, encoding="utf-8") as f:
             existing = yaml.safe_load(f) or []
         if not isinstance(existing, list):
-            return (0, 0)
+            return (0, 0, set(), set())
         before = len(existing)
-        kept = [
+        gone = [
             a for a in existing
-            if not (str(a.get("id")) == str(identifier) or a.get("alias") == identifier)
+            if (str(a.get("id")) == str(identifier) or a.get("alias") == identifier)
         ]
+        kept = [a for a in existing if a not in gone]
         if len(kept) != before:
             _backup_then_write(path, kept)
-        return (before, before - len(kept))
+        ids = {str(a.get("id")) for a in gone if a.get("id") is not None}
+        names = {a.get("alias") for a in gone if a.get("alias")}
+        return (before, before - len(kept), ids, names)
 
-    before, removed = await hass.async_add_executor_job(_remove)
+    before, removed, ids, names = await hass.async_add_executor_job(_remove)
     if removed == 0:
         return {"error": f"no automation matched id/alias '{identifier}'"}
     if hass.services.has_service("automation", "reload"):
         await hass.services.async_call("automation", "reload", {}, blocking=True)
-    return {"ok": True, "removed": removed, "remaining": before - removed}
+    purged = _purge_restored_entities(hass, "automation", ids=ids, names=names)
+    return {"ok": True, "removed": removed, "remaining": before - removed, "purged": purged}
 
 
 async def _delete_scene(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
     """Remove scene(s) from scenes.yaml by id or name, then reload."""
     path = _safe_path(hass, "scenes.yaml")
 
-    def _remove() -> tuple[int, int]:
+    def _remove() -> tuple[int, int, set[str], set[str]]:
         if not os.path.isfile(path):
-            return (0, 0)
+            return (0, 0, set(), set())
         with open(path, encoding="utf-8") as f:
             existing = yaml.safe_load(f) or []
         if not isinstance(existing, list):
-            return (0, 0)
+            return (0, 0, set(), set())
         before = len(existing)
-        kept = [
+        gone = [
             s for s in existing
-            if not (str(s.get("id")) == str(identifier) or s.get("name") == identifier)
+            if (str(s.get("id")) == str(identifier) or s.get("name") == identifier)
         ]
+        kept = [s for s in existing if s not in gone]
         if len(kept) != before:
             _backup_then_write(path, kept)
-        return (before, before - len(kept))
+        ids = {str(s.get("id")) for s in gone if s.get("id") is not None}
+        names = {s.get("name") for s in gone if s.get("name")}
+        return (before, before - len(kept), ids, names)
 
-    before, removed = await hass.async_add_executor_job(_remove)
+    before, removed, ids, names = await hass.async_add_executor_job(_remove)
     if removed == 0:
         return {"error": f"no scene matched id/name '{identifier}'"}
     if hass.services.has_service("scene", "reload"):
         await hass.services.async_call("scene", "reload", {}, blocking=True)
-    return {"ok": True, "removed": removed, "remaining": before - removed}
+    purged = _purge_restored_entities(hass, "scene", ids=ids, names=names)
+    return {"ok": True, "removed": removed, "remaining": before - removed, "purged": purged}
 
 
 async def _delete_script(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
@@ -694,7 +736,8 @@ async def _delete_script(hass: HomeAssistant, identifier: str) -> dict[str, Any]
         return {"error": f"no script matched '{identifier}'"}
     if hass.services.has_service("script", "reload"):
         await hass.services.async_call("script", "reload", {}, blocking=True)
-    return {"ok": True, "deleted": f"script.{key}"}
+    purged = _purge_restored_entities(hass, "script", entity_ids={f"script.{key}"})
+    return {"ok": True, "deleted": f"script.{key}", "purged": purged}
 
 
 def _entry_state(entry: Any) -> str:
