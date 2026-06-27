@@ -1,0 +1,18 @@
+light_panel_toggle:
+  name: 灯带色彩盘收纳
+notify_automation_complete:
+  name: 自动化完成通知
+notify_device_offline:
+  name: 设备离线通知
+notify_high_power:
+  name: 高功率通知
+notify_low_battery:
+  name: 低电量通知
+unified_speaker_next:
+  name: 统一下一首
+unified_speaker_pause:
+  name: 统一暂停
+unified_speaker_play:
+  name: 统一播放
+unified_speaker_previous:
+  name: 统一上一首

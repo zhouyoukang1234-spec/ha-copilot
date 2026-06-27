@@ -1,0 +1,64 @@
+# 语音命令 Intent 处理 (MacroDroid → OnePlus NE2210 · 192.168.31.40)
+OpenWechat:
+  speech:
+    text: "好的，正在打开微信"
+  action:
+    - service: rest_command.macrodroid_cmd
+      data:
+        cmd: "open_wechat"
+
+OpenAlipay:
+  speech:
+    text: "好的，正在打开支付宝"
+  action:
+    - service: rest_command.macrodroid_cmd
+      data:
+        cmd: "open_alipay"
+
+OpenTaobao:
+  speech:
+    text: "好的，正在打开淘宝"
+  action:
+    - service: rest_command.macrodroid_cmd
+      data:
+        cmd: "open_taobao"
+
+OpenDoubao:
+  speech:
+    text: "好的，正在打开豆包"
+  action:
+    - service: rest_command.macrodroid_cmd
+      data:
+        cmd: "open_doubao"
+
+OpenAmap:
+  speech:
+    text: "好的，正在打开高德地图"
+  action:
+    - service: rest_command.macrodroid_cmd
+      data:
+        cmd: "open_amap"
+
+OpenMijia:
+  speech:
+    text: "好的，正在打开米家"
+  action:
+    - service: rest_command.macrodroid_cmd
+      data:
+        cmd: "open_mijia"
+
+SetMute:
+  speech:
+    text: "好的，已设为静音"
+  action:
+    - service: rest_command.macrodroid_cmd
+      data:
+        cmd: "mute"
+
+DoVibrate:
+  speech:
+    text: "好的，已振动"
+  action:
+    - service: rest_command.macrodroid_cmd
+      data:
+        cmd: "vibrate"

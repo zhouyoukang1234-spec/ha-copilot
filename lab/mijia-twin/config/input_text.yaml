@@ -1,0 +1,25 @@
+dual_speakers_command:
+  max: 200
+  min: 0
+  mode: text
+  name: 双音响语音命令
+open_webui_input:
+  max: 255
+  min: 0
+  mode: text
+  name: 模型输入
+open_webui_output:
+  max: 255
+  min: 0
+  mode: text
+  name: 模型输出
+tts_message:
+  max: 200
+  min: 0
+  mode: text
+  name: TTS播报内容
+unified_speaker_command:
+  max: 200
+  min: 0
+  mode: text
+  name: 统一音箱命令

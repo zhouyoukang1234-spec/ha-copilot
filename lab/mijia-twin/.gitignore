@@ -1,0 +1,12 @@
+# HA runtime artifacts — never commit
+config/.storage/
+config/.cloud/
+config/deps/
+config/tts/
+config/*.db
+config/*.db-*
+config/*.log
+config/.HA_VERSION
+config/.uuid
+config/.ha_run.lock
+**/__pycache__/

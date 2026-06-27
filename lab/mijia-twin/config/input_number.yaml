@@ -1,0 +1,5 @@
+all_speakers_volume:
+  max: 100.0
+  min: 0.0
+  name: 所有音箱音量
+  step: 5.0

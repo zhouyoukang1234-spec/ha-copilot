@@ -1,0 +1,65 @@
+# 米家「中枢网关」· Home Assistant —— 数字孪生仿真实验室 (Devin VM)
+# 源自用户真实部署 (台式机141 / 中枢网关), 在虚拟机内 1:1 复刻其
+# 自动化/脚本/场景/模板/前端, 设备源由 lab_sim 组件以模拟实体复刻 (208 个)。
+# 已剔除真机专属耦合: 网关 MQTT(TLS)/recorder eMMC 路径/受信代理 等。
+
+homeassistant:
+  name: "中枢网关·孪生"
+  latitude: 43.8256
+  longitude: 87.6168
+  elevation: 918
+  unit_system: metric
+  currency: CNY
+  country: CN
+  time_zone: Asia/Urumqi
+  customize: !include customize.yaml
+  packages: !include_dir_named packages
+
+# 核心服务 (含 frontend / history / recorder / logbook / api 等)
+default_config:
+
+# 数字孪生设备层: 复刻真机引用但本地不存在的全部外部设备实体
+lab_sim:
+
+# 前端
+frontend:
+  themes: !include themes.yaml
+
+lovelace:
+  mode: yaml
+  resources: []
+  dashboards:
+    devin-twin:
+      mode: yaml
+      title: Devin 孪生台
+      icon: mdi:robot-happy
+      show_in_sidebar: true
+      filename: devin_dashboard.yaml
+
+# 日志
+logger:
+  default: warning
+  logs:
+    homeassistant.core: info
+    custom_components.lab_sim: info
+    homeassistant.components.automation: warning
+
+# 传感器 / 模板
+sensor: !include_dir_merge_list sensors/
+template: !include template_sensors.yaml
+
+# 会话意图
+intent_script: !include intent_script.yaml
+conversation:
+
+# 辅助实体
+input_boolean: !include input_boolean.yaml
+input_select: !include input_select.yaml
+input_number: !include input_number.yaml
+input_text: !include input_text.yaml
+group: !include groups.yaml
+
+# 自动化 / 脚本 / 场景
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml

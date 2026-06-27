@@ -1,0 +1,2578 @@
+{
+  "automations": [
+    {
+      "entity_id": "automation.da_kai_si_hao_shi_da_kai_wu_hao",
+      "state": "off",
+      "attributes": {
+        "id": "1732296680337",
+        "last_triggered": "2024-12-04T16:21:03.063872+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "鎵撳紑鍥涘彿鏃舵墦寮€浜斿彿"
+      },
+      "last_changed": "2026-03-28T10:54:10.551419+00:00",
+      "last_reported": "2026-03-28T10:54:10.551419+00:00",
+      "last_updated": "2026-03-28T10:54:10.551419+00:00",
+      "context": {
+        "id": "01KMT18YKQJMGHEJYTXVHTPMX8",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.qin_shi_fang_tiao_zha",
+      "state": "on",
+      "attributes": {
+        "id": "1732640611952",
+        "last_triggered": "2026-03-09T03:00:36.515617+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "鎬诲姛鐜囦繚鎶?- 鍏抽棴涓ぎ涓€鍙锋彃澶?"
+      },
+      "last_changed": "2026-03-28T10:54:10.551559+00:00",
+      "last_reported": "2026-03-28T10:54:10.551559+00:00",
+      "last_updated": "2026-03-28T10:54:10.551559+00:00",
+      "context": {
+        "id": "01KMT18YKQ9DQDSSXV5VXETJNE",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.guan_bi_4hao_shi_zi_dong_guan_bi_5hao",
+      "state": "on",
+      "attributes": {
+        "id": "1732640679771",
+        "last_triggered": "2026-03-27T18:05:08.240776+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "鍏抽棴4鍙锋椂鑷姩鍏抽棴5鍙?"
+      },
+      "last_changed": "2026-03-28T10:54:10.551679+00:00",
+      "last_reported": "2026-03-28T10:54:10.551679+00:00",
+      "last_updated": "2026-03-28T10:54:10.551679+00:00",
+      "context": {
+        "id": "01KMT18YKQJ60A67BF48DKYE1E",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.kai_qi_hu_wai_dian_yuan_cha_tou_2",
+      "state": "unavailable",
+      "attributes": {
+        "id": "1732715640582",
+        "friendly_name": "鏅鸿兘寮€鍚埛澶栫數婧愭彃澶?"
+      },
+      "last_changed": "2026-03-28T10:54:10.551799+00:00",
+      "last_reported": "2026-03-28T10:54:10.551799+00:00",
+      "last_updated": "2026-03-28T10:54:10.551799+00:00",
+      "context": {
+        "id": "01KMT18YKQQ2PGE4QTXVP1VD29",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.xin_jian_zi_dong_hua",
+      "state": "off",
+      "attributes": {
+        "id": "1732714684914",
+        "last_triggered": "2024-12-04T16:20:15.514722+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "鍔熺巼瓒?00鍏抽棴鎴峰鐢垫簮鎻掑ご"
+      },
+      "last_changed": "2026-03-28T10:54:10.551851+00:00",
+      "last_reported": "2026-03-28T10:54:10.551851+00:00",
+      "last_updated": "2026-03-28T10:54:10.551851+00:00",
+      "context": {
+        "id": "01KMT18YKQHBV90NABE0X6YXNW",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.guan_bi_hu_wai_dian_yuan_cha_tou",
+      "state": "on",
+      "attributes": {
+        "id": "1732716104497",
+        "last_triggered": "2026-03-16T13:56:54.495797+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "鐢垫睜鍏呮弧鍏抽棴鎴峰鐢垫簮鎻掑ご"
+      },
+      "last_changed": "2026-03-28T10:54:10.551896+00:00",
+      "last_reported": "2026-03-28T10:54:10.551896+00:00",
+      "last_updated": "2026-03-28T10:54:10.551896+00:00",
+      "context": {
+        "id": "01KMT18YKQ7YP4WGDGSFRMD1VF",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.gong_lu_bao_hu_guan_bi_you_kang_chuang_cha_tou",
+      "state": "on",
+      "attributes": {
+        "id": "1732896538035",
+        "last_triggered": "2026-03-05T19:03:08.069520+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "鍔熺巼淇濇姢 - 鍏抽棴闈炲繀瑕佹彃澶达紙淇濇姢鏈夊悍搴婃彃澶达級"
+      },
+      "last_changed": "2026-03-28T10:54:10.552199+00:00",
+      "last_reported": "2026-03-28T10:54:10.552199+00:00",
+      "last_updated": "2026-03-28T10:54:10.552199+00:00",
+      "context": {
+        "id": "01KMT18YKRR33FTDF9HS6043QA",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.api_xuan_e_zhui",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "API 璇煶鍔╂墜"
+      },
+      "last_changed": "2026-03-28T10:54:10.552409+00:00",
+      "last_reported": "2026-03-28T10:54:10.552409+00:00",
+      "last_updated": "2026-03-28T10:54:10.552409+00:00",
+      "context": {
+        "id": "01KMT18YKRJP68KHQGZ59WYNDP",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.tong_bu_suo_you_yin_xiang_yin_liang",
+      "state": "on",
+      "attributes": {
+        "id": "sync_all_speakers_volume_1764165208",
+        "last_triggered": "2025-12-16T17:30:02.808916+00:00",
+        "mode": "restart",
+        "current": 0,
+        "friendly_name": "鍚屾鎵€鏈夐煶绠遍煶閲?"
+      },
+      "last_changed": "2026-03-28T10:54:10.552520+00:00",
+      "last_reported": "2026-03-28T10:54:10.552520+00:00",
+      "last_updated": "2026-03-28T10:54:10.552520+00:00",
+      "context": {
+        "id": "01KMT18YKR44JXTW8NQN5Y4TP1",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.tong_yi_zhi_ling_yi_chuan_si",
+      "state": "on",
+      "attributes": {
+        "id": "unified_command_to_4_speakers_auto",
+        "last_triggered": "2025-11-29T06:00:21.700526+00:00",
+        "mode": "queued",
+        "current": 0,
+        "max": 5,
+        "friendly_name": "缁熶竴鎸囦护涓€浼犲洓"
+      },
+      "last_changed": "2026-03-28T10:54:10.552646+00:00",
+      "last_reported": "2026-03-28T10:54:10.552646+00:00",
+      "last_updated": "2026-03-28T10:54:10.552646+00:00",
+      "context": {
+        "id": "01KMT18YKRFXFQEVFP2TRVQYMP",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.openrgb_bai_tian_you_ren",
+      "state": "on",
+      "attributes": {
+        "id": "openrgb_motion_day_1732896800001",
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "OpenRGB 鐧藉ぉ鏈変汉"
+      },
+      "last_changed": "2026-03-28T10:54:10.552726+00:00",
+      "last_reported": "2026-03-28T10:54:10.552726+00:00",
+      "last_updated": "2026-03-28T10:54:10.552726+00:00",
+      "context": {
+        "id": "01KMT18YKRGSVTWZGZAEKFBSXJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.openrgb_wan_shang_you_ren",
+      "state": "on",
+      "attributes": {
+        "id": "openrgb_motion_evening_1732896800002",
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "OpenRGB 鏅氫笂鏈変汉"
+      },
+      "last_changed": "2026-03-28T10:54:10.552812+00:00",
+      "last_reported": "2026-03-28T10:54:10.552812+00:00",
+      "last_updated": "2026-03-28T10:54:10.552812+00:00",
+      "context": {
+        "id": "01KMT18YKRYK9CNH6AN02444R2",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.openrgb_shen_ye_you_ren",
+      "state": "on",
+      "attributes": {
+        "id": "openrgb_motion_night_1732896800003",
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "OpenRGB 娣卞鏈変汉"
+      },
+      "last_changed": "2026-03-28T10:54:10.552918+00:00",
+      "last_reported": "2026-03-28T10:54:10.552918+00:00",
+      "last_updated": "2026-03-28T10:54:10.552918+00:00",
+      "context": {
+        "id": "01KMT18YKRG6DZPKCQER3TFWMC",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.openrgb_wu_ren_guan_bi",
+      "state": "on",
+      "attributes": {
+        "id": "openrgb_motion_off_1732896800004",
+        "last_triggered": "2026-03-16T17:52:41.429871+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "OpenRGB 鏃犱汉鍏抽棴"
+      },
+      "last_changed": "2026-03-28T10:54:10.552997+00:00",
+      "last_reported": "2026-03-28T10:54:10.552997+00:00",
+      "last_updated": "2026-03-28T10:54:10.552997+00:00",
+      "context": {
+        "id": "01KMT18YKR69Q6HVD7E5N47AVJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledgen_sui_fen_wei_deng_dai",
+      "state": "on",
+      "attributes": {
+        "id": "led_follow_strip_1732897500001",
+        "last_triggered": "2026-03-16T18:13:10.427194+00:00",
+        "mode": "restart",
+        "current": 0,
+        "friendly_name": "LED璺熼殢姘涘洿鐏甫"
+      },
+      "last_changed": "2026-03-28T10:54:10.553119+00:00",
+      "last_reported": "2026-03-28T10:54:10.553119+00:00",
+      "last_updated": "2026-03-28T10:54:10.553119+00:00",
+      "context": {
+        "id": "01KMT18YKSM1KVZ2PP1H7D7ZZW",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledzao_chen_mo_shi",
+      "state": "on",
+      "attributes": {
+        "id": "led_morning_mode_1732897500002",
+        "last_triggered": "2026-03-28T00:00:00.476148+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "LED鏃╂櫒妯″紡"
+      },
+      "last_changed": "2026-03-28T10:54:10.553232+00:00",
+      "last_reported": "2026-03-28T10:54:10.553232+00:00",
+      "last_updated": "2026-03-28T10:54:10.553232+00:00",
+      "context": {
+        "id": "01KMT18YKS89S528JVBW9T199A",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledxia_wu_mo_shi",
+      "state": "on",
+      "attributes": {
+        "id": "led_afternoon_mode_1732897500003",
+        "last_triggered": "2026-03-28T06:00:00.268418+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "LED涓嬪崍妯″紡"
+      },
+      "last_changed": "2026-03-28T10:54:10.553339+00:00",
+      "last_reported": "2026-03-28T10:54:10.553339+00:00",
+      "last_updated": "2026-03-28T10:54:10.553339+00:00",
+      "context": {
+        "id": "01KMT18YKSQ9721EM94TT39461",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledbang_wan_mo_shi",
+      "state": "on",
+      "attributes": {
+        "id": "led_evening_mode_1732897500004",
+        "last_triggered": "2026-03-28T12:00:00.263309+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "LED鍌嶆櫄妯″紡"
+      },
+      "last_changed": "2026-03-28T10:54:10.553410+00:00",
+      "last_reported": "2026-03-28T12:00:00.313598+00:00",
+      "last_updated": "2026-03-28T12:00:00.313598+00:00",
+      "context": {
+        "id": "01KMT51FR7TCSW1KZPG262K6H9",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledye_wan_mo_shi",
+      "state": "on",
+      "attributes": {
+        "id": "led_night_mode_1732897500005",
+        "last_triggered": "2026-03-28T16:00:00.374118+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "LED澶滄櫄妯″紡"
+      },
+      "last_changed": "2026-03-28T10:54:10.553487+00:00",
+      "last_reported": "2026-03-28T16:00:00.429545+00:00",
+      "last_updated": "2026-03-28T16:00:00.429545+00:00",
+      "context": {
+        "id": "01KMTJRYBPK37PWFSAYKRZYWB1",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledshen_ye_guan_bi",
+      "state": "on",
+      "attributes": {
+        "id": "led_midnight_off_1732897500006",
+        "last_triggered": "2026-03-27T19:00:00.166866+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "LED娣卞鍏抽棴"
+      },
+      "last_changed": "2026-03-28T10:54:10.553569+00:00",
+      "last_reported": "2026-03-28T10:54:10.553569+00:00",
+      "last_updated": "2026-03-28T10:54:10.553569+00:00",
+      "context": {
+        "id": "01KMT18YKSVZ1RF7NH8EEV1T3X",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledcai_hong_xun_huan",
+      "state": "on",
+      "attributes": {
+        "id": "led_rainbow_cycle_1732897500007",
+        "last_triggered": "2026-03-28T14:59:30.473839+00:00",
+        "mode": "restart",
+        "current": 0,
+        "friendly_name": "LED褰╄櫣寰幆"
+      },
+      "last_changed": "2026-03-28T10:54:10.553666+00:00",
+      "last_reported": "2026-03-28T14:59:30.526073+00:00",
+      "last_updated": "2026-03-28T14:59:30.526073+00:00",
+      "context": {
+        "id": "01KMTFA5H9JKHBXGD8X03PHZES",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledzhou_mo_you_xi_mo_shi",
+      "state": "on",
+      "attributes": {
+        "id": "led_weekend_gaming_1732897500008",
+        "last_triggered": "2026-03-28T14:00:00.446201+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "LED鍛ㄦ湯娓告垙妯″紡"
+      },
+      "last_changed": "2026-03-28T10:54:10.553761+00:00",
+      "last_reported": "2026-03-28T14:00:00.514570+00:00",
+      "last_updated": "2026-03-28T14:00:00.514570+00:00",
+      "context": {
+        "id": "01KMTBX75Y1K8MNZ3BT9EPAZZ8",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.ledgong_zuo_ri_zhuan_zhu_mo_shi",
+      "state": "on",
+      "attributes": {
+        "id": "led_weekday_focus_1732897500009",
+        "last_triggered": "2026-03-27T03:00:00.477005+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "LED宸ヤ綔鏃ヤ笓娉ㄦā寮?"
+      },
+      "last_changed": "2026-03-28T10:54:10.553821+00:00",
+      "last_reported": "2026-03-28T10:54:10.553821+00:00",
+      "last_updated": "2026-03-28T10:54:10.553821+00:00",
+      "context": {
+        "id": "01KMT18YKSVV05J47053QV7E18",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.tong_yi_bo_fang_suo_you_yin_xiang_qiang_hua_ban",
+      "state": "on",
+      "attributes": {
+        "id": "unified_speaker_play_sync_1732897000001",
+        "last_triggered": "2025-12-01T13:00:48.331939+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "缁熶竴鎾斁鎵€鏈夐煶绠憋紙寮哄寲鐗堬級"
+      },
+      "last_changed": "2026-03-28T10:54:10.553962+00:00",
+      "last_reported": "2026-03-28T10:54:10.553962+00:00",
+      "last_updated": "2026-03-28T10:54:10.553962+00:00",
+      "context": {
+        "id": "01KMT18YKSWXMBCZ9G4CXBB09G",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.tong_yi_zan_ting_suo_you_yin_xiang_gai_jin",
+      "state": "on",
+      "attributes": {
+        "id": "unified_speaker_pause_sync_1732897000002",
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "缁熶竴鏆傚仠鎵€鏈夐煶绠憋紙鏀硅繘锛?"
+      },
+      "last_changed": "2026-03-28T10:54:10.554074+00:00",
+      "last_reported": "2026-03-28T10:54:10.554074+00:00",
+      "last_updated": "2026-03-28T10:54:10.554074+00:00",
+      "context": {
+        "id": "01KMT18YKTBV380GMHYR6AZ2KQ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.tong_yi_xia_yi_shou_suo_you_yin_xiang_qiang_hua_ban",
+      "state": "on",
+      "attributes": {
+        "id": "unified_speaker_next_sync_1732897000003",
+        "last_triggered": "2025-11-27T11:20:26.588637+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "缁熶竴涓嬩竴棣栨墍鏈夐煶绠憋紙寮哄寲鐗堬級"
+      },
+      "last_changed": "2026-03-28T10:54:10.554153+00:00",
+      "last_reported": "2026-03-28T10:54:10.554153+00:00",
+      "last_updated": "2026-03-28T10:54:10.554153+00:00",
+      "context": {
+        "id": "01KMT18YKTXT0YY0Y7JY8Z1XMT",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.tong_yi_shang_yi_shou_suo_you_yin_xiang_qiang_hua_ban",
+      "state": "on",
+      "attributes": {
+        "id": "unified_speaker_previous_sync_1732897000004",
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "缁熶竴涓婁竴棣栨墍鏈夐煶绠憋紙寮哄寲鐗堬級"
+      },
+      "last_changed": "2026-03-28T10:54:10.554241+00:00",
+      "last_reported": "2026-03-28T10:54:10.554241+00:00",
+      "last_updated": "2026-03-28T10:54:10.554241+00:00",
+      "context": {
+        "id": "01KMT18YKTDV6PK3CBAXYVZ1JE",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.tong_yi_zhi_ling_yi_chuan_er",
+      "state": "on",
+      "attributes": {
+        "id": "unified_command_to_2_speakers_auto",
+        "last_triggered": "2025-12-24T14:30:21.889439+00:00",
+        "mode": "queued",
+        "current": 0,
+        "max": 5,
+        "friendly_name": "缁熶竴鎸囦护涓€浼犱簩"
+      },
+      "last_changed": "2026-03-28T10:54:10.554300+00:00",
+      "last_reported": "2026-03-28T10:54:10.554300+00:00",
+      "last_updated": "2026-03-28T10:54:10.554300+00:00",
+      "context": {
+        "id": "01KMT18YKTV318JH375Y33S8WC",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.mei_ri_xia_zai_bi_ying_bi_zhi",
+      "state": "on",
+      "attributes": {
+        "id": "download_bing_wallpaper_daily",
+        "last_triggered": "2026-03-28T10:54:43.252749+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "姣忔棩涓嬭浇蹇呭簲澹佺焊"
+      },
+      "last_changed": "2026-03-28T10:54:10.554341+00:00",
+      "last_reported": "2026-03-28T10:54:46.606434+00:00",
+      "last_updated": "2026-03-28T10:54:46.606434+00:00",
+      "context": {
+        "id": "01KMT19YHMWMF9ZRFVCNGV3QB2",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_zhu_shou_wen_zi_hui_fu_lang_du",
+      "state": "on",
+      "attributes": {
+        "id": "assist_text_to_speech_1766427902989",
+        "last_triggered": null,
+        "mode": "queued",
+        "current": 0,
+        "max": 5,
+        "friendly_name": "璇煶鍔╂墜鏂囧瓧鍥炲鏈楄"
+      },
+      "last_changed": "2026-03-28T10:54:10.554378+00:00",
+      "last_reported": "2026-03-28T10:54:10.554378+00:00",
+      "last_updated": "2026-03-28T10:54:10.554378+00:00",
+      "context": {
+        "id": "01KMT18YKTM6P3HNP75RG2CBFN",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_da_kai_wei_xin",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-25T13:06:28.425965+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 打开微信"
+      },
+      "last_changed": "2026-03-28T10:54:10.554445+00:00",
+      "last_reported": "2026-03-28T10:54:10.554445+00:00",
+      "last_updated": "2026-03-28T10:54:10.554445+00:00",
+      "context": {
+        "id": "01KMT18YKTZ6JYEVQS35333K1N",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_da_kai_zhi_fu_bao",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-25T09:53:14.798596+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 打开支付宝"
+      },
+      "last_changed": "2026-03-28T10:54:10.554494+00:00",
+      "last_reported": "2026-03-28T10:54:10.554494+00:00",
+      "last_updated": "2026-03-28T10:54:10.554494+00:00",
+      "context": {
+        "id": "01KMT18YKTRA1PJNV2F1NER9DZ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_da_kai_tao_bao",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-25T09:52:48.197829+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 打开淘宝"
+      },
+      "last_changed": "2026-03-28T10:54:10.554584+00:00",
+      "last_reported": "2026-03-28T10:54:10.554584+00:00",
+      "last_updated": "2026-03-28T10:54:10.554584+00:00",
+      "context": {
+        "id": "01KMT18YKT996Z04V8EBAWHXV7",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_da_kai_dou_bao",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T19:37:49.587226+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 打开豆包"
+      },
+      "last_changed": "2026-03-28T10:54:10.554633+00:00",
+      "last_reported": "2026-03-28T10:54:10.554633+00:00",
+      "last_updated": "2026-03-28T10:54:10.554633+00:00",
+      "context": {
+        "id": "01KMT18YKTYGCGJ21KN86PKW31",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_da_kai_di_tu",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T12:43:02.695020+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 打开地图"
+      },
+      "last_changed": "2026-03-28T10:54:10.554685+00:00",
+      "last_reported": "2026-03-28T10:54:10.554685+00:00",
+      "last_updated": "2026-03-28T10:54:10.554685+00:00",
+      "context": {
+        "id": "01KMT18YKT6PEQSR0TEKCETZG3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_da_kai_mi_jia",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 打开米家"
+      },
+      "last_changed": "2026-03-28T10:54:10.554733+00:00",
+      "last_reported": "2026-03-28T10:54:10.554733+00:00",
+      "last_updated": "2026-03-28T10:54:10.554733+00:00",
+      "context": {
+        "id": "01KMT18YKTTJQQV2C4RVVESD93",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_shou_ji_jing_yin",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 手机静音"
+      },
+      "last_changed": "2026-03-28T10:54:10.554859+00:00",
+      "last_reported": "2026-03-28T10:54:10.554859+00:00",
+      "last_updated": "2026-03-28T10:54:10.554859+00:00",
+      "context": {
+        "id": "01KMT18YKTK29Q1Z2DG3R8S6MP",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_shou_ji_cha_zhao_zhen_dong",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 手机查找/震动"
+      },
+      "last_changed": "2026-03-28T10:54:10.554949+00:00",
+      "last_reported": "2026-03-28T10:54:10.554949+00:00",
+      "last_updated": "2026-03-28T10:54:10.554949+00:00",
+      "context": {
+        "id": "01KMT18YKTDDS9H4QJSXZXGRF8",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_yi_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T19:53:10.020919+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开一号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555000+00:00",
+      "last_reported": "2026-03-28T10:54:10.555000+00:00",
+      "last_updated": "2026-03-28T10:54:10.555000+00:00",
+      "context": {
+        "id": "01KMT18YKTG2HX79ZRWERFYHGE",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_yi_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T19:53:16.858778+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关一号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555039+00:00",
+      "last_reported": "2026-03-28T10:54:10.555039+00:00",
+      "last_updated": "2026-03-28T10:54:10.555039+00:00",
+      "context": {
+        "id": "01KMT18YKVFSCZCPE1W25C3H09",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_er_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开二号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555070+00:00",
+      "last_reported": "2026-03-28T10:54:10.555070+00:00",
+      "last_updated": "2026-03-28T10:54:10.555070+00:00",
+      "context": {
+        "id": "01KMT18YKVXNWXM5DW1ENETY30",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_er_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关二号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555101+00:00",
+      "last_reported": "2026-03-28T10:54:10.555101+00:00",
+      "last_updated": "2026-03-28T10:54:10.555101+00:00",
+      "context": {
+        "id": "01KMT18YKVD9PW00R1V2WQ979D",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_san_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T19:38:17.343649+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开三号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555133+00:00",
+      "last_reported": "2026-03-28T10:54:10.555133+00:00",
+      "last_updated": "2026-03-28T10:54:10.555133+00:00",
+      "context": {
+        "id": "01KMT18YKVP3ZR9ACWWRDHN08P",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_san_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T19:38:26.006548+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关三号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555176+00:00",
+      "last_reported": "2026-03-28T10:54:10.555176+00:00",
+      "last_updated": "2026-03-28T10:54:10.555176+00:00",
+      "context": {
+        "id": "01KMT18YKVB4S6XJR2PWJDYWKF",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_si_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T19:55:52.151356+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开四号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555277+00:00",
+      "last_reported": "2026-03-28T10:54:10.555277+00:00",
+      "last_updated": "2026-03-28T10:54:10.555277+00:00",
+      "context": {
+        "id": "01KMT18YKVHTHTNWW9TYGWW5HH",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_si_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T19:55:59.207116+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关四号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555320+00:00",
+      "last_reported": "2026-03-28T10:54:10.555320+00:00",
+      "last_updated": "2026-03-28T10:54:10.555320+00:00",
+      "context": {
+        "id": "01KMT18YKVFMMXRK92BEGM7GTG",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_wu_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开五号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555355+00:00",
+      "last_reported": "2026-03-28T10:54:10.555355+00:00",
+      "last_updated": "2026-03-28T10:54:10.555355+00:00",
+      "context": {
+        "id": "01KMT18YKVQ1N94650E7WDPCMW",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_wu_hao_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关五号灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555387+00:00",
+      "last_reported": "2026-03-28T10:54:10.555387+00:00",
+      "last_updated": "2026-03-28T10:54:10.555387+00:00",
+      "context": {
+        "id": "01KMT18YKVY2ZMD93FTEN4GVF3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_ding_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开顶灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555468+00:00",
+      "last_reported": "2026-03-28T10:54:10.555468+00:00",
+      "last_updated": "2026-03-28T10:54:10.555468+00:00",
+      "context": {
+        "id": "01KMT18YKV49T2M5CM6ZYR9YWR",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_ding_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关顶灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555549+00:00",
+      "last_reported": "2026-03-28T10:54:10.555549+00:00",
+      "last_updated": "2026-03-28T10:54:10.555549+00:00",
+      "context": {
+        "id": "01KMT18YKVSV0NCVN8JAMK81FM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_tong_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开筒灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555600+00:00",
+      "last_reported": "2026-03-28T10:54:10.555600+00:00",
+      "last_updated": "2026-03-28T10:54:10.555600+00:00",
+      "context": {
+        "id": "01KMT18YKVACGZ579XDH0J4PVQ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_tong_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关筒灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555638+00:00",
+      "last_reported": "2026-03-28T10:54:10.555638+00:00",
+      "last_updated": "2026-03-28T10:54:10.555638+00:00",
+      "context": {
+        "id": "01KMT18YKVMYB76SWVYACP947V",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_chuang_di_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T20:10:21.044390+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开床底灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555671+00:00",
+      "last_reported": "2026-03-28T10:54:10.555671+00:00",
+      "last_updated": "2026-03-28T10:54:10.555671+00:00",
+      "context": {
+        "id": "01KMT18YKV6N8CF57WRY45J1FC",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_chuang_di_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T20:10:29.078214+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关床底灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555703+00:00",
+      "last_reported": "2026-03-28T10:54:10.555703+00:00",
+      "last_updated": "2026-03-28T10:54:10.555703+00:00",
+      "context": {
+        "id": "01KMT18YKVNYW24XKW2PNR0R57",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_kai_deng_dai",
+      "state": "on",
+      "attributes": {
+        "last_triggered": "2025-12-24T19:40:53.632116+00:00",
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 开灯带"
+      },
+      "last_changed": "2026-03-28T10:54:10.555733+00:00",
+      "last_reported": "2026-03-28T10:54:10.555733+00:00",
+      "last_updated": "2026-03-28T10:54:10.555733+00:00",
+      "context": {
+        "id": "01KMT18YKV6EV24NP9NFT8MJ3W",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_guan_deng_dai",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 关灯带"
+      },
+      "last_changed": "2026-03-28T10:54:10.555762+00:00",
+      "last_reported": "2026-03-28T10:54:10.555762+00:00",
+      "last_updated": "2026-03-28T10:54:10.555762+00:00",
+      "context": {
+        "id": "01KMT18YKVAY5SY7G3DV48NBAW",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_quan_bu_kai_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 全部开灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555794+00:00",
+      "last_reported": "2026-03-28T10:54:10.555794+00:00",
+      "last_updated": "2026-03-28T10:54:10.555794+00:00",
+      "context": {
+        "id": "01KMT18YKVVXR2HWMV7SP08739",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.yu_yin_lan_jie_quan_bu_guan_deng",
+      "state": "on",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "语音拦截: 全部关灯"
+      },
+      "last_changed": "2026-03-28T10:54:10.555822+00:00",
+      "last_reported": "2026-03-28T10:54:10.555822+00:00",
+      "last_updated": "2026-03-28T10:54:10.555822+00:00",
+      "context": {
+        "id": "01KMT18YKVES5MQYTPYV0CCH3N",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.shou_ji_di_dian_liang_yuan_cheng_ti_xing",
+      "state": "on",
+      "attributes": {
+        "id": "phone_low_battery_alert",
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "手机低电量远程提醒"
+      },
+      "last_changed": "2026-03-28T10:54:10.555871+00:00",
+      "last_reported": "2026-03-28T10:54:10.555871+00:00",
+      "last_updated": "2026-03-28T10:54:10.555871+00:00",
+      "context": {
+        "id": "01KMT18YKVF82815PXSEDDJ95T",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "automation.zhao_shou_ji",
+      "state": "on",
+      "attributes": {
+        "id": "find_my_phone",
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "找手机"
+      },
+      "last_changed": "2026-03-28T10:54:10.555960+00:00",
+      "last_reported": "2026-03-28T10:54:10.555960+00:00",
+      "last_updated": "2026-03-28T10:54:10.555960+00:00",
+      "context": {
+        "id": "01KMT18YKVJ6AR3GMVHTZFXP11",
+        "parent_id": null,
+        "user_id": null
+      }
+    }
+  ],
+  "scripts": [
+    {
+      "entity_id": "script.home_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:home-import-outline",
+        "friendly_name": "回家模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243027+00:00",
+      "last_reported": "2026-03-28T10:54:04.243027+00:00",
+      "last_updated": "2026-03-28T10:54:04.243027+00:00",
+      "context": {
+        "id": "01KMT18REKKVP013CGCJ0D4CBQ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.away_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:home-export-outline",
+        "friendly_name": "离家模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243094+00:00",
+      "last_reported": "2026-03-28T10:54:04.243094+00:00",
+      "last_updated": "2026-03-28T10:54:04.243094+00:00",
+      "context": {
+        "id": "01KMT18REKE49X2JJWNXR1186X",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.work_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:laptop",
+        "friendly_name": "工作模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243127+00:00",
+      "last_reported": "2026-03-28T10:54:04.243127+00:00",
+      "last_updated": "2026-03-28T10:54:04.243127+00:00",
+      "context": {
+        "id": "01KMT18REKN367NGS9X46GBDWC",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.entertainment_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:movie-open",
+        "friendly_name": "娱乐模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243157+00:00",
+      "last_reported": "2026-03-28T10:54:04.243157+00:00",
+      "last_updated": "2026-03-28T10:54:04.243157+00:00",
+      "context": {
+        "id": "01KMT18REKJX69MBYFGBFJJ1NY",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.cleaning_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:broom",
+        "friendly_name": "清洁模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243186+00:00",
+      "last_reported": "2026-03-28T10:54:04.243186+00:00",
+      "last_updated": "2026-03-28T10:54:04.243186+00:00",
+      "context": {
+        "id": "01KMT18REK3GDM0ZK2D21DQ2WX",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.emergency_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:alert",
+        "friendly_name": "紧急模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243215+00:00",
+      "last_reported": "2026-03-28T10:54:04.243215+00:00",
+      "last_updated": "2026-03-28T10:54:04.243215+00:00",
+      "context": {
+        "id": "01KMT18REKDFS2ZPME7YDHE6PN",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.energy_saving_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:leaf",
+        "friendly_name": "节能模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243243+00:00",
+      "last_reported": "2026-03-28T10:54:04.243243+00:00",
+      "last_updated": "2026-03-28T10:54:04.243243+00:00",
+      "context": {
+        "id": "01KMT18REKPXVREPTN9APAVPHT",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.breakfast_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:coffee",
+        "friendly_name": "早餐模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243270+00:00",
+      "last_reported": "2026-03-28T10:54:04.243270+00:00",
+      "last_updated": "2026-03-28T10:54:04.243270+00:00",
+      "context": {
+        "id": "01KMT18REKZ6DJC6GFXMCBX006",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.lunch_break_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:weather-sunny",
+        "friendly_name": "午休模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243296+00:00",
+      "last_reported": "2026-03-28T10:54:04.243296+00:00",
+      "last_updated": "2026-03-28T10:54:04.243296+00:00",
+      "context": {
+        "id": "01KMT18REK3CDZ8GWPADQ5DZE0",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.dinner_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:silverware-fork-knife",
+        "friendly_name": "晚餐模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243323+00:00",
+      "last_reported": "2026-03-28T10:54:04.243323+00:00",
+      "last_updated": "2026-03-28T10:54:04.243323+00:00",
+      "context": {
+        "id": "01KMT18REKBYPEADZSXJN8JF8E",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.play_music_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:speaker-multiple",
+        "friendly_name": "多音响同步播放"
+      },
+      "last_changed": "2026-03-28T10:54:04.243350+00:00",
+      "last_reported": "2026-03-28T10:54:04.243350+00:00",
+      "last_updated": "2026-03-28T10:54:04.243350+00:00",
+      "context": {
+        "id": "01KMT18REKMZEYBA76ZASC9RX9",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.stop_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-24T05:32:39.501773+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:stop-circle",
+        "friendly_name": "停止所有音响"
+      },
+      "last_changed": "2026-03-28T10:54:04.243426+00:00",
+      "last_reported": "2026-03-28T10:54:04.243426+00:00",
+      "last_updated": "2026-03-28T10:54:04.243426+00:00",
+      "context": {
+        "id": "01KMT18REK6MPR43V1JG2SBAAN",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.pause_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:pause-circle",
+        "friendly_name": "暂停所有音响"
+      },
+      "last_changed": "2026-03-28T10:54:04.243485+00:00",
+      "last_reported": "2026-03-28T10:54:04.243485+00:00",
+      "last_updated": "2026-03-28T10:54:04.243485+00:00",
+      "context": {
+        "id": "01KMT18REKRJW6SZ6E94VVTFFH",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.play_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:play-circle",
+        "friendly_name": "继续播放所有音响"
+      },
+      "last_changed": "2026-03-28T10:54:04.243521+00:00",
+      "last_reported": "2026-03-28T10:54:04.243521+00:00",
+      "last_updated": "2026-03-28T10:54:04.243521+00:00",
+      "context": {
+        "id": "01KMT18REKBSRMT6RY5ZP3QH1V",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.set_all_speakers_volume",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:volume-high",
+        "friendly_name": "统一音量设置"
+      },
+      "last_changed": "2026-03-28T10:54:04.243550+00:00",
+      "last_reported": "2026-03-28T10:54:04.243550+00:00",
+      "last_updated": "2026-03-28T10:54:04.243550+00:00",
+      "context": {
+        "id": "01KMT18REK6JBMA4ET92P02Z89",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.send_to_4_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:send-circle",
+        "friendly_name": "发送到4个音箱"
+      },
+      "last_changed": "2026-03-28T10:54:04.243579+00:00",
+      "last_reported": "2026-03-28T10:54:04.243579+00:00",
+      "last_updated": "2026-03-28T10:54:04.243579+00:00",
+      "context": {
+        "id": "01KMT18REK50FEX6VDTEEP0SEY",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.send_unified_command",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:send-circle",
+        "friendly_name": "发送统一指令到4个音箱"
+      },
+      "last_changed": "2026-03-28T10:54:04.243607+00:00",
+      "last_reported": "2026-03-28T10:54:04.243607+00:00",
+      "last_updated": "2026-03-28T10:54:04.243607+00:00",
+      "context": {
+        "id": "01KMT18REKE09H0RW6CFPVK716",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.send_command_to_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "friendly_name": "向所有音箱发送命令"
+      },
+      "last_changed": "2026-03-28T10:54:04.243632+00:00",
+      "last_reported": "2026-03-28T10:54:04.243632+00:00",
+      "last_updated": "2026-03-28T10:54:04.243632+00:00",
+      "context": {
+        "id": "01KMT18REK7KH0KJSB1W82PMR4",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.sync_play_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:play-circle",
+        "friendly_name": "同步播放所有音箱"
+      },
+      "last_changed": "2026-03-28T10:54:04.243667+00:00",
+      "last_reported": "2026-03-28T10:54:04.243667+00:00",
+      "last_updated": "2026-03-28T10:54:04.243667+00:00",
+      "context": {
+        "id": "01KMT18REKQ9J181QKA0WSP6D7",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.sync_pause_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T11:23:56.689049+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:pause-circle",
+        "friendly_name": "同步暂停所有音箱"
+      },
+      "last_changed": "2026-03-28T10:54:04.243695+00:00",
+      "last_reported": "2026-03-28T10:54:04.243695+00:00",
+      "last_updated": "2026-03-28T10:54:04.243695+00:00",
+      "context": {
+        "id": "01KMT18REKY42TWQW08YWPVQ00",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.sync_next_track_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T11:20:52.433248+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:skip-next-circle",
+        "friendly_name": "同步下一首"
+      },
+      "last_changed": "2026-03-28T10:54:04.243725+00:00",
+      "last_reported": "2026-03-28T10:54:04.243725+00:00",
+      "last_updated": "2026-03-28T10:54:04.243725+00:00",
+      "context": {
+        "id": "01KMT18REK4PD67YTKJ7QJE0X2",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.sync_previous_track_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:skip-previous-circle",
+        "friendly_name": "同步上一首"
+      },
+      "last_changed": "2026-03-28T10:54:04.243750+00:00",
+      "last_reported": "2026-03-28T10:54:04.243750+00:00",
+      "last_updated": "2026-03-28T10:54:04.243750+00:00",
+      "context": {
+        "id": "01KMT18REKMWRHV58Y80Z27MSR",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_breathing_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-12T14:55:51.034827+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:lungs",
+        "friendly_name": "灯带呼吸模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243870+00:00",
+      "last_reported": "2026-03-28T10:54:04.243870+00:00",
+      "last_updated": "2026-03-28T10:54:04.243870+00:00",
+      "context": {
+        "id": "01KMT18REKYAJPYQ5MP3AF4RVZ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_rainbow_cycle",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-12T14:56:11.037028+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:palette",
+        "friendly_name": "灯带彩虹循环"
+      },
+      "last_changed": "2026-03-28T10:54:04.243944+00:00",
+      "last_reported": "2026-03-28T10:54:04.243944+00:00",
+      "last_updated": "2026-03-28T10:54:04.243944+00:00",
+      "context": {
+        "id": "01KMT18REKTM6WJHEC9MVQHBBM",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_blink_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-10T05:10:54.509441+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:flash",
+        "friendly_name": "灯带闪烁模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.243982+00:00",
+      "last_reported": "2026-03-28T10:54:04.243982+00:00",
+      "last_updated": "2026-03-28T10:54:04.243982+00:00",
+      "context": {
+        "id": "01KMT18REKRZJ6YCR1BNDBS02Y",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_gradient_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:21:28.372808+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:gradient-horizontal",
+        "friendly_name": "灯带渐变模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244011+00:00",
+      "last_reported": "2026-03-28T10:54:04.244011+00:00",
+      "last_updated": "2026-03-28T10:54:04.244011+00:00",
+      "context": {
+        "id": "01KMT18REMFT0TC1F5TEAMRXZA",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_water_flow",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:water-outline",
+        "friendly_name": "流水灯效果"
+      },
+      "last_changed": "2026-03-28T10:54:04.244043+00:00",
+      "last_reported": "2026-03-28T10:54:04.244043+00:00",
+      "last_updated": "2026-03-28T10:54:04.244043+00:00",
+      "context": {
+        "id": "01KMT18REMR83009HQPATY0SFF",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_jump_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-28T06:07:11.822094+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:dot-net",
+        "friendly_name": "跳跃闪烁模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244071+00:00",
+      "last_reported": "2026-03-28T10:54:04.244071+00:00",
+      "last_updated": "2026-03-28T10:54:04.244071+00:00",
+      "context": {
+        "id": "01KMT18REMQ2C2SWV6B05H8XXX",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_aurora_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:47:35.925716+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:weather-night-partly-cloudy",
+        "friendly_name": "极光流动模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244097+00:00",
+      "last_reported": "2026-03-28T10:54:04.244097+00:00",
+      "last_updated": "2026-03-28T10:54:04.244097+00:00",
+      "context": {
+        "id": "01KMT18REMAC06CAR8Z55HN6F2",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_scan_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:radar",
+        "friendly_name": "扫描循环模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244123+00:00",
+      "last_reported": "2026-03-28T10:54:04.244123+00:00",
+      "last_updated": "2026-03-28T10:54:04.244123+00:00",
+      "context": {
+        "id": "01KMT18REMME55TGBWD7K347ZY",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_starlight_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:star-outline",
+        "friendly_name": "星光闪烁模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244149+00:00",
+      "last_reported": "2026-03-28T10:54:04.244149+00:00",
+      "last_updated": "2026-03-28T10:54:04.244149+00:00",
+      "context": {
+        "id": "01KMT18REMYGFE14GCMPE5008R",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_stop_strip_effects",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:22:45.002327+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:stop-circle",
+        "friendly_name": "停止灯带效果"
+      },
+      "last_changed": "2026-03-28T10:54:04.244178+00:00",
+      "last_reported": "2026-03-28T10:54:04.244178+00:00",
+      "last_updated": "2026-03-28T10:54:04.244178+00:00",
+      "context": {
+        "id": "01KMT18REMSHDJ1F9546TMTB24",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_follow_strip",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:21:44.165219+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:link-variant",
+        "friendly_name": "LED同步跟随"
+      },
+      "last_changed": "2026-03-28T10:54:04.244205+00:00",
+      "last_reported": "2026-03-28T10:54:04.244205+00:00",
+      "last_updated": "2026-03-28T10:54:04.244205+00:00",
+      "context": {
+        "id": "01KMT18REM0VPZGQ2SBG7BKY66",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_follow_strip_wave",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:22:55.287700+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:waves-arrow-right",
+        "friendly_name": "LED波浪跟随"
+      },
+      "last_changed": "2026-03-28T10:54:04.244229+00:00",
+      "last_reported": "2026-03-28T10:54:04.244229+00:00",
+      "last_updated": "2026-03-28T10:54:04.244229+00:00",
+      "context": {
+        "id": "01KMT18REMV40MV5MJ57ZFENH9",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_follow_strip_gradient",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:51:21.555401+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:gradient-vertical",
+        "friendly_name": "LED渐变跟随"
+      },
+      "last_changed": "2026-03-28T10:54:04.244333+00:00",
+      "last_reported": "2026-03-28T10:54:04.244333+00:00",
+      "last_updated": "2026-03-28T10:54:04.244333+00:00",
+      "context": {
+        "id": "01KMT18REMVCXKBV0VYPTK5DF5",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_follow_strip_rainbow",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:23:31.862590+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:palette-advanced",
+        "friendly_name": "LED彩虹跟随"
+      },
+      "last_changed": "2026-03-28T10:54:04.244434+00:00",
+      "last_reported": "2026-03-28T10:54:04.244434+00:00",
+      "last_updated": "2026-03-28T10:54:04.244434+00:00",
+      "context": {
+        "id": "01KMT18REMRSS65XW3FPESM5R6",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_sunset_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:47:37.700438+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:weather-sunset",
+        "friendly_name": "日落模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244481+00:00",
+      "last_reported": "2026-03-28T10:54:04.244481+00:00",
+      "last_updated": "2026-03-28T10:54:04.244481+00:00",
+      "context": {
+        "id": "01KMT18REMZMMV0ZC87CF673JC",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_ocean_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:47:40.452238+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:waves",
+        "friendly_name": "海洋模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244512+00:00",
+      "last_reported": "2026-03-28T10:54:04.244512+00:00",
+      "last_updated": "2026-03-28T10:54:04.244512+00:00",
+      "context": {
+        "id": "01KMT18REMZ0JE5QQ78Y2WKBWF",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_forest_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T15:36:23.566096+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:tree",
+        "friendly_name": "森林模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244539+00:00",
+      "last_reported": "2026-03-28T10:54:04.244539+00:00",
+      "last_updated": "2026-03-28T10:54:04.244539+00:00",
+      "context": {
+        "id": "01KMT18REM4XF2BJK4D4HVEAEF",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_fire_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-27T16:48:19.903595+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:fire",
+        "friendly_name": "火焰模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244566+00:00",
+      "last_reported": "2026-03-28T10:54:04.244566+00:00",
+      "last_updated": "2026-03-28T10:54:04.244566+00:00",
+      "context": {
+        "id": "01KMT18REM2VETFK07BNESKY7B",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_party_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:party-popper",
+        "friendly_name": "派对模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244591+00:00",
+      "last_reported": "2026-03-28T10:54:04.244591+00:00",
+      "last_updated": "2026-03-28T10:54:04.244591+00:00",
+      "context": {
+        "id": "01KMT18REM27D6KP3VKC6R3MWB",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_reading_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:52:17.055125+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:book-open-page-variant",
+        "friendly_name": "阅读模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244617+00:00",
+      "last_reported": "2026-03-28T10:54:04.244617+00:00",
+      "last_updated": "2026-03-28T10:54:04.244617+00:00",
+      "context": {
+        "id": "01KMT18REM4W325C60RHQDA1Q1",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_focus_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:brain",
+        "friendly_name": "专注模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244646+00:00",
+      "last_reported": "2026-03-28T10:54:04.244646+00:00",
+      "last_updated": "2026-03-28T10:54:04.244646+00:00",
+      "context": {
+        "id": "01KMT18REMKXAQDN0DXJMBSTM4",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_movie_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:52:18.446549+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:movie-open",
+        "friendly_name": "电影模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244672+00:00",
+      "last_reported": "2026-03-28T10:54:04.244672+00:00",
+      "last_updated": "2026-03-28T10:54:04.244672+00:00",
+      "context": {
+        "id": "01KMT18REM3SZYTRT5WPSE3FMW",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.led_nightlight_mode",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:weather-night",
+        "friendly_name": "夜灯模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.244695+00:00",
+      "last_reported": "2026-03-28T10:54:04.244695+00:00",
+      "last_updated": "2026-03-28T10:54:04.244695+00:00",
+      "context": {
+        "id": "01KMT18REM8Z5QTZ47RAYKJ8AK",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.light_rhythm_wave",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:48:08.535787+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:waves",
+        "friendly_name": "灯光律动 - 波浪"
+      },
+      "last_changed": "2026-03-28T10:54:04.244797+00:00",
+      "last_reported": "2026-03-28T10:54:04.244797+00:00",
+      "last_updated": "2026-03-28T10:54:04.244797+00:00",
+      "context": {
+        "id": "01KMT18REMFEAV128GMDBMKXSF",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.light_rhythm_flash",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:54:15.133694+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:flash",
+        "friendly_name": "灯光律动 - 闪烁"
+      },
+      "last_changed": "2026-03-28T10:54:04.244832+00:00",
+      "last_reported": "2026-03-28T10:54:04.244832+00:00",
+      "last_updated": "2026-03-28T10:54:04.244832+00:00",
+      "context": {
+        "id": "01KMT18REMATBSBB35JDXKQ5TJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.light_rhythm_breathe",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:54:22.512208+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:weather-windy",
+        "friendly_name": "灯光律动 - 呼吸"
+      },
+      "last_changed": "2026-03-28T10:54:04.244859+00:00",
+      "last_reported": "2026-03-28T10:54:04.244859+00:00",
+      "last_updated": "2026-03-28T10:54:04.244859+00:00",
+      "context": {
+        "id": "01KMT18REM0ZKGQSMCX4W0AEV3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.light_rhythm_alternate",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:54:32.186008+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:swap-horizontal",
+        "friendly_name": "灯光律动 - 交替"
+      },
+      "last_changed": "2026-03-28T10:54:04.244884+00:00",
+      "last_reported": "2026-03-28T10:54:04.244884+00:00",
+      "last_updated": "2026-03-28T10:54:04.244884+00:00",
+      "context": {
+        "id": "01KMT18REM7Q2RXTQTYQJGRQ70",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.light_rhythm_chase",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:54:44.130814+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:run-fast",
+        "friendly_name": "灯光律动 - 追逐"
+      },
+      "last_changed": "2026-03-28T10:54:04.244909+00:00",
+      "last_reported": "2026-03-28T10:54:04.244909+00:00",
+      "last_updated": "2026-03-28T10:54:04.244909+00:00",
+      "context": {
+        "id": "01KMT18REMECRFEJ5N9MCQBDP1",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.light_rhythm_stop",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-11-29T05:55:06.649552+00:00",
+        "mode": "restart",
+        "current": 0,
+        "icon": "mdi:stop",
+        "friendly_name": "停止灯光律动"
+      },
+      "last_changed": "2026-03-28T10:54:04.244937+00:00",
+      "last_reported": "2026-03-28T10:54:04.244937+00:00",
+      "last_updated": "2026-03-28T10:54:04.244937+00:00",
+      "context": {
+        "id": "01KMT18REMM00YNWT7C0KJV4TJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.light_rhythm_random",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:dice-multiple",
+        "friendly_name": "灯光律动 - 随机"
+      },
+      "last_changed": "2026-03-28T10:54:04.244963+00:00",
+      "last_reported": "2026-03-28T10:54:04.244963+00:00",
+      "last_updated": "2026-03-28T10:54:04.244963+00:00",
+      "context": {
+        "id": "01KMT18REMMD4MDX9V9SJGXNNZ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.test_macrodroid_webview",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-24T06:31:28.382252+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:cellphone-link",
+        "friendly_name": "测试MacroDroid-WebView"
+      },
+      "last_changed": "2026-03-28T10:54:04.244991+00:00",
+      "last_reported": "2026-03-28T10:54:04.244991+00:00",
+      "last_updated": "2026-03-28T10:54:04.244991+00:00",
+      "context": {
+        "id": "01KMT18REM1M82Q6CP4HADG2JD",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.test_macrodroid_broadcast",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:broadcast",
+        "friendly_name": "测试MacroDroid-Broadcast"
+      },
+      "last_changed": "2026-03-28T10:54:04.245068+00:00",
+      "last_reported": "2026-03-28T10:54:04.245068+00:00",
+      "last_updated": "2026-03-28T10:54:04.245068+00:00",
+      "context": {
+        "id": "01KMT18RENJTP1739ZECR4PZ7Z",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.test_open_wechat_direct",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-24T06:31:40.401469+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:wechat",
+        "friendly_name": "直接打开微信"
+      },
+      "last_changed": "2026-03-28T10:54:04.245119+00:00",
+      "last_reported": "2026-03-28T10:54:04.245119+00:00",
+      "last_updated": "2026-03-28T10:54:04.245119+00:00",
+      "context": {
+        "id": "01KMT18RENQ5YN7W62EB8TVS5Y",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.send_mqtt_command",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-25T13:06:28.426664+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:cellphone-message",
+        "friendly_name": "发送MQTT命令到手机"
+      },
+      "last_changed": "2026-03-28T10:54:04.245155+00:00",
+      "last_reported": "2026-03-28T10:54:04.245155+00:00",
+      "last_updated": "2026-03-28T10:54:04.245155+00:00",
+      "context": {
+        "id": "01KMT18REN0HPPBPZMVE7E414J",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.macrodroid_open_wechat",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-24T11:40:10.571592+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:wechat",
+        "friendly_name": "MacroDroid打开微信"
+      },
+      "last_changed": "2026-03-28T10:54:04.245185+00:00",
+      "last_reported": "2026-03-28T10:54:04.245185+00:00",
+      "last_updated": "2026-03-28T10:54:04.245185+00:00",
+      "context": {
+        "id": "01KMT18RENQQ3SGABE2YSDX8SZ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.macrodroid_open_alipay",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-24T11:36:17.047333+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:credit-card",
+        "friendly_name": "MacroDroid打开支付宝"
+      },
+      "last_changed": "2026-03-28T10:54:04.245214+00:00",
+      "last_reported": "2026-03-28T10:54:04.245214+00:00",
+      "last_updated": "2026-03-28T10:54:04.245214+00:00",
+      "context": {
+        "id": "01KMT18REN7021VKRMN90TH19S",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.macrodroid_open_taobao",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-24T11:43:14.161199+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:shopping",
+        "friendly_name": "MacroDroid打开淘宝"
+      },
+      "last_changed": "2026-03-28T10:54:04.245240+00:00",
+      "last_reported": "2026-03-28T10:54:04.245240+00:00",
+      "last_updated": "2026-03-28T10:54:04.245240+00:00",
+      "context": {
+        "id": "01KMT18RENVNZEXKZ5R9X9D8HE",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.macrodroid_open_doubao",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-24T11:41:05.603997+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:robot",
+        "friendly_name": "MacroDroid打开豆包"
+      },
+      "last_changed": "2026-03-28T10:54:04.245265+00:00",
+      "last_reported": "2026-03-28T10:54:04.245265+00:00",
+      "last_updated": "2026-03-28T10:54:04.245265+00:00",
+      "context": {
+        "id": "01KMT18RENACBBN1KEGRTT7XGR",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.macrodroid_open_amap",
+      "state": "off",
+      "attributes": {
+        "last_triggered": "2025-12-24T11:35:31.286951+00:00",
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:map",
+        "friendly_name": "MacroDroid打开高德地图"
+      },
+      "last_changed": "2026-03-28T10:54:04.245289+00:00",
+      "last_reported": "2026-03-28T10:54:04.245289+00:00",
+      "last_updated": "2026-03-28T10:54:04.245289+00:00",
+      "context": {
+        "id": "01KMT18RENN4ZF96ZNNYSX3ZF7",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.macrodroid_open_mijia",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:home-automation",
+        "friendly_name": "MacroDroid打开米家"
+      },
+      "last_changed": "2026-03-28T10:54:04.245315+00:00",
+      "last_reported": "2026-03-28T10:54:04.245315+00:00",
+      "last_updated": "2026-03-28T10:54:04.245315+00:00",
+      "context": {
+        "id": "01KMT18RENVD0X4962G3G9N3HH",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.macrodroid_mute",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:volume-off",
+        "friendly_name": "MacroDroid开启静音"
+      },
+      "last_changed": "2026-03-28T10:54:04.245339+00:00",
+      "last_reported": "2026-03-28T10:54:04.245339+00:00",
+      "last_updated": "2026-03-28T10:54:04.245339+00:00",
+      "context": {
+        "id": "01KMT18REN6FN6JF2RAV76ARSK",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.macrodroid_vibrate",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:vibrate",
+        "friendly_name": "MacroDroid震动提醒"
+      },
+      "last_changed": "2026-03-28T10:54:04.245406+00:00",
+      "last_reported": "2026-03-28T10:54:04.245406+00:00",
+      "last_updated": "2026-03-28T10:54:04.245406+00:00",
+      "context": {
+        "id": "01KMT18RENBKQ1Z1C6AKGATRK3",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.debug_voice_context",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:bug",
+        "friendly_name": "语音来源调试"
+      },
+      "last_changed": "2026-03-28T10:54:04.245461+00:00",
+      "last_reported": "2026-03-28T10:54:04.245461+00:00",
+      "last_updated": "2026-03-28T10:54:04.245461+00:00",
+      "context": {
+        "id": "01KMT18RENKK8PGJNJ2JKW2FPH",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.send_universal_cmd",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:android-debug-bridge",
+        "friendly_name": "发送万能命令 (Advanced)"
+      },
+      "last_changed": "2026-03-28T10:54:04.245493+00:00",
+      "last_reported": "2026-03-28T10:54:04.245493+00:00",
+      "last_updated": "2026-03-28T10:54:04.245493+00:00",
+      "context": {
+        "id": "01KMT18RENSGDDEMC821ZDZX77",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.tts_broadcast_all_speakers",
+      "state": "off",
+      "attributes": {
+        "last_triggered": null,
+        "mode": "single",
+        "current": 0,
+        "icon": "mdi:bullhorn",
+        "friendly_name": "TTS播报"
+      },
+      "last_changed": "2026-03-28T10:54:04.245522+00:00",
+      "last_reported": "2026-03-28T10:54:04.245522+00:00",
+      "last_updated": "2026-03-28T10:54:04.245522+00:00",
+      "context": {
+        "id": "01KMT18RENFS1R63BYT6NJVZAN",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.find_phone",
+      "state": "unavailable",
+      "attributes": {
+        "restored": true,
+        "icon": "mdi:cellphone-sound",
+        "friendly_name": "找手机",
+        "supported_features": 0
+      },
+      "last_changed": "2026-03-28T10:54:39.980555+00:00",
+      "last_reported": "2026-03-28T10:54:39.980555+00:00",
+      "last_updated": "2026-03-28T10:54:39.980555+00:00",
+      "context": {
+        "id": "01KMT19VBCY6JFPS7C4AYNT8EE",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "script.phone_status_report",
+      "state": "unavailable",
+      "attributes": {
+        "restored": true,
+        "friendly_name": "手机状态报告",
+        "supported_features": 0
+      },
+      "last_changed": "2026-03-28T10:54:39.980559+00:00",
+      "last_reported": "2026-03-28T10:54:39.980559+00:00",
+      "last_updated": "2026-03-28T10:54:39.980559+00:00",
+      "context": {
+        "id": "01KMT19VBCJW9WCJVX752RETK6",
+        "parent_id": null,
+        "user_id": null
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "entity_id": "scene.hui_jia_mo_shi",
+      "state": "unknown",
+      "attributes": {
+        "entity_id": [
+          "switch.sonoff_10022dede9_1",
+          "switch.sonoff_10022dedc7_1",
+          "light.philips_strip3_12ad_light"
+        ],
+        "icon": "mdi:home-import-outline",
+        "friendly_name": "回家模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.251081+00:00",
+      "last_reported": "2026-03-28T10:54:04.251081+00:00",
+      "last_updated": "2026-03-28T10:54:04.251081+00:00",
+      "context": {
+        "id": "01KMT18REVBHZ06F4P4KC36PMZ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "scene.chi_jia_mo_shi",
+      "state": "unknown",
+      "attributes": {
+        "entity_id": [
+          "switch.sonoff_10022dede9_1",
+          "switch.sonoff_10022dedc7_1",
+          "light.philips_strip3_12ad_light",
+          "fan.dmaker_p221_5b47_fan",
+          "switch.xiaomi_x08e_8219_switch_status"
+        ],
+        "icon": "mdi:home-export-outline",
+        "friendly_name": "离家模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.255893+00:00",
+      "last_reported": "2026-03-28T10:54:04.255893+00:00",
+      "last_updated": "2026-03-28T10:54:04.255893+00:00",
+      "context": {
+        "id": "01KMT18REZW4XY2QYGSJ9BHM5S",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "scene.gong_zuo_mo_shi",
+      "state": "2026-02-25T17:32:38.317768+00:00",
+      "attributes": {
+        "entity_id": [
+          "switch.sonoff_10022dede9_1",
+          "switch.sonoff_10022dedc7_1",
+          "light.philips_strip3_12ad_light",
+          "fan.dmaker_p221_5b47_fan"
+        ],
+        "icon": "mdi:laptop",
+        "friendly_name": "工作模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.257783+00:00",
+      "last_reported": "2026-03-28T10:54:04.257783+00:00",
+      "last_updated": "2026-03-28T10:54:04.257783+00:00",
+      "context": {
+        "id": "01KMT18RF1NR6NRDEKQTC4PJXJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "scene.yu_le_mo_shi",
+      "state": "2025-08-31T09:28:21.950381+00:00",
+      "attributes": {
+        "entity_id": [
+          "switch.sonoff_10022dede9_1",
+          "light.philips_strip3_12ad_light",
+          "fan.dmaker_p221_5b47_fan"
+        ],
+        "icon": "mdi:movie-open",
+        "friendly_name": "娱乐模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.258269+00:00",
+      "last_reported": "2026-03-28T10:54:04.258269+00:00",
+      "last_updated": "2026-03-28T10:54:04.258269+00:00",
+      "context": {
+        "id": "01KMT18RF2QQJDHZXEQEAHGYSJ",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "scene.qing_ji_mo_shi",
+      "state": "unknown",
+      "attributes": {
+        "entity_id": [
+          "switch.sonoff_10022dede9_1",
+          "light.philips_strip3_12ad_light",
+          "fan.dmaker_p221_5b47_fan"
+        ],
+        "icon": "mdi:broom",
+        "friendly_name": "清洁模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.261001+00:00",
+      "last_reported": "2026-03-28T10:54:04.261001+00:00",
+      "last_updated": "2026-03-28T10:54:04.261001+00:00",
+      "context": {
+        "id": "01KMT18RF5XB97H0CKFFCPH982",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "scene.jie_neng_mo_shi",
+      "state": "unknown",
+      "attributes": {
+        "entity_id": [
+          "switch.sonoff_10022dede9_1",
+          "switch.sonoff_10022dedc7_1",
+          "light.philips_strip3_12ad_light",
+          "fan.dmaker_p221_5b47_fan"
+        ],
+        "icon": "mdi:leaf",
+        "friendly_name": "节能模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.261211+00:00",
+      "last_reported": "2026-03-28T10:54:04.261211+00:00",
+      "last_updated": "2026-03-28T10:54:04.261211+00:00",
+      "context": {
+        "id": "01KMT18RF500GEM8RMCFFCW8B9",
+        "parent_id": null,
+        "user_id": null
+      }
+    },
+    {
+      "entity_id": "scene.jin_ji_mo_shi",
+      "state": "unknown",
+      "attributes": {
+        "entity_id": [
+          "switch.sonoff_10022dede9_1",
+          "switch.sonoff_10022dedc7_1",
+          "light.philips_strip3_12ad_light"
+        ],
+        "icon": "mdi:alert",
+        "friendly_name": "紧急模式"
+      },
+      "last_changed": "2026-03-28T10:54:04.261729+00:00",
+      "last_reported": "2026-03-28T10:54:04.261729+00:00",
+      "last_updated": "2026-03-28T10:54:04.261729+00:00",
+      "context": {
+        "id": "01KMT18RF5YY1KTDVYM99XB3D7",
+        "parent_id": null,
+        "user_id": null
+      }
+    }
+  ],
+  "total": 1437
+}

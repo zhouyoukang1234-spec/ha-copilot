@@ -1,0 +1,63 @@
+title: Devin 孪生台
+views:
+  - title: 总览
+    path: overview
+    icon: mdi:view-dashboard
+    cards:
+      - type: markdown
+        content: >
+          ## Devin · 数字孪生台
+          由 Devin 直接在用户真实米家配置之上推演构建。设备层为 `lab_sim`
+          模拟实体, 自动化/脚本/场景为用户真机原样复刻。**与真机零接触。**
+      - type: entities
+        title: Devin 推演 · 派生与控制
+        entities:
+          - sensor.devin_jia_ting_zong_gong_lu
+          - sensor.devin_deng_ju_zai_xian_shu
+          - input_boolean.devin_night_guard
+          - input_text.devin_last_report
+      - type: glance
+        title: 米家灯具 (孪生)
+        columns: 5
+        entities:
+          - entity: light.yi_hao_deng
+          - entity: light.er_hao_deng
+          - entity: light.san_hao_deng
+          - entity: light.si_hao_deng
+          - entity: light.wu_hao_deng
+      - type: entities
+        title: EcoFlow 储能 (孪生)
+        entities:
+          - sensor.delta2_1838_main_battery_level
+          - sensor.delta2_1838_status
+          - sensor.river_2_max_battery_level
+          - sensor.river_2_max_ac_out_power
+      - type: entities
+        title: 环境 · 温湿度 (孪生)
+        entities:
+          - sensor.miaomiaoce_t9_0582_temperature
+          - sensor.miaomiaoce_t9_0582_relative_humidity
+      - type: entities
+        title: 情景脚本 (用户真机原样)
+        entities:
+          - script.home_mode
+          - script.away_mode
+          - script.entertainment_mode
+          - script.energy_saving_mode
+  - title: 音响
+    path: media
+    icon: mdi:speaker
+    cards:
+      - type: entities
+        title: 小爱音响矩阵 (孪生)
+        entities:
+          - media_player.xiaomi_lx06_6dfd_play_control
+          - media_player.xiaomi_lx06_72f9_play_control
+          - media_player.xiaomi_lx04_12e4_play_control_2
+          - media_player.xiaomi_l16a_0be7_play_control
+          - media_player.xiaomi_x08e_8219_play_control
+      - type: entities
+        title: 统一控制
+        entities:
+          - script.play_music_all_speakers
+          - script.stop_all_speakers

@@ -1,0 +1,3 @@
+# EcoFlow Delta2 (192.168.31.134) - TCP:3000 + MQTTS:8883
+# 注意: EcoFlow integration需要单独安装
+# HACS: https://github.com/tolwi/hassio-ecoflow-cloud
