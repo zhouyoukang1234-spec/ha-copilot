@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ruff_cache/
+
+# HA-Copilot backups
+*.copilot.bak
+
+# Local HA test instance (never commit a real config / secrets)
+test-config/
+*.log
+.storage/
+secrets.yaml
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
