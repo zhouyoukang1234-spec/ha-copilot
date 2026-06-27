@@ -740,6 +740,79 @@ async def _delete_script(hass: HomeAssistant, identifier: str) -> dict[str, Any]
     return {"ok": True, "deleted": f"script.{key}", "purged": purged}
 
 
+async def _delete_area(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Delete an area from the area registry by area_id or name (mirrors create_area)."""
+    area_id = _resolve_area_id(hass, identifier)
+    if area_id is None:
+        return {"error": f"no area matched id/name '{identifier}'"}
+    reg = ar.async_get(hass)
+    name = reg.async_get_area(area_id).name
+    reg.async_delete(area_id)
+    return {"ok": True, "deleted_area_id": area_id, "name": name}
+
+
+async def _delete_helper(
+    hass: HomeAssistant, domain: str, object_id: str
+) -> dict[str, Any]:
+    """Remove a helper from the managed package, then reload (mirrors create_helper)."""
+    allowed = {
+        "input_boolean", "input_number", "input_text", "input_select",
+        "input_datetime", "timer", "counter",
+    }
+    if domain not in allowed:
+        return {"error": f"unsupported helper domain '{domain}'; one of {sorted(allowed)}"}
+    path = _managed_package_path(hass)
+
+    def _remove() -> bool:
+        doc = _load_managed_package(path)
+        helpers = doc.get(domain) or {}
+        if object_id not in helpers:
+            return False
+        helpers.pop(object_id)
+        doc[domain] = helpers
+        _dump_managed_package(path, doc)
+        return True
+
+    removed = await hass.async_add_executor_job(_remove)
+    if not removed:
+        return {"error": f"no '{domain}' helper named '{object_id}'"}
+    if hass.services.has_service(domain, "reload"):
+        await hass.services.async_call(domain, "reload", {}, blocking=True)
+    entity_id = f"{domain}.{object_id}"
+    purged = _purge_restored_entities(hass, domain, entity_ids={entity_id})
+    return {"ok": True, "deleted": entity_id, "purged": purged}
+
+
+async def _delete_template_sensor(hass: HomeAssistant, name: str) -> dict[str, Any]:
+    """Remove a template sensor from the managed package by name, then reload."""
+    path = _managed_package_path(hass)
+
+    def _remove() -> bool:
+        doc = _load_managed_package(path)
+        blocks = doc.get("template") or []
+        hit = False
+        for block in blocks:
+            sensors = block.get("sensor")
+            if not isinstance(sensors, list):
+                continue
+            kept = [e for e in sensors if e.get("name") != name]
+            if len(kept) != len(sensors):
+                block["sensor"] = kept
+                hit = True
+        if not hit:
+            return False
+        doc["template"] = [b for b in blocks if b.get("sensor") or b.get("binary_sensor")]
+        _dump_managed_package(path, doc)
+        return True
+
+    removed = await hass.async_add_executor_job(_remove)
+    if not removed:
+        return {"error": f"no template sensor named '{name}'"}
+    await _reload(hass, "template")
+    purged = _purge_restored_entities(hass, "sensor", names={name})
+    return {"ok": True, "deleted": name, "purged": purged}
+
+
 def _entry_state(entry: Any) -> str:
     state = getattr(entry, "state", None)
     return getattr(state, "value", str(state)) if state is not None else "unknown"
@@ -879,6 +952,31 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if name == "delete_scene":
                 return await _delete_scene(hass, ident)
             return await _delete_script(hass, ident)
+        if name == "delete_area":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            ident = args.get("identifier") or args.get("area_id") or args.get("name")
+            if not ident:
+                return {"error": "missing required argument: identifier"}
+            return await _delete_area(hass, ident)
+        if name == "delete_helper":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            domain = args.get("domain")
+            object_id = args.get("object_id")
+            eid = args.get("entity_id") or args.get("identifier")
+            if (not domain or not object_id) and isinstance(eid, str) and "." in eid:
+                domain, object_id = eid.split(".", 1)
+            if not domain or not object_id:
+                return {"error": "missing required arguments: domain + object_id (or entity_id)"}
+            return await _delete_helper(hass, domain, object_id)
+        if name == "delete_template_sensor":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            ident = args.get("name") or args.get("identifier")
+            if not ident:
+                return {"error": "missing required argument: name"}
+            return await _delete_template_sensor(hass, ident)
         if name == "list_config_entries":
             return await _list_config_entries(hass, args.get("domain"))
         if name == "reload_config_entry":
@@ -1311,6 +1409,45 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"identifier": {"type": "string", "description": "Script key or script.<key> entity_id"}},
                 "required": ["identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_area",
+            "description": "Delete an area from the area registry by area_id or name. Mirrors create_area; entities assigned to it become area-less.",
+            "parameters": {
+                "type": "object",
+                "properties": {"identifier": {"type": "string", "description": "Area id or name"}},
+                "required": ["identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_helper",
+            "description": "Delete a helper (input_boolean/number/text/select/datetime, timer, counter) created via create_helper, then reload and purge the entity. Pass domain+object_id or an entity_id like 'input_boolean.foo'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string", "description": "Helper domain, e.g. input_boolean"},
+                    "object_id": {"type": "string", "description": "Helper object_id"},
+                    "entity_id": {"type": "string", "description": "Alternative: '<domain>.<object_id>'"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_template_sensor",
+            "description": "Delete a template sensor created via create_template_sensor, by its name, then reload and purge the entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "Template sensor name"}},
+                "required": ["name"],
             },
         },
     },
