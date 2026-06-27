@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol  # noqa: F401  (kept for future schema validation)
 import yaml
 
+from homeassistant.components.recorder import get_instance as _recorder_get_instance
+from homeassistant.components.recorder import history as _recorder_history
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import (
     area_registry as ar,
@@ -21,6 +25,8 @@ from homeassistant.helpers import (
     entity_registry as er,
 )
 from homeassistant.helpers.check_config import async_check_ha_config_file
+from homeassistant.helpers.template import Template
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_ALLOW_RESTART, CONF_ALLOW_WRITE
 
@@ -206,6 +212,141 @@ async def _read_logs(hass: HomeAssistant, lines: int = 60) -> dict[str, Any]:
     return {"log_tail": await hass.async_add_executor_job(_tail)}
 
 
+async def _create_area(hass: HomeAssistant, name: str) -> dict[str, Any]:
+    """Create an area (room/zone) in the area registry, idempotently."""
+    reg = ar.async_get(hass)
+    existing = next((a for a in reg.async_list_areas() if a.name == name), None)
+    if existing is not None:
+        return {"ok": True, "area_id": existing.id, "name": existing.name, "existed": True}
+    area = reg.async_create(name)
+    return {"ok": True, "area_id": area.id, "name": area.name}
+
+
+def _resolve_area_id(hass: HomeAssistant, area: str) -> str | None:
+    reg = ar.async_get(hass)
+    if reg.async_get_area(area) is not None:
+        return area
+    match = next((a for a in reg.async_list_areas() if a.name == area), None)
+    return match.id if match else None
+
+
+async def _update_entity(
+    hass: HomeAssistant,
+    entity_id: str,
+    *,
+    name: str | None = None,
+    area: str | None = None,
+    enabled: bool | None = None,
+) -> dict[str, Any]:
+    """Update an entity registry entry (rename / assign area / enable-disable)."""
+    reg = er.async_get(hass)
+    if reg.async_get(entity_id) is None:
+        return {
+            "error": f"entity '{entity_id}' is not in the entity registry. "
+            "Only registry-backed entities (those with a unique_id) can be "
+            "renamed/assigned/disabled here.",
+        }
+    kwargs: dict[str, Any] = {}
+    if name is not None:
+        kwargs["name"] = name
+    if area is not None:
+        area_id = _resolve_area_id(hass, area)
+        if area_id is None:
+            return {"error": f"area '{area}' not found; create it first with create_area"}
+        kwargs["area_id"] = area_id
+    if enabled is not None:
+        kwargs["disabled_by"] = None if enabled else er.RegistryEntryDisabler.USER
+    if not kwargs:
+        return {"error": "nothing to update (provide name, area, or enabled)"}
+    updated = reg.async_update_entity(entity_id, **kwargs)
+    return {
+        "ok": True,
+        "entity_id": updated.entity_id,
+        "name": updated.name,
+        "area_id": updated.area_id,
+        "disabled": updated.disabled_by is not None,
+    }
+
+
+async def _render_template(hass: HomeAssistant, template: str) -> dict[str, Any]:
+    """Render a Jinja2 template against live HA state (Developer Tools > Template)."""
+    try:
+        result = Template(template, hass).async_render()
+    except Exception as err:  # noqa: BLE001 - template errors are user-facing
+        return {"error": f"template error: {type(err).__name__}: {err}"}
+    return {"ok": True, "result": result}
+
+
+async def _get_history(hass: HomeAssistant, entity_id: str, hours: int = 24) -> dict[str, Any]:
+    """Return recorded state changes for an entity over the last N hours."""
+    if "recorder" not in hass.config.components:
+        return {"error": "the recorder integration is not enabled, so no history is available"}
+    start = dt_util.utcnow() - timedelta(hours=int(hours))
+
+    def _query() -> dict:
+        return _recorder_history.state_changes_during_period(hass, start, None, entity_id)
+
+    data = await _recorder_get_instance(hass).async_add_executor_job(_query)
+    series = [
+        {"state": s.state, "when": s.last_changed.isoformat()}
+        for s in data.get(entity_id, [])
+    ]
+    return {"entity_id": entity_id, "count": len(series), "history": series[-100:]}
+
+
+async def _create_scene(hass: HomeAssistant, name: str, entities: dict) -> dict[str, Any]:
+    """Append a scene to scenes.yaml and reload."""
+    path = _safe_path(hass, "scenes.yaml")
+
+    def _append() -> int:
+        existing: list = []
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+                if isinstance(loaded, list):
+                    existing = loaded
+        scene = {"id": f"copilot_scene_{len(existing) + 1}", "name": name, "entities": entities}
+        existing.append(scene)
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(existing, f, allow_unicode=True, sort_keys=False)
+        return len(existing)
+
+    total = await hass.async_add_executor_job(_append)
+    if hass.services.has_service("scene", "reload"):
+        await hass.services.async_call("scene", "reload", {}, blocking=True)
+    return {"ok": True, "name": name, "total_scenes": total}
+
+
+async def _create_script(hass: HomeAssistant, alias: str, sequence: Any) -> dict[str, Any]:
+    """Append a script to scripts.yaml (keyed by a slug) and reload."""
+    path = _safe_path(hass, "scripts.yaml")
+    if isinstance(sequence, dict):
+        sequence = [sequence]
+    slug = re.sub(r"[^a-z0-9_]+", "_", alias.lower()).strip("_") or "copilot_script"
+
+    def _append() -> str:
+        existing: dict = {}
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+                if isinstance(loaded, dict):
+                    existing = loaded
+        key = slug
+        i = 2
+        while key in existing:
+            key = f"{slug}_{i}"
+            i += 1
+        existing[key] = {"alias": alias, "sequence": sequence}
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(existing, f, allow_unicode=True, sort_keys=False)
+        return key
+
+    key = await hass.async_add_executor_job(_append)
+    if hass.services.has_service("script", "reload"):
+        await hass.services.async_call("script", "reload", {}, blocking=True)
+    return {"ok": True, "script_entity_id": f"script.{key}"}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -247,6 +388,25 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _registry_overview(hass)
         if name == "read_logs":
             return await _read_logs(hass, args.get("lines", 60))
+        if name == "create_area":
+            return await _create_area(hass, args["name"])
+        if name == "rename_entity":
+            return await _update_entity(hass, args["entity_id"], name=args["name"])
+        if name == "assign_entity_area":
+            return await _update_entity(hass, args["entity_id"], area=args["area"])
+        if name == "set_entity_enabled":
+            return await _update_entity(hass, args["entity_id"], enabled=bool(args["enabled"]))
+        if name == "render_template":
+            return await _render_template(hass, args["template"])
+        if name == "get_history":
+            return await _get_history(hass, args["entity_id"], args.get("hours", 24))
+        if name == "create_scene":
+            return await _create_scene(hass, args["name"], args.get("entities") or {})
+        if name == "create_script":
+            seq = args.get("sequence")
+            if seq is None:
+                seq = args.get("action")
+            return await _create_script(hass, args["alias"], seq)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -406,6 +566,120 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {"lines": {"type": "integer"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_area",
+            "description": "Create an area (room/zone), e.g. '客厅', '卧室'. Idempotent: returns the existing area if the name already exists.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "Area name"}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rename_entity",
+            "description": "Set the friendly display name of an entity in the entity registry (like renaming it in Settings UI). Only works for registry-backed entities.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "name": {"type": "string", "description": "New display name"},
+                },
+                "required": ["entity_id", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_entity_area",
+            "description": "Assign an entity to an area (by area name or area_id). Create the area first with create_area if it does not exist.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "area": {"type": "string", "description": "Area name or area_id"},
+                },
+                "required": ["entity_id", "area"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_entity_enabled",
+            "description": "Enable or disable an entity in the registry (disabled entities stop updating). Only registry-backed entities.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "enabled": {"type": "boolean"},
+                },
+                "required": ["entity_id", "enabled"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "render_template",
+            "description": "Render a Jinja2 template against live HA state, e.g. \"{{ states('sensor.x') }}\" or \"{{ states.light | selectattr('state','eq','on') | list | count }}\". Use this to compute/inspect state.",
+            "parameters": {
+                "type": "object",
+                "properties": {"template": {"type": "string"}},
+                "required": ["template"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_history",
+            "description": "Get recorded state changes for an entity over the last N hours (default 24).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "hours": {"type": "integer", "description": "Look-back window in hours"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_scene",
+            "description": "Create a scene by appending to scenes.yaml and reloading. Provide name and entities as a mapping of entity_id -> desired state, e.g. {\"light.living_room\": \"on\", \"light.bedroom\": \"off\"}.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "entities": {"type": "object", "description": "entity_id -> state mapping"},
+                },
+                "required": ["name", "entities"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_script",
+            "description": "Create a script by appending to scripts.yaml and reloading. Provide alias and sequence (a list of action steps, e.g. [{service: light.turn_on, data: {entity_id: light.living_room}}]).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "alias": {"type": "string"},
+                    "sequence": {"type": "array", "description": "List of action steps"},
+                },
+                "required": ["alias", "sequence"],
             },
         },
     },

@@ -5,7 +5,7 @@
   "documentation": "https://github.com/zhouyoukang1234-spec/ha-copilot",
   "issue_tracker": "https://github.com/zhouyoukang1234-spec/ha-copilot/issues",
   "dependencies": ["http", "frontend", "websocket_api"],
-  "after_dependencies": ["conversation"],
+  "after_dependencies": ["conversation", "recorder"],
   "codeowners": ["@zhouyoukang1234-spec"],
   "requirements": [],
   "iot_class": "local_push",

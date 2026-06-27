@@ -44,6 +44,7 @@ from .const import (
     STATIC_URL_BASE,
 )
 from .http_api import CopilotChatView, CopilotConfigView
+from .tools import dispatch as dispatch_tool
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -114,6 +115,24 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         "ask",
         _handle_ask,
         schema=vol.Schema({vol.Required("message"): cv.string}),
+        supports_response="only",
+    )
+
+    # Directly invoke a single copilot tool (bypassing the LLM). Useful from
+    # automations/scripts that already know exactly which low-level operation
+    # they want, and for deterministic testing of the tool layer.
+    async def _handle_run_tool(call: ServiceCall) -> dict:
+        return await dispatch_tool(
+            hass, store, call.data["tool"], call.data.get("args") or {}
+        )
+
+    hass.services.async_register(
+        DOMAIN,
+        "run_tool",
+        _handle_run_tool,
+        schema=vol.Schema(
+            {vol.Required("tool"): cv.string, vol.Optional("args"): dict}
+        ),
         supports_response="only",
     )
 
