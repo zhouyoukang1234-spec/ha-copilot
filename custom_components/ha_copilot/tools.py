@@ -445,7 +445,8 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         return {"error": f"{type(err).__name__}: {err}"}
 
 
-# OpenAI-style function specifications advertised to the model.
+# OpenAI-style function specifications. Exposed to external agents verbatim via
+# the run_tool HTTP API and converted to MCP tool descriptors for the MCP server.
 TOOL_SPECS: list[dict[str, Any]] = [
     {
         "type": "function",

@@ -1,7 +1,7 @@
 {
   "domain": "ha_copilot",
   "name": "HA-Copilot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "documentation": "https://github.com/zhouyoukang1234-spec/ha-copilot",
   "issue_tracker": "https://github.com/zhouyoukang1234-spec/ha-copilot/issues",
   "dependencies": ["http", "frontend", "websocket_api"],

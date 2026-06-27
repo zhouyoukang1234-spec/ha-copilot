@@ -1,25 +1,10 @@
-ask:
-  name: Ask HA-Copilot
-  description: >-
-    Send a natural-language instruction to HA-Copilot. The agent may inspect and
-    modify Home Assistant using its tools, and returns a reply plus the trace of
-    operations it performed.
-  fields:
-    message:
-      name: Message
-      description: The instruction or question for the copilot.
-      required: true
-      example: "创建一个自动化：每天日落时打开客厅灯"
-      selector:
-        text:
-          multiline: true
-
 run_tool:
   name: Run a copilot tool
   description: >-
-    Directly execute one HA-Copilot tool by name, bypassing the LLM. Useful for
-    automations/scripts that know exactly which low-level operation they want,
-    and for deterministic testing of the tool layer.
+    Directly execute one HA-Copilot tool by name against Home Assistant. This is
+    the deterministic capability-layer entry point — no model is involved. Useful
+    for automations/scripts and for external agents that know exactly which
+    low-level operation they want.
   fields:
     tool:
       name: Tool

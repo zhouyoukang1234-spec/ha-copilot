@@ -1,18 +1,18 @@
-// HA-Copilot Workspace — a dependency-free custom element that turns Home
-// Assistant into a Cursor/VS-Code-style workspace driven by conversation.
+// HA-Copilot Workspace — a dependency-free, model-free custom element that turns
+// Home Assistant into a Cursor/VS-Code-style workspace.
 //
 // Home Assistant injects `hass`, `narrow`, `route` and `panel` properties.
 // The left activity bar switches between deterministic views (Overview,
 // Devices, Automations, Editor, Logs, Integrations) that read/write the live
-// instance directly through `hass` + the `ha_copilot.run_tool` service, while
-// the right-docked Copilot drives everything in natural language. The two are
-// fused: anything the Copilot changes refreshes the active view, and every
-// view exposes a "tell Copilot" shortcut.
+// instance directly through `hass` + the `ha_copilot.run_tool` service. The
+// right-docked Operator Console runs any single tool deterministically against
+// the live instance — the SAME tool layer that is exposed to external agents
+// over MCP. No inference endpoint is ever called from here.
 
 const LS = {
   view: "ha_copilot_view",
-  chatOpen: "ha_copilot_chat_open",
-  history: "ha_copilot_history",
+  consoleOpen: "ha_copilot_console_open",
+  oplog: "ha_copilot_oplog",
   editorFile: "ha_copilot_editor_file",
 };
 
@@ -41,8 +41,9 @@ class HaCopilotPanel extends HTMLElement {
     this._rendered = false;
     this._busy = false;
     this._view = localStorage.getItem(LS.view) || "overview";
-    this._chatOpen = localStorage.getItem(LS.chatOpen) !== "0";
-    this._history = this._loadHistory();
+    this._consoleOpen = localStorage.getItem(LS.consoleOpen) !== "0";
+    this._oplog = this._loadOplog();
+    this._tools = [];
     this._cfg = null;
     this._search = "";
     this._domainFilter = "";
@@ -72,19 +73,19 @@ class HaCopilotPanel extends HTMLElement {
   }
 
   // ---- persistence -------------------------------------------------------
-  _loadHistory() {
+  _loadOplog() {
     try {
-      const raw = localStorage.getItem(LS.history);
+      const raw = localStorage.getItem(LS.oplog);
       const h = raw ? JSON.parse(raw) : [];
-      return Array.isArray(h) ? h.slice(-16) : [];
+      return Array.isArray(h) ? h.slice(-50) : [];
     } catch (e) {
       return [];
     }
   }
 
-  _saveHistory() {
+  _saveOplog() {
     try {
-      localStorage.setItem(LS.history, JSON.stringify(this._history.slice(-16)));
+      localStorage.setItem(LS.oplog, JSON.stringify(this._oplog.slice(-50)));
     } catch (e) {
       /* quota — non-fatal */
     }
@@ -115,6 +116,13 @@ class HaCopilotPanel extends HTMLElement {
       this._cfg = await this._api("GET", "ha_copilot/config");
     } catch (e) {
       this._cfg = null;
+    }
+    try {
+      const t = await this._api("GET", "ha_copilot/tools");
+      this._tools = (t && t.tools) || [];
+      this._renderToolPicker();
+    } catch (e) {
+      this._tools = [];
     }
     this._updateStatus();
   }
@@ -155,22 +163,24 @@ class HaCopilotPanel extends HTMLElement {
           <div class="cp-viewbar">
             <div class="cp-viewtitle" id="cp-viewtitle">总览</div>
             <div class="cp-viewactions" id="cp-viewactions"></div>
-            <button class="cp-chip" id="cp-toggle-chat" title="切换 Copilot">☰ Copilot</button>
+            <button class="cp-chip" id="cp-toggle-chat" title="切换命令台">☰ 命令台</button>
           </div>
           <div class="cp-view" id="cp-view"></div>
         </section>
         <aside class="cp-chat" id="cp-chat">
           <div class="cp-chat-head">
             <span class="cp-dot" id="cp-dot"></span>
-            <b>Copilot</b>
-            <span class="cp-chat-status" id="cp-chat-status">connecting…</span>
-            <button class="cp-iconbtn" id="cp-clear" title="清空对话">⟲</button>
+            <b>命令台</b>
+            <span class="cp-chat-status" id="cp-chat-status">—</span>
+            <button class="cp-iconbtn" id="cp-clear" title="清空记录">⟲</button>
+          </div>
+          <div class="cp-console-form">
+            <select class="cp-select" id="cp-tool"></select>
+            <div class="cp-tool-desc" id="cp-tool-desc"></div>
+            <textarea id="cp-args" class="cp-args" placeholder='参数 JSON，例如 {"domain":"light"}'></textarea>
+            <button id="cp-run" class="cp-run-btn">执行工具</button>
           </div>
           <div class="cp-log" id="cp-log"></div>
-          <div class="cp-input">
-            <textarea id="cp-box" placeholder="给 Copilot 下达指令…  (Enter 发送, Shift+Enter 换行)"></textarea>
-            <button id="cp-send">发送</button>
-          </div>
         </aside>
         <footer class="cp-status" id="cp-status"></footer>
       </div>`;
@@ -188,35 +198,30 @@ class HaCopilotPanel extends HTMLElement {
       act.appendChild(b);
     }
 
-    // Chat wiring
-    this._renderChatHistory();
-    const box = this.querySelector("#cp-box");
-    this.querySelector("#cp-send").addEventListener("click", () => this._send());
-    box.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        this._send();
-      }
-    });
+    // Console wiring
+    this._renderToolPicker();
+    this._renderOplog();
+    this.querySelector("#cp-run").addEventListener("click", () => this._runConsole());
+    this.querySelector("#cp-tool").addEventListener("change", () => this._onToolPick());
     this.querySelector("#cp-clear").addEventListener("click", () => {
-      this._history = [];
-      this._saveHistory();
+      this._oplog = [];
+      this._saveOplog();
       this.querySelector("#cp-log").innerHTML = "";
-      this._greet();
+      this._renderOplog();
     });
-    this.querySelector("#cp-toggle-chat").addEventListener("click", () => this._toggleChat());
+    this.querySelector("#cp-toggle-chat").addEventListener("click", () => this._toggleConsole());
 
-    this._applyChatOpen();
+    this._applyConsoleOpen();
   }
 
-  _toggleChat() {
-    this._chatOpen = !this._chatOpen;
-    localStorage.setItem(LS.chatOpen, this._chatOpen ? "1" : "0");
-    this._applyChatOpen();
+  _toggleConsole() {
+    this._consoleOpen = !this._consoleOpen;
+    localStorage.setItem(LS.consoleOpen, this._consoleOpen ? "1" : "0");
+    this._applyConsoleOpen();
   }
 
-  _applyChatOpen() {
-    this.querySelector(".cp-root").classList.toggle("chat-closed", !this._chatOpen);
+  _applyConsoleOpen() {
+    this.querySelector(".cp-root").classList.toggle("chat-closed", !this._consoleOpen);
   }
 
   // ---- status bar / chat header -----------------------------------------
@@ -230,11 +235,11 @@ class HaCopilotPanel extends HTMLElement {
     sb.innerHTML =
       `<span>● ${conn}</span>` +
       `<span>${states} 实体</span>` +
-      (cfg.model ? `<span>模型 ${this._esc(cfg.model)}</span>` : "") +
-      (cfg.base_url ? `<span class="dim">${this._esc(cfg.base_url)}</span>` : "") +
+      (cfg.tool_count != null ? `<span>${cfg.tool_count} 工具</span>` : "") +
+      (cfg.mcp_endpoint ? `<span class="dim">MCP ${this._esc(cfg.mcp_endpoint)}</span>` : "") +
       `<span class="cp-write ${cfg.allow_write ? "ok" : "ro"}">${write}</span>`;
     const cs = this.querySelector("#cp-chat-status");
-    if (cs) cs.textContent = cfg.model ? `${cfg.model}` : "ready";
+    if (cs) cs.textContent = cfg.tool_count != null ? `${cfg.tool_count} 工具` : "ready";
     const dot = this.querySelector("#cp-dot");
     if (dot) dot.className = "cp-dot ok";
   }
@@ -484,9 +489,8 @@ class HaCopilotPanel extends HTMLElement {
     const attrs = this._el("pre", { class: "cp-json", text: JSON.stringify(s.attributes, null, 2) });
     modal.appendChild(attrs);
     const ftr = this._el("div", { class: "cp-modal-ftr" });
-    ftr.appendChild(this._actionBtn("交给 Copilot", () => {
-      back.remove();
-      this._prefillChat(`针对实体 ${entity_id}：`);
+    ftr.appendChild(this._actionBtn("复制 entity_id", () => {
+      this._copy(entity_id);
     }));
     modal.appendChild(ftr);
     back.appendChild(modal);
@@ -495,15 +499,17 @@ class HaCopilotPanel extends HTMLElement {
 
   // ---- AUTOMATIONS -------------------------------------------------------
   _viewAutomations(host, actions) {
-    actions.appendChild(this._actionBtn("新建自动化", () =>
-      this._prefillChat("创建一个自动化：")
-    ));
+    actions.appendChild(this._actionBtn("编辑 automations.yaml", () => {
+      this._editorPath = "automations.yaml";
+      localStorage.setItem(LS.editorFile, this._editorPath);
+      this._switchView("editor");
+    }));
     const autos = Object.values(this._hass.states || {})
       .filter((s) => s.entity_id.startsWith("automation."))
       .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));
     host.innerHTML = "";
     if (!autos.length) {
-      host.appendChild(this._el("div", { class: "cp-empty", text: "还没有自动化。点右上「新建自动化」让 Copilot 帮你创建。" }));
+      host.appendChild(this._el("div", { class: "cp-empty", text: "还没有自动化。点右上「编辑 automations.yaml」直接编写，或在命令台调用 create_automation 工具。" }));
       return;
     }
     const list = this._el("div", { class: "cp-list" });
@@ -718,95 +724,96 @@ class HaCopilotPanel extends HTMLElement {
     ]);
   }
 
-  // ---- Copilot chat ------------------------------------------------------
-  _greet() {
-    this._appendMsg(
-      "assistant",
-      "你好，我是 HA-Copilot。我已深度融合进这台 Home Assistant：可读写配置、调用服务、建自动化/场景/脚本、管理实体与区域、校验配置并自我验证。左侧是工作区（设备/自动化/配置/日志/集成），我做的任何改动都会同步刷新到对应视图。直接告诉我你想做什么。"
-    );
-  }
-
-  _renderChatHistory() {
-    const log = this.querySelector("#cp-log");
-    log.innerHTML = "";
-    if (!this._history.length) {
-      this._greet();
+  // ---- operator console (deterministic, no model) ------------------------
+  _renderToolPicker() {
+    const sel = this.querySelector("#cp-tool");
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = "";
+    if (!this._tools.length) {
+      sel.appendChild(this._el("option", { value: "", text: "加载工具中…" }));
       return;
     }
-    for (const m of this._history) {
-      if (m.role === "user") this._appendMsg("user", m.content);
-      else if (m.role === "assistant") this._appendMsg("assistant", m.content);
+    for (const t of this._tools) {
+      sel.appendChild(this._el("option", { value: t.name, text: t.name }));
+    }
+    if (prev) sel.value = prev;
+    this._onToolPick();
+  }
+
+  _onToolPick() {
+    const sel = this.querySelector("#cp-tool");
+    const desc = this.querySelector("#cp-tool-desc");
+    if (!sel || !desc) return;
+    const t = this._tools.find((x) => x.name === sel.value);
+    desc.textContent = t ? t.description || "" : "";
+  }
+
+  _renderOplog() {
+    const log = this.querySelector("#cp-log");
+    if (!log) return;
+    log.innerHTML = "";
+    if (!this._oplog.length) {
+      log.appendChild(this._el("div", { class: "cp-empty", text: "命令台：选择一个工具并执行，直接操作 Home Assistant 本源（无模型）。同一工具层也经 MCP 暴露给外部 agent。" }));
+      return;
+    }
+    for (const e of this._oplog) this._appendOp(e);
+  }
+
+  _appendOp(e) {
+    const log = this.querySelector("#cp-log");
+    if (!log) return;
+    const div = this._el("div", { class: "cp-op" });
+    const r = JSON.stringify(e.result);
+    div.innerHTML =
+      `<div class="cp-op-call"><b>${this._esc(e.tool)}</b>(${this._esc(JSON.stringify(e.args))})</div>` +
+      `<div class="cp-op-res ${e.ok ? "ok" : "err"}">${this._esc(r)}</div>`;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async _runConsole() {
+    if (this._busy) return;
+    const sel = this.querySelector("#cp-tool");
+    const argsBox = this.querySelector("#cp-args");
+    const tool = sel.value;
+    if (!tool) return;
+    let args = {};
+    const raw = (argsBox.value || "").trim();
+    if (raw) {
+      try {
+        args = JSON.parse(raw);
+      } catch (e) {
+        this._appendOp({ tool, args: raw, result: { error: "参数不是合法 JSON" }, ok: false });
+        return;
+      }
+    }
+    this._busy = true;
+    const runBtn = this.querySelector("#cp-run");
+    runBtn.disabled = true;
+    try {
+      const result = await this._runTool(tool, args);
+      const ok = !(result && typeof result === "object" && "error" in result);
+      const entry = { tool, args, result, ok, ts: Date.now() };
+      this._oplog.push(entry);
+      if (this._oplog.length > 50) this._oplog = this._oplog.slice(-50);
+      this._saveOplog();
+      this._appendOp(entry);
+      // The tool may have mutated HA — refresh the active workspace view.
+      this._renderView();
+    } catch (e) {
+      this._appendOp({ tool, args, result: { error: String(e && e.message ? e.message : e) }, ok: false });
+    } finally {
+      this._busy = false;
+      runBtn.disabled = false;
     }
   }
 
-  _appendMsg(cls, text) {
-    const log = this.querySelector("#cp-log");
-    const div = this._el("div", { class: "cp-msg " + cls, text });
-    log.appendChild(div);
-    log.scrollTop = log.scrollHeight;
-    return div;
-  }
-
-  _appendSteps(steps) {
-    if (!steps || !steps.length) return;
-    const log = this.querySelector("#cp-log");
-    const div = this._el("div", { class: "cp-steps" });
-    div.innerHTML =
-      `<b>操作轨迹 (${steps.length} 步)</b><br>` +
-      steps
-        .map((s, i) => {
-          const r = JSON.stringify(s.result);
-          const short = r.length > 220 ? r.slice(0, 220) + "…" : r;
-          return `${i + 1}. <b>${this._esc(s.tool)}</b>(${this._esc(JSON.stringify(s.args))}) → ${this._esc(short)}`;
-        })
-        .join("<br>");
-    log.appendChild(div);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  _prefillChat(text) {
-    this._chatOpen = true;
-    localStorage.setItem(LS.chatOpen, "1");
-    this._applyChatOpen();
-    const box = this.querySelector("#cp-box");
-    box.value = text;
-    box.focus();
-  }
-
-  async _send() {
-    if (this._busy) return;
-    const box = this.querySelector("#cp-box");
-    const text = box.value.trim();
-    if (!text) return;
-    box.value = "";
-    this._appendMsg("user", text);
-    this._busy = true;
-    const sendBtn = this.querySelector("#cp-send");
-    sendBtn.disabled = true;
-    const typing = this._appendMsg("assistant typing", "思考中…");
-
+  _copy(text) {
     try {
-      const res = await this._api("POST", "ha_copilot/chat", {
-        message: text,
-        history: this._history,
-      });
-      typing.remove();
-      this._appendSteps(res.steps);
-      const reply = res.reply || "(无回复)";
-      this._appendMsg("assistant", reply);
-      this._history.push({ role: "user", content: text });
-      this._history.push({ role: "assistant", content: reply });
-      if (this._history.length > 16) this._history = this._history.slice(-16);
-      this._saveHistory();
-      // The Copilot may have mutated HA — refresh the active workspace view.
-      if (res.steps && res.steps.length) this._renderView();
+      navigator.clipboard.writeText(text);
     } catch (e) {
-      typing.remove();
-      this._appendMsg("assistant", "出错了: " + (e && e.message ? e.message : e));
-    } finally {
-      this._busy = false;
-      sendBtn.disabled = false;
-      box.focus();
+      /* ignore */
     }
   }
 
@@ -898,6 +905,15 @@ class HaCopilotPanel extends HTMLElement {
     .cp-input textarea{flex:1;resize:none;border:1px solid var(--divider-color,#3c3c3c);border-radius:9px;padding:9px;font-size:13px;font-family:inherit;background:var(--secondary-background-color,#2d2d2d);color:inherit;min-height:40px;max-height:120px;}
     .cp-input button{border:none;background:var(--primary-color,#03a9f4);color:#fff;border-radius:9px;padding:0 16px;cursor:pointer;font-weight:500;}
     .cp-input button:disabled{opacity:.5;}
+    .cp-console-form{display:flex;flex-direction:column;gap:8px;padding:12px;border-bottom:1px solid var(--divider-color,#333);}
+    .cp-tool-desc{font-size:11px;color:var(--secondary-text-color,#9e9e9e);min-height:14px;line-height:1.4;}
+    .cp-args{resize:vertical;min-height:60px;border:1px solid var(--divider-color,#3c3c3c);border-radius:9px;padding:9px;font-size:12px;font-family:var(--code-font-family,monospace);background:var(--secondary-background-color,#2d2d2d);color:inherit;}
+    .cp-run-btn{border:none;background:var(--primary-color,#03a9f4);color:#fff;border-radius:9px;padding:9px 16px;cursor:pointer;font-weight:500;}
+    .cp-run-btn:disabled{opacity:.5;}
+    .cp-op{font-size:11px;background:rgba(0,0,0,.25);border-left:3px solid var(--primary-color,#03a9f4);padding:8px 10px;border-radius:8px;font-family:var(--code-font-family,monospace);word-break:break-all;}
+    .cp-op-call{color:var(--primary-text-color,#ddd);margin-bottom:4px;}
+    .cp-op-res.ok{color:#7bd88a;}
+    .cp-op-res.err{color:#f48fb1;}
     .cp-status{grid-area:status;display:flex;align-items:center;gap:18px;padding:0 16px;background:var(--app-header-background-color,#007acc);color:#fff;font-size:11px;}
     .cp-status .dim{opacity:.7;}
     .cp-status .cp-write.ok{color:#c8f7c5;}.cp-status .cp-write.ro{color:#ffe0b2;}
