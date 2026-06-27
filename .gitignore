@@ -22,3 +22,6 @@ secrets.yaml
 .DS_Store
 .idea/
 .vscode/
+deploy/ha_token.txt
+__pycache__/
+*.pyc
