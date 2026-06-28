@@ -34,7 +34,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify as _slugify
 
-from . import resources
+from . import memory, resources
 from .const import CONF_ALLOW_RESTART, CONF_ALLOW_WRITE
 
 
@@ -3365,6 +3365,25 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.import_blueprint(
                 hass, store, args["url"], args.get("domain")
             )
+        if name == "recall_memory":
+            return await memory.recall(hass, args.get("key") or "")
+        if name == "list_memory":
+            return await memory.list_memory(hass, args.get("category"))
+        if name == "remember_memory":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await memory.remember(
+                hass, args.get("key") or "", args.get("value"),
+                args.get("category", "general"),
+            )
+        if name == "forget_memory":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await memory.forget(hass, args.get("key") or "")
+        if name == "snapshot_device_profile":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await memory.snapshot_device_profile(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -3390,6 +3409,7 @@ _READ_ONLY_TOOLS = frozenset({
     "search_github",
     "search_blueprints",
     "recommend_resources",
+    "recall_memory",
 })
 # Irreversible / disruptive operations (removal, data purge, full restart).
 _DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics"})
@@ -4952,6 +4972,56 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "url": {"type": "string", "description": "URL to the blueprint .yaml (a GitHub blob url is auto-converted to raw)."},
                 "domain": {"type": "string", "description": "optional override: 'automation', 'script', or 'template'."},
             }, "required": ["url"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember_memory",
+            "description": "Persist a fact across sessions/restarts (upsert by key) \u2014 the agent's long-term memory for what it learned about this home (user preferences, device notes, decisions). value is any JSON; category namespaces it (e.g. 'preferences', 'devices'). Stored as plain JSON via HA's Store; no model/external calls. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "key": {"type": "string"},
+                "value": {"description": "any JSON value to remember"},
+                "category": {"type": "string", "description": "namespace, default 'general'"},
+            }, "required": ["key", "value"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_memory",
+            "description": "Recall one persisted memory entry by key (returns found:false if unknown). Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "key": {"type": "string"},
+            }, "required": ["key"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_memory",
+            "description": "List persisted memory entries (key, value, category, updated_at), most-recent first, optionally filtered by category. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "category": {"type": "string", "description": "optional category filter"},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget_memory",
+            "description": "Delete one persisted memory entry by key. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "key": {"type": "string"},
+            }, "required": ["key"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "snapshot_device_profile",
+            "description": "Capture the home's real device signals (manufacturers, integration domains, entity-domain counts) into memory under category 'devices', so later sessions recall what the home contains without re-scanning and can detect changes. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
 ]
