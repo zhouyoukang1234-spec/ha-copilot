@@ -361,13 +361,15 @@ async def discover_resources(
     discovery.
 
     Fans out concurrently across the HACS catalog (integrations / cards /
-    themes), GitHub repositories, and community blueprints, returning each
-    source's results plus a fused, deduped ``top`` list (highest-starred across
-    sources). A non-expert types a brand or a need ("xiaomi vacuum", "low
-    battery notification") and gets installable integrations/cards, example
-    repos, and ready-to-import automations in a single call. Each source
-    degrades independently — one failing (rate-limit/network) never blanks the
-    others; failures surface in ``partial_errors``.
+    themes), GitHub repositories, community blueprints, and the community
+    Zigbee device database, returning each source's results plus a fused,
+    deduped ``top`` list (highest-starred across the repo sources). A
+    non-expert types a brand or a need ("xiaomi vacuum", "aqara motion", "low
+    battery notification") and gets — in one call — whether the hardware is
+    Zigbee-supported (and by which bridge), installable integrations/cards,
+    example repos, and ready-to-import automations. Each source degrades
+    independently — one failing (rate-limit/network) never blanks the others;
+    failures surface in ``partial_errors``.
     """
     q = (query or "").strip()
     if not q:
@@ -377,10 +379,11 @@ async def discover_resources(
                 "'low battery notification')"
             )
         }
-    hacs, github, blueprints = await asyncio.gather(
+    hacs, github, blueprints, zigbee = await asyncio.gather(
         search_community_resources(hass, q, "all", limit),
         search_github(hass, q, "stars", limit),
         search_blueprints(hass, q, limit),
+        search_zigbee_devices(hass, q, limit),
         return_exceptions=True,
     )
     errors: list[str] = []
@@ -397,6 +400,7 @@ async def discover_resources(
     hacs_r = _section("hacs", hacs)
     github_r = _section("github", github)
     blueprint_r = _section("blueprints", blueprints)
+    zigbee_r = _section("zigbee", zigbee)
 
     # Fused top list: dedupe by repo full_name, keep the highest-starred, tag
     # each with which source(s) surfaced it.
@@ -430,9 +434,11 @@ async def discover_resources(
         "hacs": hacs_r,
         "github": github_r,
         "blueprints": blueprint_r,
+        "zigbee": zigbee_r,
         "note": (
             "Install HACS items as a custom repository by url; for a blueprint "
-            "call list_repo_blueprints then import_blueprint."
+            "call list_repo_blueprints then import_blueprint. zigbee entries "
+            "show whether the hardware is supported (zigbee2mqtt_supported/zha)."
         ),
     }
     if errors:
