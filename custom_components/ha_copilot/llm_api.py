@@ -29,6 +29,17 @@ from homeassistant.util.json import JsonObjectType
 from . import tools
 from .const import DATA_STORE, DOMAIN
 
+try:
+    # Home Assistant's own AssistAPI uses this helper to list the entities the
+    # user has exposed to a given assistant (respecting their expose settings),
+    # resolving area names via the registries. We reuse it verbatim so the
+    # context we hand the model matches HA's native behaviour exactly.
+    from homeassistant.helpers.llm import (  # type: ignore[attr-defined]
+        _get_exposed_entities,
+    )
+except ImportError:  # pragma: no cover - internal helper renamed/moved
+    _get_exposed_entities = None
+
 LLM_API_ID = "ha_copilot"
 LLM_API_NAME = "HA-Copilot (deterministic tools)"
 
@@ -105,15 +116,46 @@ class _CopilotTool(llm.Tool):
         return _coerce_json(result)
 
 
+def _exposed_entities_prompt(exposed: dict[str, dict[str, Any]]) -> str:
+    """Render exposed entities as a compact, area-grouped context block.
+
+    Borrowed from HA's AssistAPI pattern: giving the model the entity_ids it may
+    operate (grouped by area, with name + current state) up front makes tool
+    calls more precise and saves the round-trips/tokens of discovery calls.
+    """
+    by_area: dict[str, list[str]] = {}
+    for entity_id, info in exposed.items():
+        area = info.get("areas") or "Unassigned"
+        name = info.get("names") or entity_id
+        state = info.get("state", "")
+        by_area.setdefault(area, []).append(f"- {entity_id} ({name}) = {state}")
+
+    lines = [
+        f"Currently exposed Home Assistant entities ({len(exposed)} total), "
+        "grouped by area. Operate them by entity_id; prefer an exact match here "
+        "over guessing names or calling a discovery tool first:"
+    ]
+    for area in sorted(by_area):
+        lines.append(f"\n[{area}]")
+        lines.extend(sorted(by_area[area]))
+    return "\n".join(lines)
+
+
 class CopilotLLMAPI(llm.API):
     """Native LLM API backed by the HA-Copilot deterministic tool layer."""
 
     async def async_get_api_instance(
         self, llm_context: llm.LLMContext
     ) -> llm.APIInstance:
+        api_prompt = API_PROMPT
+        assistant = llm_context.assistant if llm_context else None
+        if assistant and _get_exposed_entities is not None:
+            exposed = _get_exposed_entities(self.hass, assistant)
+            if exposed:
+                api_prompt = f"{API_PROMPT}\n\n{_exposed_entities_prompt(exposed)}"
         return llm.APIInstance(
             api=self,
-            api_prompt=API_PROMPT,
+            api_prompt=api_prompt,
             llm_context=llm_context,
             tools=[_CopilotTool(spec) for spec in tools.TOOL_SPECS],
             custom_serializer=_custom_serializer,
