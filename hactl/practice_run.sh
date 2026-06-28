@@ -23,7 +23,7 @@ L2="${LIGHTS[2]:-$L0}"
 echo "discovered lights: $L0 | $L1 | $L2 (total ${#LIGHTS[@]})"
 
 H "state plane: list lights"
-hactl states --domain light --brief | head -20
+hactl states --domain light --brief | head -20 || true
 
 H "registry plane: create an area"
 hactl area-create "影音室"
@@ -31,7 +31,7 @@ hactl area-create "影音室"
 H "config-editor plane: create an automation, then verify it is live + config valid"
 hactl automation-create demo_dusk \
   "{\"alias\":\"演示日落开灯\",\"trigger\":[{\"platform\":\"sun\",\"event\":\"sunset\"}],\"action\":[{\"service\":\"light.turn_on\",\"target\":{\"entity_id\":\"$L0\"}}]}"
-hactl automation-list | head -10
+hactl automation-list | head -10 || true
 hactl check
 
 H "scene: create -> activate -> observe the lights actually flip"
@@ -58,10 +58,10 @@ H "template plane: render against live state"
 hactl template "{{ states.light | selectattr('state','eq','on') | list | count }}"
 
 H "history plane: recent changes for one entity"
-hactl history "$L0" --hours 1 | head -10
+hactl history "$L0" --hours 1 | head -10 || true
 
 H "raw config plane: read the generated YAML the editor wrote"
-hactl conf-get automations.yaml | head -10
+hactl conf-get automations.yaml | head -10 || true
 
 # ---- deep-fusion round 1: introspection / registries / statistics / actions ----
 H "introspection plane: HA core config (version, units, components)"
@@ -263,5 +263,23 @@ hactl tool get_conversation_agents | python -c "import sys,json;d=json.load(sys.
 
 H "purge_recorder: recorder housekeeping (drop rows older than keep_days)"
 hactl tool purge_recorder --args '{"keep_days":30,"repack":false}' | python -c "import sys,json;d=json.load(sys.stdin);print('purge ok:',d.get('ok'),'| keep_days:',d.get('keep_days'))"
+
+# ---- deep-fusion round 11: multi-turn converse / recorder db / system health / entity registry write ----
+H "converse: multi-turn Assist (threads a conversation_id across turns)"
+CID=$(hactl tool converse --args '{"text":"what time is it"}' | python -c "import sys,json;print(json.load(sys.stdin).get('conversation_id',''))")
+echo "turn1 conversation_id: $CID"
+hactl tool converse --args "{\"text\":\"thanks\",\"conversation_id\":\"$CID\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('turn2 same cid:', d.get('conversation_id')=='$CID')"
+
+H "get_recorder_db_info: the recorder DB identity + footprint"
+hactl tool get_recorder_db_info | python -c "import sys,json;d=json.load(sys.stdin);print('dialect:',d.get('dialect'),'| size_bytes:',d.get('db_size_bytes'),'| url:',d.get('db_url'))"
+
+H "get_recorder_runs: the recorder boot/uptime ledger"
+hactl tool get_recorder_runs | python -c "import sys,json;d=json.load(sys.stdin);r=(d.get('runs') or [{}])[-1];print('runs:',d.get('count'),'| latest start:',r.get('start'),'| closed_incorrect:',r.get('closed_incorrect'))"
+
+H "get_entity_sources: which integration provides each entity (per-domain rollup)"
+hactl tool get_entity_sources | python -c "import sys,json;d=json.load(sys.stdin);print('total:',d.get('total'),'| domains:',d.get('domain_count'),'| custom_component entities:',d.get('custom_component_count'))"
+
+H "update_entity_registry: write a friendly-name + icon override"
+hactl tool update_entity_registry --args "{\"entity_id\":\"$EID\",\"icon\":\"mdi:lightbulb\",\"name\":\"hactl 实践名\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('ok:',d.get('ok'),'| name:',d.get('name'),'| icon:',d.get('icon'))"
 
 echo; echo "### practice run complete"

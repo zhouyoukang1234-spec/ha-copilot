@@ -2385,6 +2385,138 @@ async def _purge_recorder(hass: HomeAssistant, keep_days: int = 10,
             "note": "purge is queued on the recorder thread"}
 
 
+async def _converse(hass: HomeAssistant, text: str, conversation_id: str | None = None,
+                    language: str | None = None, agent_id: str | None = None) -> dict[str, Any]:
+    """Multi-turn Assist conversation: like conversation_process but threads a
+    conversation_id so follow-up turns share context. Returns the (new)
+    conversation_id to chain, the agent's speech, and continue_conversation."""
+    payload: dict[str, Any] = {"text": text}
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
+    if language:
+        payload["language"] = language
+    if agent_id:
+        payload["agent_id"] = agent_id
+    resp = await hass.services.async_call(
+        "conversation", "process", payload, blocking=True, return_response=True) or {}
+    response = resp.get("response") or {}
+    speech = ((response.get("speech") or {}).get("plain") or {}).get("speech", "")
+    return {
+        "conversation_id": resp.get("conversation_id"),
+        "continue_conversation": resp.get("continue_conversation"),
+        "response_type": response.get("response_type"),
+        "speech": speech,
+    }
+
+
+async def _get_recorder_db_info(hass: HomeAssistant) -> dict[str, Any]:
+    """The recorder's database identity & footprint — SQL dialect, the
+    (password-masked) connection URL, live recording flag + write backlog,
+    bind-var limit, and on-disk size for SQLite. Complements get_recorder_info."""
+    import os
+    import re
+    inst = _recorder_get_instance(hass)
+    db_url = getattr(inst, "db_url", "") or ""
+    masked = re.sub(r"://([^:/@]+):([^@]+)@", r"://\1:***@", db_url)
+    size = None
+    if db_url.startswith("sqlite") and "///" in db_url:
+        path = db_url.split("///", 1)[1]
+        if path and os.path.exists(path):
+            size = os.path.getsize(path)
+    return {
+        "dialect": getattr(inst, "dialect_name", None),
+        "db_url": masked,
+        "recording": bool(inst.recording),
+        "backlog": getattr(inst, "backlog", None),
+        "max_bind_vars": getattr(inst, "max_bind_vars", None),
+        "db_size_bytes": size,
+    }
+
+
+async def _get_recorder_runs(hass: HomeAssistant) -> dict[str, Any]:
+    """List the recorder's run periods — every span between an HA start and the
+    next clean shutdown that history was recorded for (start/end, and whether it
+    closed incorrectly i.e. an unclean stop). The boot/uptime ledger of the DB."""
+    if "recorder" not in hass.config.components:
+        return {"error": "the recorder integration is not enabled"}
+    from homeassistant.components.recorder.db_schema import RecorderRuns
+    from homeassistant.components.recorder.util import session_scope
+
+    def _query() -> list[dict[str, Any]]:
+        with session_scope(hass=hass, read_only=True) as session:
+            rows = session.query(RecorderRuns).order_by(RecorderRuns.start).all()
+            return [{
+                "run_id": r.run_id,
+                "start": r.start.isoformat() if r.start else None,
+                "end": r.end.isoformat() if r.end else None,
+                "closed_incorrect": bool(r.closed_incorrect),
+            } for r in rows]
+
+    runs = await _recorder_get_instance(hass).async_add_executor_job(_query)
+    return {"count": len(runs), "runs": runs[-50:]}
+
+
+async def _get_entity_sources(hass: HomeAssistant, entity_id: str | None = None) -> dict[str, Any]:
+    """Map live entities to their providing source — the integration/domain that
+    created each one and whether it comes from a custom_component, plus its
+    config_entry. Filter to one entity_id, or get a per-domain rollup of all."""
+    from homeassistant.helpers.entity import entity_sources
+    sources = entity_sources(hass)
+    if entity_id:
+        info = sources.get(entity_id)
+        if info is None:
+            return {"error": f"entity '{entity_id}' has no recorded source (not added by an integration)"}
+        return {"entity_id": entity_id, "source": dict(info)}
+    by_domain: dict[str, int] = {}
+    custom: list[str] = []
+    for eid, info in sources.items():
+        dom = info.get("domain", "?")
+        by_domain[dom] = by_domain.get(dom, 0) + 1
+        if info.get("custom_component"):
+            custom.append(eid)
+    return {
+        "total": len(sources),
+        "domain_count": len(by_domain),
+        "by_domain": dict(sorted(by_domain.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "custom_component_count": len(custom),
+        "custom_component_entities": sorted(custom)[:50],
+    }
+
+
+async def _update_entity_registry(hass: HomeAssistant, entity_id: str,
+                                  **changes: Any) -> dict[str, Any]:
+    """Write entity-registry overrides for an entity — friendly name, icon,
+    area assignment, entity_category, labels, enable/disable & hide, or a
+    rename (new_entity_id). The user-customization surface of the registry."""
+    ereg = er.async_get(hass)
+    if ereg.async_get(entity_id) is None:
+        return {"error": f"entity '{entity_id}' not in the entity registry"}
+    kwargs: dict[str, Any] = {}
+    for field in ("name", "icon", "area_id", "new_entity_id", "entity_category"):
+        if changes.get(field) is not None:
+            kwargs[field] = changes[field]
+    if changes.get("labels") is not None:
+        kwargs["labels"] = set(changes["labels"])
+    if changes.get("disabled_by") is not None:
+        kwargs["disabled_by"] = er.RegistryEntryDisabler(changes["disabled_by"])
+    if changes.get("hidden_by") is not None:
+        kwargs["hidden_by"] = er.RegistryEntryHider(changes["hidden_by"])
+    if not kwargs:
+        return {"error": "no updatable fields provided"}
+    entry = ereg.async_update_entity(entity_id, **kwargs)
+    return {
+        "ok": True,
+        "entity_id": entry.entity_id,
+        "name": entry.name,
+        "icon": entry.icon,
+        "area_id": entry.area_id,
+        "entity_category": entry.entity_category,
+        "labels": sorted(entry.labels),
+        "disabled_by": entry.disabled_by,
+        "hidden_by": entry.hidden_by,
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -2728,6 +2860,25 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _purge_recorder(hass, int(args.get("keep_days", 10)),
                                          bool(args.get("repack", False)),
                                          bool(args.get("apply_filter", False)))
+        # ---- deep-fusion round 11 ----
+        if name == "converse":
+            return await _converse(hass, args.get("text") or args.get("input", ""),
+                                   args.get("conversation_id"), args.get("language"),
+                                   args.get("agent_id"))
+        if name == "get_recorder_db_info":
+            return await _get_recorder_db_info(hass)
+        if name == "get_recorder_runs":
+            return await _get_recorder_runs(hass)
+        if name == "get_entity_sources":
+            return await _get_entity_sources(hass, args.get("entity_id"))
+        if name == "update_entity_registry":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _update_entity_registry(
+                hass, args["entity_id"], name=args.get("name"), icon=args.get("icon"),
+                area_id=args.get("area_id"), new_entity_id=args.get("new_entity_id"),
+                entity_category=args.get("entity_category"), labels=args.get("labels"),
+                disabled_by=args.get("disabled_by"), hidden_by=args.get("hidden_by"))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -3998,6 +4149,63 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "repack": {"type": "boolean", "description": "rewrite/compact the DB file (default false)."},
                 "apply_filter": {"type": "boolean", "description": "apply the recorder include/exclude filter (default false)."},
             }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "converse",
+            "description": "Multi-turn Assist conversation: like conversation_process but threads a conversation_id so follow-up turns share context. Returns the (new) conversation_id to chain, the agent's speech, and continue_conversation.",
+            "parameters": {"type": "object", "properties": {
+                "text": {"type": "string", "description": "the utterance to send."},
+                "conversation_id": {"type": "string", "description": "id from a prior turn to continue (optional)."},
+                "language": {"type": "string", "description": "language code (optional)."},
+                "agent_id": {"type": "string", "description": "conversation agent entity id (optional; see get_conversation_agents)."},
+            }, "required": ["text"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recorder_db_info",
+            "description": "The recorder database's identity & footprint — SQL dialect, password-masked connection URL, live recording flag + write backlog, bind-var limit, and on-disk size for SQLite. Complements get_recorder_info.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recorder_runs",
+            "description": "List the recorder's run periods — every span between an HA start and the next clean shutdown that history was recorded for (start/end + whether it closed incorrectly, i.e. an unclean stop). The boot/uptime ledger of the DB.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_entity_sources",
+            "description": "Map live entities to their providing source — the integration/domain that created each one, whether it is from a custom_component, and its config_entry. Pass entity_id for one, or omit for a per-domain rollup of all.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "one entity to resolve (optional; omit for the full rollup)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_entity_registry",
+            "description": "Write entity-registry overrides for an entity — friendly name, icon, area assignment, entity_category, labels, enable/disable & hide, or a rename (new_entity_id). The user-customization surface of the registry (write).",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string"},
+                "name": {"type": "string", "description": "friendly name override."},
+                "icon": {"type": "string", "description": "mdi icon override, e.g. 'mdi:lightbulb'."},
+                "area_id": {"type": "string", "description": "assign to an area."},
+                "new_entity_id": {"type": "string", "description": "rename the entity_id."},
+                "entity_category": {"type": "string", "description": "config | diagnostic."},
+                "labels": {"type": "array", "items": {"type": "string"}, "description": "label ids."},
+                "disabled_by": {"type": "string", "description": "'user' to disable; omit to leave unchanged."},
+                "hidden_by": {"type": "string", "description": "'user' to hide; omit to leave unchanged."},
+            }, "required": ["entity_id"]},
         },
     },
 ]
