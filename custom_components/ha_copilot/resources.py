@@ -755,15 +755,31 @@ async def list_repo_blueprints(
     def _raw(path: str) -> str:
         return f"{_RAW_BASE}/{owner}/{name}/{branch}/{path}"
 
-    # Tier 1: canonical blueprints/ directory (path-only, no fetch).
+    def _label(path: str) -> str:
+        stem = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        pretty = stem.replace("_", " ").replace("-", " ").strip().title()
+        return pretty or stem
+
+    def _domain_of(path: str) -> str | None:
+        parts = [p.lower() for p in path.split("/")]
+        for dom in ("automation", "script", "template"):
+            if dom in parts:
+                return dom
+        return None
+
+    # Tier 1: canonical blueprints/ directory (path-only, no fetch). Names and
+    # domains are derived from the path so a non-expert sees readable titles
+    # without us fetching every file; import_blueprint reads the authoritative
+    # name/domain at deploy time.
     results = [
-        {"path": p, "raw_url": _raw(p)}
+        {"path": p, "raw_url": _raw(p), "name": _label(p), "domain": _domain_of(p)}
         for p in yaml_paths
         if "blueprints" in p.lower().split("/")[:-1]
     ][:cap]
     detection = "blueprints-dir"
 
     # Tier 2: content-sniff shallow yaml for a top-level ``blueprint:`` key.
+    # Here we've already parsed the doc, so use its authoritative name/domain.
     if not results:
         detection = "content-sniff"
         # Shallow files only (depth <= 1) to bound fetches and skip vendored/CI.
@@ -775,7 +791,13 @@ async def list_repo_blueprints(
             except Exception:  # noqa: BLE001 - skip unfetchable/unparseable
                 continue
             if isinstance(doc, dict) and "blueprint" in doc:
-                results.append({"path": p, "raw_url": _raw(p)})
+                bp = doc["blueprint"] if isinstance(doc["blueprint"], dict) else {}
+                results.append({
+                    "path": p,
+                    "raw_url": _raw(p),
+                    "name": bp.get("name") or _label(p),
+                    "domain": bp.get("domain") or _domain_of(p),
+                })
                 if len(results) >= cap:
                     break
     return {
