@@ -291,14 +291,20 @@ async def search_blueprints(
     results instead of an empty list.
     """
     base = query.strip()
+    words = base.split()
     # Most specific -> least specific, but always floored at a home-assistant
     # context: dropping it entirely returns unrelated repos (e.g. random
-    # "reminder" projects), so we never relax below that.
+    # "reminder" projects), so we never relax below that. GitHub ANDs every
+    # word, so a verbose phrase ("garage door reminder") can over-constrain to
+    # zero even with the context dropped; we therefore also progressively drop
+    # the user's own trailing words, keeping the home-assistant floor, so a
+    # non-expert phrase still surfaces relevant results instead of nothing.
     candidates = [
         f"{base} home assistant blueprint",
         f"{base} home-assistant blueprint",
-        f"{base} home-assistant",
     ]
+    for i in range(len(words), 0, -1):
+        candidates.append(f"{' '.join(words[:i])} home-assistant")
     seen: set[str] = set()
     ladder = [c.strip() for c in candidates if c.strip() and not (c.strip() in seen or seen.add(c.strip()))]
     if not ladder:
