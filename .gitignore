@@ -15,6 +15,9 @@ test-config/
 .storage/
 secrets.yaml
 
+# hactl operator token (long-lived access token; never commit)
+.ha_token
+
 # OS / editor
 .DS_Store
 .idea/

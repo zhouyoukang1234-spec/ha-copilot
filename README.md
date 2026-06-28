@@ -2,6 +2,17 @@
 
 > 道法自然 · 无为而无不为
 
+本仓库的本源是：**让 AI 自己全链路操作 Home Assistant 的底层**。这里的"智能体"是操作者本身（强 AI），而不是一个被塞进聊天框里的弱模型——基础设施是适配于操作者的"编辑器 + 工具"，操作者直接驱动它，在不断实践中操作到底、验证到底。
+
+仓库提供两层、互补的接入方式：
+
+- **`hactl/`（主路径 · 操作者优先）** —— 一套**给 AI 直接调用**的 HA 底层控制命令行：状态面 / 注册表面 / 配置编辑面 / 原始 YAML 面全覆盖，每条命令输入是普通参数、输出是单个 JSON，便于链式操作与读回校验。这是"Cursor-for-HA"被正确锚定的形态：AI 是操作者，`hactl` 是它操作 HA 的工具层。详见 [`hactl/README.md`](hactl/README.md)。
+- **`custom_components/ha_copilot/`（融合底座）** —— 一个深度融合进 HA 内部的 custom integration，向上既能被 `hactl` 之外的调用方使用（`ha_copilot.run_tool` 确定性直调单个底层工具），也内置了一个可选的、可插拔的对话式前端面板。它是"住在 HA 里面"的执行底座。
+
+下面先描述融合底座（`ha_copilot`），操作者命令行见 `hactl/README.md`。
+
+---
+
 **HA-Copilot** 把 "Cursor 之于 VS Code" 的思路搬进 Home Assistant：它不是一个从外部调用 API 的助手，而是一个**深度融合进 HA 内部**的 AI 协作层。你用自然语言下达意图，AI 直接操作 HA 的底层——读写配置、调用任意服务、查询实体/区域/设备、创建自动化、校验配置、重载与排错——并自我验证结果。
 
 ## 它是怎么"融合"的
@@ -29,6 +40,11 @@
 | `read_config_file` / `write_config_file` | 读写 config 目录内的 YAML（写入自动备份 `.copilot.bak`，限制在 config 目录内） |
 | `check_config` | 校验配置是否有效 |
 | `create_automation` | 追加自动化到 `automations.yaml` 并重载 |
+| `create_scene` / `create_script` | 追加场景到 `scenes.yaml` / 脚本到 `scripts.yaml` 并重载（可直接执行） |
+| `create_area` | 在区域注册表中新建房间/区域（幂等） |
+| `rename_entity` / `assign_entity_area` / `set_entity_enabled` | 实体注册表写操作：改显示名 / 分配区域 / 启用·禁用（等价于 Settings UI 里的操作） |
+| `render_template` | 针对实时状态渲染 Jinja2 模板（等价于开发者工具 > 模板） |
+| `get_history` | 查询实体最近 N 小时的状态历史（需 recorder） |
 | `reload` / `restart` | 重载某域配置 / 重启 HA（重启默认禁用） |
 | `list_areas` / `registry_overview` | 区域、实体/设备/区域注册表概览 |
 | `read_logs` | 读取 HA 日志尾部用于排错 |
@@ -46,7 +62,20 @@ ha_copilot:
   allow_restart: false                       # 是否允许 AI 重启 HA
 ```
 
-重启 HA 后，侧边栏出现 **HA-Copilot**。也可在开发者工具里调用服务 `ha_copilot.ask`（带响应）。
+重启 HA 后，侧边栏出现 **HA-Copilot**。也可在开发者工具里调用服务：
+
+- `ha_copilot.ask`（带响应）—— 用自然语言驱动 AI（LLM + 工具循环）。
+- `ha_copilot.run_tool`（带响应）—— 绕过 LLM，直接执行单个底层工具，便于自动化/脚本调用与确定性测试，例如：
+
+```yaml
+service: ha_copilot.run_tool
+data:
+  tool: render_template
+  args:
+    template: "{{ states.light | selectattr('state','eq','on') | list | count }}"
+```
+
+> `get_history` 需要在 `configuration.yaml` 中启用 `recorder:`（或 `default_config:`）。
 
 ### 本地模型（推荐 Ollama）
 
@@ -63,4 +92,4 @@ ollama serve               # 暴露 http://localhost:11434/v1
 
 ## 状态
 
-v0.1 — 核心融合层与聊天面板已可用，并已在真实 HA 实例 + 本地 Ollama 上端到端验证（AI 通过对话真实创建自动化、改配置、调服务并自检）。
+v0.1 — 核心融合层与聊天面板已可用，并已在真实 HA 实例 + 本地 Ollama 上端到端验证。深化的底层工具（注册表读写、场景/脚本、模板渲染、历史查询）已通过确定性闭环测试（写入 → 重载 → 回读/执行 验证），9/9 通过。
