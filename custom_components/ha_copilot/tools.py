@@ -1526,7 +1526,12 @@ async def _delete_tag(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
 
 async def _get_system_health(hass: HomeAssistant) -> dict[str, Any]:
     """Aggregate the system_health info of all integrations that report it."""
-    import homeassistant.components.system_health as sh
+    # HA 2025.x removed system_health.get_info(); aggregate the registrations
+    # stored at hass.data["system_health"] via get_integration_info() instead.
+    from homeassistant.components.system_health import (
+        DOMAIN as SH_DOMAIN,
+        get_integration_info,
+    )
 
     def _safe(v: Any) -> Any:
         if isinstance(v, (str, int, float, bool)) or v is None:
@@ -1537,9 +1542,23 @@ async def _get_system_health(hass: HomeAssistant) -> dict[str, Any]:
             return [_safe(x) for x in v]
         return str(v)
 
-    info = await sh.get_info(hass)
-    return {"count": len(info),
-            "health": {d: _safe(vals) for d, vals in info.items()}}
+    registrations = hass.data.get(SH_DOMAIN) or {}
+    health: dict[str, Any] = {}
+    for domain, registration in registrations.items():
+        result = await get_integration_info(hass, registration)
+        raw = result.get("info") or {}
+        resolved: dict[str, Any] = {}
+        for key, value in raw.items():
+            # Some integrations report awaitable values (e.g. reachability
+            # probes); resolve them to concrete values for a one-shot report.
+            if asyncio.iscoroutine(value) or isinstance(value, asyncio.Task):
+                try:
+                    value = await value
+                except Exception as exc:  # noqa: BLE001
+                    value = f"error: {exc}"
+            resolved[key] = _safe(value)
+        health[domain] = resolved
+    return {"count": len(health), "health": health}
 
 
 async def _get_blueprint(hass: HomeAssistant, path: str,
@@ -1769,6 +1788,10 @@ async def _evaluate_condition(hass: HomeAssistant, condition: Any,
     committing it to an automation.
     """
     from homeassistant.helpers import condition as cond
+    from homeassistant.helpers import config_validation as cv
+    # Run through the config schema first so string templates / numeric coerces
+    # become Template objects etc. (callers pass raw dicts, not cv-validated).
+    condition = cv.CONDITION_SCHEMA(condition)
     validated = cond.async_validate_condition_config(hass, condition)
     if asyncio.iscoroutine(validated):
         validated = await validated
