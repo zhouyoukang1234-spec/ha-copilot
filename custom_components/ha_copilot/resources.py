@@ -479,15 +479,20 @@ async def import_blueprint(
         except Exception:  # noqa: BLE001 - reload best-effort
             reloaded = False
 
+    # HA references a blueprint by a path relative to ``blueprints/<domain>/``,
+    # NOT including the domain segment. This is what validate_blueprint_inputs /
+    # create_automation_from_blueprint / use_blueprint expect.
+    blueprint_path = f"ha_copilot/{slug}.yaml"
     return {
         "ok": True,
         "name": name,
         "domain": bp_domain,
-        "path": rel,
+        "blueprint_path": blueprint_path,
+        "file": rel,
         "reloaded": reloaded,
         "use": (
-            f"Reference path '{bp_domain}/ha_copilot/{slug}.yaml' when creating "
-            f"a {bp_domain} from this blueprint."
+            f"Pass path='{blueprint_path}' (domain {bp_domain}) to "
+            "validate_blueprint_inputs / create_automation_from_blueprint."
         ),
     }
 
