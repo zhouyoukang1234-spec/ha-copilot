@@ -141,6 +141,25 @@ def _exposed_entities_prompt(exposed: dict[str, dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def entity_context_block(
+    hass: HomeAssistant, assistant: str = "conversation"
+) -> str:
+    """Area-grouped context block for entities exposed to ``assistant``.
+
+    Shared by the native LLM API and the MCP ``prompts`` capability so both
+    routes hand a client the *same* AssistAPI-style context. ``assistant``
+    defaults to ``"conversation"`` (the built-in Assist conversation agent),
+    which is the assistant MCP clients have no way to name themselves. Returns
+    an empty string when nothing is exposed or the HA helper is unavailable.
+    """
+    if not assistant or _get_exposed_entities is None:
+        return ""
+    exposed = _get_exposed_entities(hass, assistant)
+    if not exposed:
+        return ""
+    return _exposed_entities_prompt(exposed)
+
+
 class CopilotLLMAPI(llm.API):
     """Native LLM API backed by the HA-Copilot deterministic tool layer."""
 
@@ -149,10 +168,10 @@ class CopilotLLMAPI(llm.API):
     ) -> llm.APIInstance:
         api_prompt = API_PROMPT
         assistant = llm_context.assistant if llm_context else None
-        if assistant and _get_exposed_entities is not None:
-            exposed = _get_exposed_entities(self.hass, assistant)
-            if exposed:
-                api_prompt = f"{API_PROMPT}\n\n{_exposed_entities_prompt(exposed)}"
+        if assistant:
+            block = entity_context_block(self.hass, assistant)
+            if block:
+                api_prompt = f"{API_PROMPT}\n\n{block}"
         return llm.APIInstance(
             api=self,
             api_prompt=api_prompt,
