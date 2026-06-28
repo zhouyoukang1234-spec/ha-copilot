@@ -34,6 +34,27 @@ from homeassistant.util import slugify as _slugify
 
 from .const import CONF_ALLOW_WRITE
 
+
+class _BlueprintLoader(yaml.SafeLoader):
+    """SafeLoader that tolerates HA's custom tags (``!input``, ``!include`` …).
+
+    Blueprints universally use ``!input`` (and configs use ``!include`` /
+    ``!secret``), which a plain ``safe_load`` rejects. We only need to inspect
+    the document (confirm it is a blueprint, read name/domain) — the raw text is
+    written verbatim, so HA's own loader resolves the tags at use time.
+    """
+
+
+def _construct_undefined(loader: yaml.Loader, tag_suffix: str, node: yaml.Node):
+    if isinstance(node, yaml.MappingNode):
+        return loader.construct_mapping(node)
+    if isinstance(node, yaml.SequenceNode):
+        return loader.construct_sequence(node)
+    return loader.construct_scalar(node)
+
+
+_BlueprintLoader.add_multi_constructor("!", _construct_undefined)
+
 # HACS publishes a machine-readable catalog per category. These are static JSON
 # blobs (no auth), keyed by repository id.
 HACS_DATA_BASE = "https://data-v2.hacs.xyz"
@@ -419,7 +440,7 @@ async def import_blueprint(
     except Exception as err:  # noqa: BLE001
         return {"error": f"fetch failed: {type(err).__name__}: {err}"}
     try:
-        doc = yaml.safe_load(text)
+        doc = yaml.load(text, Loader=_BlueprintLoader)  # noqa: S506 - custom safe subclass
     except yaml.YAMLError as err:
         return {"error": f"invalid YAML: {err}"}
     if not isinstance(doc, dict) or "blueprint" not in doc:
