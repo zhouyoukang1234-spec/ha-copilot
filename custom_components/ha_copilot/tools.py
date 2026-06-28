@@ -3461,6 +3461,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.discover_resources(
                 hass, args.get("query", ""), int(args.get("limit", 8))
             )
+        if name == "search_zigbee_devices":
+            return await resources.search_zigbee_devices(
+                hass, args.get("query", ""), int(args.get("limit", 15))
+            )
         if name == "list_repo_blueprints":
             repo = args.get("repo") or args.get("full_name") or args.get("url")
             if not repo:
@@ -3565,6 +3569,7 @@ _READ_ONLY_TOOLS = frozenset({
     "search_github",
     "search_blueprints",
     "discover_resources",
+    "search_zigbee_devices",
     "recommend_resources",
     "recommend_blueprints",
     "recall_memory",
@@ -5108,6 +5113,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "query": {"type": "string", "description": "what to find: a brand, device type, or desired automation, e.g. 'aqara motion' or 'notify when laundry done'."},
                 "limit": {"type": "integer", "description": "max results per source / in the fused top list (default 8)."},
+            }, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_zigbee_devices",
+            "description": "Look a Zigbee device up in the community device database (blakadder, ~2700 devices). A non-expert types a brand or the model printed on the box ('aqara motion', 'RTCGQ11LM', 'sonoff plug') and gets which bridges support it \u2014 crucially whether zigbee2mqtt does (zigbee2mqtt_supported) and also zha \u2014 plus the device's reference page. Confirms hardware is supported (and by which stack) before searching for automations for it. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "a Zigbee device brand, name, or model, e.g. 'aqara motion' or 'RTCGQ11LM'."},
+                "limit": {"type": "integer", "description": "max devices to return (default 15)."},
             }, "required": ["query"]},
         },
     },
