@@ -282,4 +282,24 @@ hactl tool get_entity_sources | python -c "import sys,json;d=json.load(sys.stdin
 H "update_entity_registry: write a friendly-name + icon override"
 hactl tool update_entity_registry --args "{\"entity_id\":\"$EID\",\"icon\":\"mdi:lightbulb\",\"name\":\"hactl 实践名\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('ok:',d.get('ok'),'| name:',d.get('name'),'| icon:',d.get('icon'))"
 
+# ---- deep-fusion round 12: input_* helpers / group members / person / todo update ----
+H "list_input_helpers: the manual-input control panel"
+hactl tool list_input_helpers | python -c "import sys,json;d=json.load(sys.stdin);print('helpers:',d.get('count'),'| first:',(d.get('helpers') or [{}])[0].get('entity_id'))"
+
+IB=$(hactl tool list_input_helpers --args '{"domain":"input_boolean"}' | python -c "import sys,json;h=json.load(sys.stdin).get('helpers') or [{}];print(h[0].get('entity_id',''))")
+H "set_input_helper: write an input_boolean ($IB)"
+hactl tool set_input_helper --args "{\"entity_id\":\"$IB\",\"value\":\"on\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('ok:',d.get('ok'),'| service:',d.get('service'),'| state:',d.get('state'))"
+
+GRP=$(hactl tool list_states --args '{"domain":"group"}' | python -c "import sys,json;e=json.load(sys.stdin).get('entities') or [{}];print(e[0].get('entity_id',''))")
+H "get_group: members + roll-up of $GRP"
+hactl tool get_group --args "{\"entity_id\":\"$GRP\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('members:',d.get('member_count'),'| state:',d.get('state'))"
+
+H "get_person: presence-detection identity view"
+hactl tool get_person --args '{"identifier":"person.devin"}' | python -c "import sys,json;d=json.load(sys.stdin);print('person:',d.get('entity_id'),'| state:',d.get('state'),'| user_id:',bool(d.get('user_id')),'| trackers:',len(d.get('device_trackers') or []))"
+
+H "update_todo_item: add then complete+rename a to-do item"
+TODOLIST=$(hactl tool list_states --args '{"domain":"todo"}' | python -c "import sys,json;e=json.load(sys.stdin).get('entities') or [{}];print(e[0].get('entity_id',''))")
+hactl tool add_todo_item --args "{\"entity_id\":\"$TODOLIST\",\"item\":\"hactl 演练项\"}" >/dev/null
+hactl tool update_todo_item --args "{\"entity_id\":\"$TODOLIST\",\"item\":\"hactl 演练项\",\"rename\":\"hactl 演练项-完成\",\"status\":\"completed\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('ok:',d.get('ok'),'| updated:',d.get('updated'))"
+
 echo; echo "### practice run complete"

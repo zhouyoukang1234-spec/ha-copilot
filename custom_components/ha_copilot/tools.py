@@ -2517,6 +2517,145 @@ async def _update_entity_registry(hass: HomeAssistant, entity_id: str,
     }
 
 
+_INPUT_DOMAINS = ("input_boolean", "input_number", "input_text",
+                  "input_select", "input_datetime", "input_button")
+
+
+async def _list_input_helpers(hass: HomeAssistant, domain: str | None = None) -> dict[str, Any]:
+    """Enumerate the input_* helper entities (the user-defined state holders:
+    input_boolean/number/text/select/datetime/button) with their current value
+    and config (min/max/options/pattern/mode) — the manual-input control panel."""
+    domains = (domain,) if domain else _INPUT_DOMAINS
+    out: list[dict[str, Any]] = []
+    for st in hass.states.async_all():
+        dom = st.domain
+        if dom not in domains:
+            continue
+        attrs = dict(st.attributes)
+        cfg = {k: attrs[k] for k in ("min", "max", "step", "mode", "pattern",
+                                     "options", "has_date", "has_time", "editable")
+               if k in attrs}
+        out.append({
+            "entity_id": st.entity_id,
+            "domain": dom,
+            "state": st.state,
+            "name": attrs.get("friendly_name"),
+            "config": cfg,
+        })
+    out.sort(key=lambda e: e["entity_id"])
+    return {"count": len(out), "helpers": out}
+
+
+async def _set_input_helper(hass: HomeAssistant, entity_id: str, value: Any) -> dict[str, Any]:
+    """Write a value to any input_* helper, routing to the right service:
+    boolean→turn_on/off, number/text→set_value, select→select_option,
+    datetime→set_datetime, button→press. The unified helper-write surface."""
+    dom = entity_id.split(".", 1)[0]
+    if dom not in _INPUT_DOMAINS:
+        return {"error": f"'{entity_id}' is not an input_* helper"}
+    if hass.states.get(entity_id) is None:
+        return {"error": f"entity '{entity_id}' not found"}
+    if dom == "input_boolean":
+        svc = "turn_on" if str(value).lower() in ("1", "true", "on", "yes") else "turn_off"
+        data: dict[str, Any] = {}
+    elif dom == "input_button":
+        svc, data = "press", {}
+    elif dom == "input_number":
+        svc, data = "set_value", {"value": float(value)}
+    elif dom == "input_text":
+        svc, data = "set_value", {"value": str(value)}
+    elif dom == "input_select":
+        svc, data = "select_option", {"option": str(value)}
+    else:  # input_datetime
+        v = str(value)
+        if " " in v or "T" in v:
+            data = {"datetime": v.replace("T", " ")}
+        elif ":" in v:
+            data = {"time": v}
+        else:
+            data = {"date": v}
+        svc = "set_datetime"
+    await hass.services.async_call(dom, svc, {"entity_id": entity_id, **data}, blocking=True)
+    new = hass.states.get(entity_id)
+    return {"ok": True, "entity_id": entity_id, "service": f"{dom}.{svc}",
+            "state": new.state if new else None}
+
+
+async def _get_group(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Resolve a group (or any grouping entity exposing an entity_id member
+    list — group.*, light/switch groups, etc.) into its members with each
+    member's live state. The membership + roll-up view of a grouping entity."""
+    st = hass.states.get(entity_id)
+    if st is None:
+        return {"error": f"entity '{entity_id}' not found"}
+    members = st.attributes.get("entity_id")
+    if not members:
+        return {"error": f"'{entity_id}' has no 'entity_id' member list (not a group)"}
+    member_states = []
+    for m in members:
+        ms = hass.states.get(m)
+        member_states.append({"entity_id": m, "state": ms.state if ms else "unknown",
+                              "name": (ms.attributes.get("friendly_name") if ms else None)})
+    return {
+        "entity_id": entity_id,
+        "state": st.state,
+        "name": st.attributes.get("friendly_name"),
+        "member_count": len(members),
+        "members": member_states,
+    }
+
+
+async def _get_person(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Resolve a person (by person entity_id, person id, or name) into their
+    tracked location — current zone/state, the device_trackers feeding it,
+    linked HA user_id, and picture. The presence-detection identity view."""
+    target = identifier if identifier.startswith("person.") else None
+    for st in hass.states.async_all("person"):
+        a = st.attributes
+        if (target and st.entity_id == target) or (not target and (
+                a.get("id") == identifier or a.get("friendly_name") == identifier
+                or st.entity_id == f"person.{identifier}")):
+            return {
+                "entity_id": st.entity_id,
+                "name": a.get("friendly_name"),
+                "state": st.state,
+                "id": a.get("id"),
+                "user_id": a.get("user_id"),
+                "device_trackers": a.get("device_trackers", []),
+                "in_zones": a.get("in_zones", []),
+                "gps_accuracy": a.get("gps_accuracy"),
+                "latitude": a.get("latitude"),
+                "longitude": a.get("longitude"),
+                "picture": a.get("entity_picture"),
+                "editable": a.get("editable"),
+            }
+    return {"error": f"no person matches '{identifier}'"}
+
+
+async def _update_todo_item(hass: HomeAssistant, entity_id: str, item: str,
+                            rename: str | None = None, status: str | None = None,
+                            due_date: str | None = None,
+                            description: str | None = None) -> dict[str, Any]:
+    """Update an existing item on a to-do list (todo.update_item) — change its
+    status (needs_action/completed), rename it, set a due date or description.
+    The edit/complete counterpart to add_todo_item (write)."""
+    if hass.states.get(entity_id) is None:
+        return {"error": f"todo list '{entity_id}' not found"}
+    data: dict[str, Any] = {"item": item}
+    if rename is not None:
+        data["rename"] = rename
+    if status is not None:
+        data["status"] = status
+    if due_date is not None:
+        data["due_date"] = due_date
+    if description is not None:
+        data["description"] = description
+    await hass.services.async_call("todo", "update_item",
+                                   {"entity_id": entity_id, **data}, blocking=True)
+    return {"ok": True, "entity_id": entity_id, "item": item,
+            "updated": {k: v for k, v in data.items() if k != "item"}}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -2879,6 +3018,24 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 area_id=args.get("area_id"), new_entity_id=args.get("new_entity_id"),
                 entity_category=args.get("entity_category"), labels=args.get("labels"),
                 disabled_by=args.get("disabled_by"), hidden_by=args.get("hidden_by"))
+        # ---- deep-fusion round 12 ----
+        if name == "list_input_helpers":
+            return await _list_input_helpers(hass, args.get("domain"))
+        if name == "get_group":
+            return await _get_group(hass, args["entity_id"])
+        if name == "get_person":
+            return await _get_person(hass, args.get("identifier") or args.get("person") or args.get("name"))
+        if name == "set_input_helper":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_input_helper(hass, args["entity_id"], args.get("value"))
+        if name == "update_todo_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _update_todo_item(
+                hass, args["entity_id"], args["item"], rename=args.get("rename"),
+                status=args.get("status"), due_date=args.get("due_date"),
+                description=args.get("description"))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -4206,6 +4363,62 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "disabled_by": {"type": "string", "description": "'user' to disable; omit to leave unchanged."},
                 "hidden_by": {"type": "string", "description": "'user' to hide; omit to leave unchanged."},
             }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_input_helpers",
+            "description": "Enumerate the input_* helper entities (input_boolean/number/text/select/datetime/button) with their current value and config (min/max/options/pattern/mode) — the manual-input control panel.",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "restrict to one helper domain, e.g. 'input_number' (optional)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_input_helper",
+            "description": "Write a value to any input_* helper, routing to the right service: boolean→turn_on/off, number/text→set_value, select→select_option, datetime→set_datetime, button→press. Unified helper-write surface (write).",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "the input_* helper entity."},
+                "value": {"description": "the value to set (bool/number/string/option/datetime depending on the helper)."},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_group",
+            "description": "Resolve a group (or any grouping entity exposing an entity_id member list) into its members with each member's live state — the membership + roll-up view of a grouping entity.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_person",
+            "description": "Resolve a person (by person entity_id, person id, or name) into their tracked location — current zone/state, the device_trackers feeding it, linked HA user_id, and picture. The presence-detection identity view.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "person entity_id, id, or friendly name."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_todo_item",
+            "description": "Update an existing item on a to-do list (todo.update_item) — change its status (needs_action/completed), rename it, set a due date or description. The edit/complete counterpart to add_todo_item (write).",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "the todo list entity."},
+                "item": {"type": "string", "description": "the item to update (its summary or uid)."},
+                "rename": {"type": "string", "description": "new summary (optional)."},
+                "status": {"type": "string", "description": "'needs_action' or 'completed' (optional)."},
+                "due_date": {"type": "string", "description": "due date YYYY-MM-DD (optional)."},
+                "description": {"type": "string", "description": "item description (optional)."},
+            }, "required": ["entity_id", "item"]},
         },
     },
 ]
