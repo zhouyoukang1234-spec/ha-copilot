@@ -155,4 +155,23 @@ hactl tool call_service --args "{\"domain\":\"light\",\"service\":\"turn_off\",\
 ( sleep 2; hactl tool call_service --args "{\"domain\":\"light\",\"service\":\"turn_on\",\"data\":{\"entity_id\":\"$EID\"}}" >/dev/null ) &
 hactl tool wait_for_template --args "{\"template\":\"{{ is_state('$EID','on') }}\",\"timeout\":8}" | python -c "import sys,json;d=json.load(sys.stdin);print('matched:',d['matched'],'| waited:',d.get('waited'))"
 
+# ---- deep-fusion round 5: device graph / stat metadata / condition eval / zones / automation trace ----
+H "device graph: deep introspection of first device + its entities"
+DID=$(hactl tool list_devices | python -c "import sys,json;d=json.load(sys.stdin)['devices'];print(d[0]['id'] if d else '')")
+if [ -n "$DID" ]; then hactl tool get_device --args "{\"identifier\":\"$DID\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('device:',d['name'],'| model:',d.get('model'),'| entities:',d['entity_count'])"; fi
+
+H "recorder statistic metadata: source/unit/has_mean/has_sum"
+hactl tool get_statistic_metadata | python -c "import sys,json;d=json.load(sys.stdin);print('stats:',d['count'])"
+
+H "condition engine: evaluate state + template + numeric conditions against live state"
+hactl tool call_service --args "{\"domain\":\"light\",\"service\":\"turn_on\",\"data\":{\"entity_id\":\"$EID\"}}" >/dev/null
+hactl tool evaluate_condition --args "{\"condition\":{\"condition\":\"state\",\"entity_id\":\"$EID\",\"state\":\"on\"}}" | python -c "import sys,json;print('state cond ->',json.load(sys.stdin)['result'])"
+hactl tool evaluate_condition --args '{"condition":"{{ 5 > 3 }}"}' | python -c "import sys,json;print('template cond ->',json.load(sys.stdin)['result'])"
+
+H "presence/geofence: list zones + persons inside"
+hactl tool list_zones | python -c "import sys,json;d=json.load(sys.stdin);print('zones:',[z['name'] for z in d['zones']])"
+
+H "automation debug: most recent execution trace of a known automation"
+hactl tool get_automation_trace --args '{"identifier":"download_bing_wallpaper_daily"}' | python -c "import sys,json;d=json.load(sys.stdin);l=d.get('latest',{});print('trace count:',d['count'],'| script_execution:',l.get('script_execution'),'| state:',l.get('state'))"
+
 echo; echo "### practice run complete"

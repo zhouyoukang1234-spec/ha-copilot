@@ -8,6 +8,7 @@ the layer that makes the AI "fused" with HA rather than calling it from outside.
 from __future__ import annotations
 
 import asyncio
+import functools
 import os
 from datetime import timedelta
 from typing import Any
@@ -1699,6 +1700,132 @@ async def _get_config_entry(hass: HomeAssistant, identifier: str) -> dict[str, A
     }
 
 
+async def _get_device(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Deep device introspection (by id or name) + its entities — device graph.
+
+    The device analogue of describe_area: connections, identifiers, owning
+    config entries, via_device parent, firmware/hardware, area, and the full
+    list of entities the device exposes.
+    """
+    dreg = dr.async_get(hass)
+    ereg = er.async_get(hass)
+    dev = dreg.async_get(identifier)
+    if dev is None:
+        dev = next((d for d in dreg.devices.values()
+                    if (d.name_by_user or d.name) == identifier), None)
+    if dev is None:
+        return {"error": f"device '{identifier}' not found"}
+    entities = [{"entity_id": e.entity_id, "name": e.name or e.original_name,
+                 "domain": e.entity_id.split(".")[0]}
+                for e in ereg.entities.values() if e.device_id == dev.id]
+    return {
+        "id": dev.id,
+        "name": dev.name_by_user or dev.name,
+        "name_by_user": dev.name_by_user,
+        "manufacturer": dev.manufacturer,
+        "model": dev.model,
+        "sw_version": dev.sw_version,
+        "hw_version": dev.hw_version,
+        "area_id": dev.area_id,
+        "via_device_id": dev.via_device_id,
+        "config_entries": sorted(dev.config_entries),
+        "connections": [list(c) for c in dev.connections],
+        "identifiers": [list(i) for i in dev.identifiers],
+        "disabled_by": dev.disabled_by,
+        "entry_type": dev.entry_type,
+        "labels": sorted(dev.labels),
+        "entity_count": len(entities),
+        "entities": entities,
+    }
+
+
+async def _get_statistic_metadata(hass: HomeAssistant,
+                                  statistic_ids: list[str] | None = None) -> dict[str, Any]:
+    """Recorder statistic metadata: unit, source, has_mean/has_sum, name."""
+    ids = set(statistic_ids) if statistic_ids else None
+    meta = await _recorder_get_instance(hass).async_add_executor_job(
+        functools.partial(_recorder_statistics.get_metadata, hass, statistic_ids=ids))
+    items = {sid: dict(m) for sid, (_row, m) in meta.items()}
+    return {"count": len(items), "metadata": items}
+
+
+async def _evaluate_condition(hass: HomeAssistant, condition: Any,
+                              variables: dict | None = None) -> dict[str, Any]:
+    """Validate + evaluate an HA condition config (state/numeric_state/template/
+    time/and/or/...) against live state. Lets an agent test logic before
+    committing it to an automation.
+    """
+    from homeassistant.helpers import condition as cond
+    validated = cond.async_validate_condition_config(hass, condition)
+    if asyncio.iscoroutine(validated):
+        validated = await validated
+    checker = cond.async_from_config(hass, validated)
+    if asyncio.iscoroutine(checker):
+        checker = await checker
+    res = checker(hass, variables or {})
+    if asyncio.iscoroutine(res):
+        res = await res
+    return {"result": bool(res), "raw": res}
+
+
+async def _list_zones(hass: HomeAssistant) -> dict[str, Any]:
+    """List zones with geo (lat/long/radius) and the persons currently inside."""
+    items = []
+    for s in sorted(hass.states.async_all("zone"), key=lambda s: s.entity_id):
+        a = s.attributes
+        items.append({
+            "entity_id": s.entity_id,
+            "name": a.get("friendly_name"),
+            "latitude": a.get("latitude"),
+            "longitude": a.get("longitude"),
+            "radius": a.get("radius"),
+            "passive": a.get("passive"),
+            "person_count": int(s.state) if s.state.isdigit() else None,
+            "persons": list(a.get("persons", [])),
+        })
+    return {"count": len(items), "zones": items}
+
+
+async def _get_automation_trace(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Return the most recent execution trace of an automation (step-by-step
+    path through triggers/conditions/actions) — the automation debug surface.
+    Accepts an automation entity_id, numeric id, or alias.
+    """
+    from homeassistant.components.trace import DATA_TRACE
+    ereg = er.async_get(hass)
+    # The trace store is flat, keyed by f"{domain}.{item_id}" where item_id is
+    # the automation's config `id` (== the entity's registry unique_id).
+    store = hass.data.get(DATA_TRACE, {})
+    item_id = identifier
+    if identifier.startswith("automation."):
+        ent = ereg.async_get(identifier)
+        if ent and ent.unique_id:
+            item_id = ent.unique_id
+    key = f"automation.{item_id}"
+    traces = store.get(key)
+    if not traces:
+        # fall back to resolving by friendly-name alias
+        for s in hass.states.async_all("automation"):
+            if s.attributes.get("friendly_name") == identifier:
+                ent = ereg.async_get(s.entity_id)
+                cand = f"automation.{ent.unique_id}" if ent and ent.unique_id else None
+                if cand and cand in store:
+                    key = cand
+                    traces = store.get(key)
+                    break
+    if not traces:
+        return {"automation": identifier, "resolved_key": key,
+                "count": 0, "traces": [],
+                "note": "no stored traces yet (automation may not have run)"}
+    ordered = list(traces.values())
+    return {
+        "automation": identifier,
+        "resolved_key": key,
+        "count": len(ordered),
+        "latest": ordered[-1].as_short_dict(),
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -1958,6 +2085,17 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _wait_for_template(hass, args["template"], args.get("timeout", 10))
         if name == "get_config_entry":
             return await _get_config_entry(hass, args.get("identifier") or args.get("entry_id") or args.get("domain"))
+        # ---- deep-fusion round 5 ----
+        if name == "get_device":
+            return await _get_device(hass, args.get("identifier") or args.get("device_id") or args.get("name"))
+        if name == "get_statistic_metadata":
+            return await _get_statistic_metadata(hass, args.get("statistic_ids"))
+        if name == "evaluate_condition":
+            return await _evaluate_condition(hass, args["condition"], args.get("variables"))
+        if name == "list_zones":
+            return await _list_zones(hass)
+        if name == "get_automation_trace":
+            return await _get_automation_trace(hass, args.get("identifier") or args.get("automation_id") or args.get("entity_id"))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -2918,6 +3056,55 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "description": "Single config entry detail by entry_id or domain: domain, title, load state, source, version, disabled_by, support flags and options. Secrets in .data are deliberately not exposed.",
             "parameters": {"type": "object", "properties": {
                 "identifier": {"type": "string", "description": "config entry_id, or a domain (returns the first entry)."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_device",
+            "description": "Deep device introspection by id or name (the device analogue of describe_area): manufacturer/model, sw/hw version, area, via_device parent, owning config entries, connections, identifiers, labels and the full list of entities the device exposes.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "Device id or name."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_statistic_metadata",
+            "description": "Recorder long-term statistic metadata: per statistic_id its source, name, unit_of_measurement and has_mean/has_sum flags. Omit statistic_ids for all. Pair with get_statistics to interpret aggregated data correctly.",
+            "parameters": {"type": "object", "properties": {
+                "statistic_ids": {"type": "array", "items": {"type": "string"}, "description": "Optional list of statistic ids to filter by."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "evaluate_condition",
+            "description": "Validate and evaluate an HA condition config against live state, returning a boolean. Supports state/numeric_state/template/time/zone/and/or/not and shorthand template strings. Lets an agent test logic BEFORE committing it into an automation.",
+            "parameters": {"type": "object", "properties": {
+                "condition": {"description": "A condition config (object) or a shorthand template string, e.g. {\"condition\":\"state\",\"entity_id\":\"light.x\",\"state\":\"on\"}."},
+                "variables": {"type": "object", "description": "Optional template variables."},
+            }, "required": ["condition"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_zones",
+            "description": "List zones with geo (latitude/longitude/radius/passive) and the persons currently inside each — the presence/geofence surface.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_automation_trace",
+            "description": "Return the most recent execution trace of an automation (step-by-step path through trigger/conditions/actions, timing, changed variables) — the automation debug surface. Accepts an automation entity_id, numeric id, or alias.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "automation entity_id, numeric id, or alias."},
             }, "required": ["identifier"]},
         },
     },
