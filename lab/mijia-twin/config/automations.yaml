@@ -89,7 +89,7 @@
   mode: single
   triggers:
   - trigger: template
-    value_template: '{{ states(''sensor.sonoff_total_power_usage'')|float > 600 }}'
+    value_template: '{{ states(''sensor.sonoff_total_power_usage'')|float(0) > 600 }}'
 - actions:
   - action: switch.turn_off
     data: {}

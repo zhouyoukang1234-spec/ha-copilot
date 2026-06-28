@@ -22,10 +22,16 @@ const VIEWS = [
   { id: "automations", icon: "M13 3v6h8l-9 13v-9H4l9-10z", label: "自动化" },
   { id: "editor", icon: "M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z", label: "配置编辑" },
   { id: "logs", icon: "M3 3h18v2H3zm0 4h18v2H3zm0 4h12v2H3zm0 4h18v2H3zm0 4h12v2H3z", label: "日志" },
+  { id: "areas", icon: "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-9z", label: "区域" },
+  { id: "templates", icon: "M3 3h18v4H3V3zm0 7h8v11H3V10zm10 0h8v11h-8V10z", label: "模板传感器" },
   { id: "integrations", icon: "M10 4h4v2h2a2 2 0 0 1 2 2v3h2v4h-2v3a2 2 0 0 1-2 2h-3v2h-4v-2H8a2 2 0 0 1-2-2v-3H4v-4h2V8a2 2 0 0 1 2-2h2V4z", label: "集成" },
 ];
 
 const TOGGLE_DOMAINS = ["light", "switch", "input_boolean", "fan", "siren", "humidifier"];
+const DELETABLE_DOMAINS = [
+  "scene", "script", "input_boolean", "input_number", "input_text",
+  "input_select", "input_datetime", "timer", "counter",
+];
 const DOMAIN_LABELS = {
   light: "灯光", switch: "开关", input_boolean: "布尔量", input_number: "数值",
   fan: "风扇", sensor: "传感器", binary_sensor: "二元传感器", climate: "温控",
@@ -271,6 +277,8 @@ class HaCopilotPanel extends HTMLElement {
       if (this._view === "automations") return this._viewAutomations(host, actions);
       if (this._view === "editor") return this._viewEditor(host, actions);
       if (this._view === "logs") return this._viewLogs(host, actions);
+      if (this._view === "areas") return this._viewAreas(host, actions);
+      if (this._view === "templates") return this._viewTemplates(host, actions);
       if (this._view === "integrations") return this._viewIntegrations(host, actions);
     } catch (e) {
       host.innerHTML = "";
@@ -488,13 +496,102 @@ class HaCopilotPanel extends HTMLElement {
     modal.appendChild(this._el("div", { class: "cp-modal-sub", text: entity_id + "  ·  " + this._fmtState(s) }));
     const attrs = this._el("pre", { class: "cp-json", text: JSON.stringify(s.attributes, null, 2) });
     modal.appendChild(attrs);
+    const domain = entity_id.split(".")[0];
+    this._appendControls(modal, s, entity_id, domain, back);
     const ftr = this._el("div", { class: "cp-modal-ftr" });
     ftr.appendChild(this._actionBtn("复制 entity_id", () => {
       this._copy(entity_id);
     }));
+    if (DELETABLE_DOMAINS.includes(domain)) {
+      const delBtn = this._actionBtn("删除", async () => {
+        const label = s.attributes.friendly_name || entity_id;
+        if (!window.confirm(`删除「${label}」(${entity_id})？此操作将从配置中移除并清理残留。`)) return;
+        delBtn.textContent = "删除中…"; delBtn.disabled = true;
+        const r = await this._deleteEntity(entity_id, domain, label);
+        if (r && r.error) { delBtn.textContent = "失败: " + r.error; delBtn.disabled = false; return; }
+        back.remove();
+        this._renderView();
+      });
+      delBtn.classList.add("cp-btn-danger");
+      ftr.appendChild(delBtn);
+    }
     modal.appendChild(ftr);
     back.appendChild(modal);
     this.querySelector(".cp-root").appendChild(back);
+  }
+
+  async _deleteEntity(entity_id, domain, label) {
+    if (domain === "scene") return this._runTool("delete_scene", { identifier: label });
+    if (domain === "script") return this._runTool("delete_script", { identifier: entity_id });
+    return this._runTool("delete_helper", { entity_id });
+  }
+
+  // Domain-specific control affordances inside the entity-detail modal.
+  // These call HA services directly and read state back so the user can
+  // operate devices end-to-end without leaving the panel.
+  _appendControls(modal, s, entity_id, domain, back) {
+    const ctl = this._el("div", { class: "cp-modal-ctl" });
+    const refresh = () => {
+      const ns = this._hass.states[entity_id];
+      if (ns) {
+        const sub = modal.querySelector(".cp-modal-sub");
+        if (sub) sub.textContent = entity_id + "  ·  " + this._fmtState(ns);
+      }
+    };
+    const callAndShow = async (btn, dom, service, data, busyText) => {
+      const orig = btn.textContent;
+      btn.textContent = busyText || "执行中…"; btn.disabled = true;
+      try {
+        await this._hass.callService(dom, service, { entity_id, ...(data || {}) });
+        setTimeout(refresh, 400);
+        btn.textContent = "已执行"; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 900);
+      } catch (e) {
+        btn.textContent = "失败"; setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
+      }
+    };
+
+    if (domain === "scene") {
+      const b = this._actionBtn("激活场景", () => callAndShow(b, "scene", "turn_on", null, "激活中…"));
+      b.classList.add("cp-chip-accent"); ctl.appendChild(b);
+    } else if (domain === "script") {
+      const b = this._actionBtn("运行脚本", () => callAndShow(b, "script", "turn_on", null, "运行中…"));
+      b.classList.add("cp-chip-accent"); ctl.appendChild(b);
+      const ren = this._actionBtn("重命名", async () => {
+        const cur = s.attributes.friendly_name || entity_id;
+        const nn = window.prompt(`重命名脚本「${cur}」为：`, cur);
+        if (!nn || nn.trim() === "" || nn.trim() === cur) return;
+        ren.textContent = "…"; ren.disabled = true;
+        const r = await this._runTool("update_script", { identifier: entity_id, new_alias: nn.trim() });
+        if (r && r.error) { ren.textContent = "失败"; setTimeout(() => { ren.textContent = "重命名"; ren.disabled = false; }, 1200); return; }
+        const sub = modal.querySelector(".cp-modal-sub");
+        const ns = this._hass.states[entity_id];
+        if (sub && ns) sub.textContent = entity_id + "  ·  " + this._fmtState(ns);
+        ren.textContent = "已重命名"; setTimeout(() => { ren.textContent = "重命名"; ren.disabled = false; }, 900);
+      });
+      ctl.appendChild(ren);
+    } else if (TOGGLE_DOMAINS.includes(domain)) {
+      const on = s.state === "on";
+      const b = this._actionBtn(on ? "关闭" : "打开",
+        () => callAndShow(b, domain, s.state === "on" ? "turn_off" : "turn_on"));
+      b.classList.add("cp-chip-accent"); ctl.appendChild(b);
+      // Brightness for lights that support it.
+      if (domain === "light" && (s.attributes.supported_color_modes || []).some(
+        (m) => ["brightness", "color_temp", "hs", "xy", "rgb", "rgbw", "rgbww"].includes(m))) {
+        const pct = s.attributes.brightness != null ? Math.round((s.attributes.brightness / 255) * 100) : 100;
+        const wrap = this._el("label", { class: "cp-slider-wrap", text: "亮度 " });
+        const val = this._el("span", { class: "cp-slider-val", text: pct + "%" });
+        const sl = this._el("input", {
+          class: "cp-slider", type: "range", min: 1, max: 100, value: pct,
+          oninput: (e) => { val.textContent = e.target.value + "%"; },
+          onchange: (e) => {
+            this._hass.callService("light", "turn_on", { entity_id, brightness_pct: Number(e.target.value) });
+            setTimeout(refresh, 400);
+          },
+        });
+        wrap.appendChild(sl); wrap.appendChild(val); ctl.appendChild(wrap);
+      }
+    }
+    if (ctl.children.length) modal.appendChild(ctl);
   }
 
   // ---- AUTOMATIONS -------------------------------------------------------
@@ -532,6 +629,35 @@ class HaCopilotPanel extends HTMLElement {
       });
       sw.appendChild(this._el("span", { class: "cp-knob" }));
       right.appendChild(sw);
+      const ren = this._el("button", {
+        class: "cp-chip", text: "重命名",
+        onclick: async () => {
+          const cur = s.attributes.friendly_name || s.entity_id;
+          const nn = window.prompt(`重命名自动化「${cur}」为：`, cur);
+          if (!nn || nn.trim() === "" || nn.trim() === cur) return;
+          ren.textContent = "…"; ren.disabled = true;
+          try {
+            const r = await this._runTool("update_automation", { identifier: s.attributes.id || cur, new_alias: nn.trim() });
+            if (r && r.error) { ren.textContent = "失败"; setTimeout(() => { ren.textContent = "重命名"; ren.disabled = false; }, 1200); return; }
+          } catch (e) { ren.textContent = "失败"; ren.disabled = false; return; }
+          setTimeout(() => this._renderView(), 600);
+        },
+      });
+      right.appendChild(ren);
+      const del = this._el("button", {
+        class: "cp-chip cp-chip-danger", text: "删除",
+        onclick: async () => {
+          const label = s.attributes.friendly_name || s.entity_id;
+          if (!window.confirm(`删除自动化「${label}」？将从 automations.yaml 移除（保留备份）。`)) return;
+          del.textContent = "删除中…"; del.disabled = true;
+          try {
+            const r = await this._runTool("delete_automation", { identifier: s.attributes.id || label });
+            if (r && r.error) { del.textContent = "失败"; del.disabled = false; return; }
+          } catch (e) { del.textContent = "失败"; del.disabled = false; return; }
+          setTimeout(() => this._renderView(), 600);
+        },
+      });
+      right.appendChild(del);
       row.appendChild(right);
       list.appendChild(row);
     }
@@ -678,6 +804,154 @@ class HaCopilotPanel extends HTMLElement {
     }
   }
 
+  // ---- AREAS -------------------------------------------------------------
+  async _viewAreas(host, actions) {
+    actions.appendChild(this._actionBtn("刷新", () => this._renderView()));
+    host.innerHTML = "";
+    host.appendChild(this._el("div", { class: "cp-note", text: "房间/区域管理（区域注册表）。新建、重命名、删除均走能力层 create_area / rename_area / delete_area，与 MCP 同源。" }));
+
+    // Create row.
+    const createRow = this._el("div", { class: "cp-area-create" });
+    const inp = this._el("input", { class: "cp-input-text", type: "text", placeholder: "新区域名称，如 客厅 / 主卧" });
+    const addBtn = this._el("button", { class: "cp-chip cp-chip-accent", text: "新建区域" });
+    const doCreate = async () => {
+      const nm = inp.value.trim();
+      if (!nm) return;
+      addBtn.disabled = true; addBtn.textContent = "新建中…";
+      const r = await this._runTool("create_area", { name: nm });
+      if (r && r.error) { addBtn.textContent = "失败"; setTimeout(() => { addBtn.textContent = "新建区域"; addBtn.disabled = false; }, 1200); return; }
+      inp.value = "";
+      this._renderView();
+    };
+    addBtn.onclick = doCreate;
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") doCreate(); });
+    createRow.appendChild(inp); createRow.appendChild(addBtn);
+    host.appendChild(createRow);
+
+    const list = this._el("div", { class: "cp-list", id: "cp-arealist" });
+    host.appendChild(list);
+    list.appendChild(this._el("div", { class: "cp-empty", text: "加载中…" }));
+    try {
+      const r = await this._runTool("list_areas");
+      const areas = (r && r.areas) || [];
+      list.innerHTML = "";
+      if (!areas.length) {
+        list.appendChild(this._el("div", { class: "cp-empty", text: "还没有区域。用上方输入框新建一个。" }));
+        return;
+      }
+      areas.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      for (const a of areas) {
+        const row = this._el("div", { class: "cp-row" });
+        const left = this._el("div", { class: "cp-row-main" });
+        left.appendChild(this._el("div", { class: "cp-row-name", text: a.name }));
+        left.appendChild(this._el("div", { class: "cp-row-id", text: a.id }));
+        row.appendChild(left);
+        const right = this._el("div", { class: "cp-row-ctrl" });
+        const renameBtn = this._el("button", {
+          class: "cp-chip", text: "重命名",
+          onclick: async () => {
+            const nn = window.prompt(`重命名区域「${a.name}」为：`, a.name);
+            if (!nn || nn.trim() === "" || nn.trim() === a.name) return;
+            renameBtn.disabled = true; renameBtn.textContent = "…";
+            const rr = await this._runTool("rename_area", { identifier: a.id, new_name: nn.trim() });
+            if (rr && rr.error) { renameBtn.textContent = "失败"; setTimeout(() => { renameBtn.textContent = "重命名"; renameBtn.disabled = false; }, 1200); return; }
+            this._renderView();
+          },
+        });
+        right.appendChild(renameBtn);
+        const delBtn = this._el("button", {
+          class: "cp-chip cp-chip-danger", text: "删除",
+          onclick: async () => {
+            if (!window.confirm(`删除区域「${a.name}」(${a.id})？区域内实体不会被删除，只是解除归属。`)) return;
+            delBtn.disabled = true; delBtn.textContent = "删除中…";
+            const rr = await this._runTool("delete_area", { identifier: a.id });
+            if (rr && rr.error) { delBtn.textContent = "失败"; setTimeout(() => { delBtn.textContent = "删除"; delBtn.disabled = false; }, 1200); return; }
+            this._renderView();
+          },
+        });
+        right.appendChild(delBtn);
+        row.appendChild(right);
+        list.appendChild(row);
+      }
+    } catch (e) {
+      list.innerHTML = "";
+      list.appendChild(this._el("div", { class: "cp-empty", text: "无法读取区域: " + (e.message || e) }));
+    }
+  }
+
+  // ---- TEMPLATE SENSORS --------------------------------------------------
+  async _viewTemplates(host, actions) {
+    actions.appendChild(this._actionBtn("刷新", () => this._renderView()));
+    host.innerHTML = "";
+    host.appendChild(this._el("div", { class: "cp-note", text: "模板传感器管理。新建会先用实时状态校验 Jinja 模板再部署；删除走能力层 delete_template_sensor + 自动清理实体，与 MCP 同源。" }));
+
+    // Create row: name + Jinja state template + optional unit.
+    const createRow = this._el("div", { class: "cp-area-create" });
+    const nameInp = this._el("input", { class: "cp-input-text", type: "text", placeholder: "传感器名称，如 开灯数量" });
+    const tplInp = this._el("input", { class: "cp-input-text", type: "text", placeholder: "Jinja 状态模板，如 {{ states.light | selectattr('state','eq','on') | list | count }}" });
+    const unitInp = this._el("input", { class: "cp-input-text", type: "text", placeholder: "单位（可选）" });
+    const addBtn = this._el("button", { class: "cp-chip cp-chip-accent", text: "新建模板传感器" });
+    const doCreate = async () => {
+      const nm = nameInp.value.trim();
+      const tpl = tplInp.value.trim();
+      if (!nm || !tpl) return;
+      addBtn.disabled = true; addBtn.textContent = "校验并部署…";
+      const args = { name: nm, state: tpl };
+      if (unitInp.value.trim()) args.unit = unitInp.value.trim();
+      const r = await this._runTool("create_template_sensor", args);
+      if (r && r.error) {
+        addBtn.textContent = "失败"; addBtn.title = r.error;
+        setTimeout(() => { addBtn.textContent = "新建模板传感器"; addBtn.disabled = false; addBtn.title = ""; }, 2000);
+        return;
+      }
+      nameInp.value = ""; tplInp.value = ""; unitInp.value = "";
+      setTimeout(() => this._renderView(), 600);
+    };
+    addBtn.onclick = doCreate;
+    createRow.appendChild(nameInp); createRow.appendChild(tplInp);
+    createRow.appendChild(unitInp); createRow.appendChild(addBtn);
+    host.appendChild(createRow);
+
+    const list = this._el("div", { class: "cp-list", id: "cp-tpllist" });
+    host.appendChild(list);
+    list.appendChild(this._el("div", { class: "cp-empty", text: "加载中…" }));
+    try {
+      const r = await this._runTool("list_template_sensors");
+      const sensors = (r && r.template_sensors) || [];
+      list.innerHTML = "";
+      if (!sensors.length) {
+        list.appendChild(this._el("div", { class: "cp-empty", text: "还没有模板传感器。用上方表单新建一个。" }));
+        return;
+      }
+      sensors.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      for (const s of sensors) {
+        const row = this._el("div", { class: "cp-row" });
+        const left = this._el("div", { class: "cp-row-main" });
+        const stateTxt = s.current_state == null ? "（未渲染）" : s.current_state + (s.unit_of_measurement ? " " + s.unit_of_measurement : "");
+        left.appendChild(this._el("div", { class: "cp-row-name", text: s.name + "  ·  " + stateTxt }));
+        left.appendChild(this._el("div", { class: "cp-row-id", text: s.entity_id + "   " + (s.state_template || "") }));
+        row.appendChild(left);
+        const right = this._el("div", { class: "cp-row-ctrl" });
+        const delBtn = this._el("button", {
+          class: "cp-chip cp-chip-danger", text: "删除",
+          onclick: async () => {
+            if (!window.confirm(`删除模板传感器「${s.name}」(${s.entity_id})？`)) return;
+            delBtn.disabled = true; delBtn.textContent = "删除中…";
+            const rr = await this._runTool("delete_template_sensor", { name: s.name });
+            if (rr && rr.error) { delBtn.textContent = "失败"; setTimeout(() => { delBtn.textContent = "删除"; delBtn.disabled = false; }, 1200); return; }
+            setTimeout(() => this._renderView(), 600);
+          },
+        });
+        right.appendChild(delBtn);
+        row.appendChild(right);
+        list.appendChild(row);
+      }
+    } catch (e) {
+      list.innerHTML = "";
+      list.appendChild(this._el("div", { class: "cp-empty", text: "无法读取模板传感器: " + (e.message || e) }));
+    }
+  }
+
   // ---- INTEGRATIONS ------------------------------------------------------
   async _viewIntegrations(host, actions) {
     actions.appendChild(this._actionBtn("添加集成", () => window.open("/config/integrations/dashboard", "_blank")));
@@ -687,23 +961,45 @@ class HaCopilotPanel extends HTMLElement {
     host.appendChild(list);
     list.appendChild(this._el("div", { class: "cp-empty", text: "加载中…" }));
     try {
-      const entries = await this._ws({ type: "config_entries/get" });
+      // Drive through the same capability layer that MCP exposes, so the panel
+      // and external operators see identical integration state.
+      const r = await this._runTool("list_config_entries");
+      const entries = (r && r.entries) || [];
       list.innerHTML = "";
-      if (!entries || !entries.length) {
+      if (!entries.length) {
         list.appendChild(this._el("div", { class: "cp-empty", text: "暂无集成条目" }));
         return;
       }
-      for (const en of entries.sort((a, b) => a.domain.localeCompare(b.domain))) {
+      for (const en of entries) {
         const row = this._el("div", { class: "cp-row" });
         const left = this._el("div", { class: "cp-row-main" });
         left.appendChild(this._el("div", { class: "cp-row-name", text: en.title || en.domain }));
         left.appendChild(this._el("div", { class: "cp-row-id", text: en.domain }));
         row.appendChild(left);
+        const right = this._el("div", { class: "cp-row-ctrl" });
         const st = (en.state || "").toLowerCase();
-        row.appendChild(this._el("span", {
+        right.appendChild(this._el("span", {
           class: "cp-pill " + (st === "loaded" ? "ok" : st ? "warn" : ""),
           text: en.state || "—",
         }));
+        if (en.entry_id) {
+          right.appendChild(this._el("button", {
+            class: "cp-chip", text: "重载", title: "重载该集成（不重启 HA）",
+            onclick: async (e) => {
+              const btn = e.currentTarget;
+              btn.disabled = true;
+              btn.textContent = "重载中…";
+              try {
+                const rr = await this._runTool("reload_config_entry", { entry_id: en.entry_id });
+                btn.textContent = rr && rr.ok ? "已重载" : "失败";
+              } catch (err) {
+                btn.textContent = "失败";
+              }
+              setTimeout(() => this._renderView(), 800);
+            },
+          }));
+        }
+        row.appendChild(right);
         list.appendChild(row);
       }
     } catch (e) {
@@ -875,6 +1171,8 @@ class HaCopilotPanel extends HTMLElement {
     .cp-view{flex:1;overflow-y:auto;padding:16px;}
     .cp-chip{border:1px solid var(--divider-color,#3c3c3c);background:var(--secondary-background-color,#2d2d2d);color:inherit;border-radius:7px;padding:5px 12px;font-size:13px;cursor:pointer;}
     .cp-chip:hover{border-color:var(--primary-color,#03a9f4);color:var(--primary-color,#03a9f4);}
+    .cp-chip-danger:hover{border-color:var(--error-color,#db4437);color:var(--error-color,#db4437);}
+    .cp-chip[disabled]{opacity:.5;cursor:default;}
     .cp-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
     .cp-card{background:var(--card-background-color,#252526);border:1px solid var(--divider-color,#333);border-radius:12px;padding:16px;}
     .cp-card-v{font-size:30px;font-weight:700;color:var(--primary-color,#03a9f4);}
@@ -887,6 +1185,8 @@ class HaCopilotPanel extends HTMLElement {
     .cp-controls{display:flex;gap:8px;margin-bottom:12px;}
     .cp-input-text,.cp-select{background:var(--secondary-background-color,#2d2d2d);border:1px solid var(--divider-color,#3c3c3c);color:inherit;border-radius:8px;padding:8px 10px;font-size:13px;}
     .cp-input-text{flex:1;}
+    .cp-area-create{display:flex;gap:8px;align-items:center;margin:10px 0 6px;}
+    .cp-area-create .cp-input-text{flex:1;}
     .cp-list{display:flex;flex-direction:column;gap:6px;}
     .cp-row{display:flex;align-items:center;gap:10px;background:var(--card-background-color,#252526);border:1px solid var(--divider-color,#2c2c2c);border-radius:10px;padding:10px 14px;cursor:pointer;}
     .cp-row:hover{border-color:var(--primary-color,#03a9f4);}
@@ -959,7 +1259,15 @@ class HaCopilotPanel extends HTMLElement {
     .cp-modal-head{display:flex;justify-content:space-between;align-items:center;font-size:15px;}
     .cp-modal-sub{font-size:12px;color:var(--secondary-text-color,#9e9e9e);font-family:var(--code-font-family,monospace);margin:6px 0;}
     .cp-json{flex:1;overflow:auto;background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:12px;font-size:12px;}
-    .cp-modal-ftr{display:flex;justify-content:flex-end;margin-top:10px;}
+    .cp-modal-ftr{display:flex;justify-content:flex-end;gap:8px;margin-top:10px;}
+    .cp-btn-danger{border-color:var(--error-color,#db4437)!important;color:var(--error-color,#db4437)!important;}
+    .cp-btn-danger:hover{background:var(--error-color,#db4437)!important;color:#fff!important;}
+    .cp-modal-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--divider-color,#3c3c3c);}
+    .cp-chip-accent{border-color:var(--primary-color,#03a9f4)!important;color:var(--primary-color,#03a9f4)!important;}
+    .cp-chip-accent:hover{background:var(--primary-color,#03a9f4)!important;color:#fff!important;}
+    .cp-slider-wrap{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--secondary-text-color,#9b9b9b);}
+    .cp-slider{vertical-align:middle;}
+    .cp-slider-val{min-width:38px;text-align:right;color:inherit;}
     `;
   }
 }

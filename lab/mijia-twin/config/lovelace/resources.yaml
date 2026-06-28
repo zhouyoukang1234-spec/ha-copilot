@@ -1,0 +1,5 @@
+# Lovelace (YAML mode) frontend resources.
+# Mushroom card bundle is vendored under www/community so the dashboard renders
+# its custom:mushroom-* cards on a cold start without HACS.
+- url: /local/community/lovelace-mushroom/mushroom.js?v=5.1.1
+  type: module
