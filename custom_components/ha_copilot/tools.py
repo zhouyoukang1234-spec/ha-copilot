@@ -3006,8 +3006,11 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _assign_entities_by_rules(
                 hass, args["rules"], bool(args.get("only_unassigned", True)))
         if name == "create_helper":
+            obj_id = args.get("object_id") or _slugify(args.get("name") or "")
+            if not obj_id:
+                return {"error": "missing required argument: object_id (or name to derive it)"}
             return await _create_helper(
-                hass, store, args["domain"], args["object_id"], args.get("config") or {})
+                hass, store, args["domain"], obj_id, args.get("config") or {})
         if name == "create_template_sensor":
             return await _create_template_sensor(
                 hass, store, args["name"], args["state"], unit=args.get("unit"),
@@ -3129,7 +3132,7 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "fire_event":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
-            return await _fire_event(hass, args["event_type"], args.get("event_data"))
+            return await _fire_event(hass, args["event_type"], args.get("event_data") or args.get("data"))
         if name == "list_persons":
             return await _list_persons(hass)
         # ---- deep-fusion round 2 ----
@@ -3828,10 +3831,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {
                     "domain": {"type": "string", "description": "Helper domain, e.g. 'input_boolean'"},
-                    "object_id": {"type": "string", "description": "Helper object id (slug)"},
+                    "object_id": {"type": "string", "description": "Helper object id (slug); derived from name if omitted"},
+                    "name": {"type": "string", "description": "Friendly name; used to derive object_id when object_id is omitted"},
                     "config": {"type": "object", "description": "Helper config, e.g. {name: '...'}"},
                 },
-                "required": ["domain", "object_id", "config"],
+                "required": ["domain"],
             },
         },
     },
@@ -4237,7 +4241,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {
                     "event_type": {"type": "string"},
-                    "event_data": {"type": "object"},
+                    "event_data": {"type": "object", "description": "Event payload (alias: 'data')"},
                 },
                 "required": ["event_type"],
             },
