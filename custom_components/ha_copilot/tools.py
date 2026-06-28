@@ -3201,12 +3201,18 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "list_zones":
             return await _list_zones(hass)
         if name == "get_automation_trace":
-            return await _get_automation_trace(hass, args.get("identifier") or args.get("automation_id") or args.get("entity_id"))
+            ident = args.get("identifier") or args.get("automation_id") or args.get("entity_id")
+            if not ident:
+                return {"error": "missing required argument: identifier (automation_id or entity_id)"}
+            return await _get_automation_trace(hass, ident)
         # ---- deep-fusion round 6 ----
         if name == "get_system_log":
             return await _get_system_log(hass, args.get("level"), args.get("limit", 50))
         if name == "get_integration_manifest":
-            return await _get_integration_manifest(hass, args.get("domain") or args.get("identifier"))
+            ident = args.get("domain") or args.get("identifier")
+            if not ident:
+                return {"error": "missing required argument: domain"}
+            return await _get_integration_manifest(hass, ident)
         if name == "get_recorder_info":
             return await _get_recorder_info(hass)
         if name == "get_loaded_integrations":
@@ -3215,7 +3221,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _call_service_response(hass, args["domain"], args["service"], args.get("data"))
         # ---- deep-fusion round 7 ----
         if name == "get_automation_config":
-            return await _get_automation_config(hass, args.get("identifier") or args.get("id") or args.get("entity_id"))
+            ident = args.get("identifier") or args.get("id") or args.get("entity_id")
+            if not ident:
+                return {"error": "missing required argument: identifier (id or entity_id)"}
+            return await _get_automation_config(hass, ident)
         if name == "validate_automation_config":
             return await _validate_automation_config(hass, args["config"])
         if name == "list_config_flows":
@@ -3234,7 +3243,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 has_sum=bool(args.get("has_sum", False)))
         # ---- deep-fusion round 8 ----
         if name == "get_script_config":
-            return await _get_script_config(hass, args.get("identifier") or args.get("entity_id") or args.get("id"))
+            ident = args.get("identifier") or args.get("entity_id") or args.get("id")
+            if not ident:
+                return {"error": "missing required argument: identifier (entity_id or id)"}
+            return await _get_script_config(hass, ident)
         if name == "get_scene_config":
             return await _get_scene_config(hass, args.get("identifier") or args.get("name") or args.get("id"))
         if name == "get_device_automations":
@@ -3300,7 +3312,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "get_group":
             return await _get_group(hass, args["entity_id"])
         if name == "get_person":
-            return await _get_person(hass, args.get("identifier") or args.get("person") or args.get("name"))
+            ident = args.get("identifier") or args.get("person") or args.get("name")
+            if not ident:
+                return {"error": "missing required argument: identifier (person or name)"}
+            return await _get_person(hass, ident)
         if name == "set_input_helper":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
