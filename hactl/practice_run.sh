@@ -248,4 +248,20 @@ H "validate_blueprint_inputs + create_automation_from_blueprint: instantiate a b
 hactl tool validate_blueprint_inputs --args '{"path":"homeassistant/motion_light.yaml","inputs":{"motion_entity":"binary_sensor.x","light_target":{"entity_id":"light.y"}}}' | python -c "import sys,json;d=json.load(sys.stdin);print('valid:',d.get('valid'),'| required:',d.get('required'))"
 hactl tool create_automation_from_blueprint --args "{\"path\":\"homeassistant/motion_light.yaml\",\"alias\":\"practice 蓝图实例\",\"inputs\":{\"motion_entity\":\"binary_sensor.lab_motion\",\"light_target\":{\"entity_id\":\"$EID\"}}}" | python -c "import sys,json;d=json.load(sys.stdin);print('instantiated:',d.get('ok'),'| from_blueprint:',d.get('from_blueprint'),'| id:',d.get('automation_id'))"
 
+# ---- deep-fusion round 10: assist pipelines / network adapters / conversation agents / recorder purge ----
+H "get_assist_pipelines: the voice-assistant pipelines + preferred"
+hactl tool get_assist_pipelines | python -c "import sys,json;d=json.load(sys.stdin);print('pipelines:',d.get('count'),'| preferred:',d.get('preferred_id'))"
+
+H "get_assist_pipeline: preferred pipeline detail (conversation/STT/TTS engines)"
+hactl tool get_assist_pipeline | python -c "import sys,json;p=json.load(sys.stdin).get('pipeline',{});print('name:',p.get('name'),'| conv:',p.get('conversation_engine'),'| lang:',p.get('language'))"
+
+H "get_network_adapters: the adapters HA sees for discovery/announce"
+hactl tool get_network_adapters | python -c "import sys,json;d=json.load(sys.stdin);print('adapters:',d.get('count'),[a.get('name') for a in d.get('adapters',[])])"
+
+H "get_conversation_agents: the agents conversation_process can target"
+hactl tool get_conversation_agents | python -c "import sys,json;d=json.load(sys.stdin);print('agents:',d.get('count'),[a['agent_id'] for a in d.get('agents',[])])"
+
+H "purge_recorder: recorder housekeeping (drop rows older than keep_days)"
+hactl tool purge_recorder --args '{"keep_days":30,"repack":false}' | python -c "import sys,json;d=json.load(sys.stdin);print('purge ok:',d.get('ok'),'| keep_days:',d.get('keep_days'))"
+
 echo; echo "### practice run complete"

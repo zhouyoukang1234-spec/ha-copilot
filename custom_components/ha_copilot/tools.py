@@ -2313,6 +2313,78 @@ async def _get_template_functions(hass: HomeAssistant) -> dict[str, Any]:
     }
 
 
+async def _get_assist_pipelines(hass: HomeAssistant) -> dict[str, Any]:
+    """List all configured Assist (voice) pipelines with their STT/TTS/
+    conversation engines and languages, plus which one is preferred — the
+    full voice-assistant configuration surface."""
+    from homeassistant.components.assist_pipeline.pipeline import (
+        async_get_pipeline,
+        async_get_pipelines,
+    )
+    pipelines = async_get_pipelines(hass)
+    preferred = async_get_pipeline(hass)
+    return {
+        "count": len(pipelines),
+        "preferred_id": preferred.id if preferred else None,
+        "pipelines": [p.to_json() for p in pipelines],
+    }
+
+
+async def _get_assist_pipeline(hass: HomeAssistant, pipeline_id: str | None = None) -> dict[str, Any]:
+    """One Assist pipeline's full definition (defaults to the preferred
+    pipeline when no id given) — conversation/STT/TTS engines, languages,
+    wake word and local-intent preference."""
+    from homeassistant.components.assist_pipeline.pipeline import async_get_pipeline
+    try:
+        pipeline = async_get_pipeline(hass, pipeline_id)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"pipeline '{pipeline_id}' not found: {exc}"}
+    if pipeline is None:
+        return {"error": f"pipeline '{pipeline_id}' not found"}
+    return {"found": True, "pipeline": pipeline.to_json()}
+
+
+async def _get_network_adapters(hass: HomeAssistant) -> dict[str, Any]:
+    """The network adapters HA sees (name, default, auto/enabled, IPv4/IPv6) —
+    the networking view used for discovery and URL announcement."""
+    from homeassistant.components.network import async_get_adapters
+    adapters = await async_get_adapters(hass)
+    return {"count": len(adapters), "adapters": adapters}
+
+
+async def _get_conversation_agents(hass: HomeAssistant) -> dict[str, Any]:
+    """List the conversation/Assist agents that conversation_process can
+    target via agent_id (the built-in Home Assistant agent plus any
+    conversation entities from integrations)."""
+    agents: list[dict[str, Any]] = []
+    for state in hass.states.async_all("conversation"):
+        agents.append({
+            "agent_id": state.entity_id,
+            "name": state.attributes.get("friendly_name") or state.name,
+        })
+    return {
+        "count": len(agents),
+        "default_agent_id": "conversation.home_assistant",
+        "agents": agents,
+    }
+
+
+async def _purge_recorder(hass: HomeAssistant, keep_days: int = 10,
+                          repack: bool = False, apply_filter: bool = False) -> dict[str, Any]:
+    """Trigger a recorder purge (recorder.purge service): drop history/state
+    rows older than keep_days; optionally repack the DB to reclaim disk and
+    apply the include/exclude recorder filter. The recorder housekeeping op."""
+    if not hass.services.has_service("recorder", "purge"):
+        return {"error": "recorder.purge service unavailable (recorder not loaded)"}
+    await hass.services.async_call(
+        "recorder", "purge",
+        {"keep_days": keep_days, "repack": repack, "apply_filter": apply_filter},
+        blocking=True)
+    return {"ok": True, "keep_days": keep_days, "repack": repack,
+            "apply_filter": apply_filter,
+            "note": "purge is queued on the recorder thread"}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -2641,6 +2713,21 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _create_automation_from_blueprint(
                 hass, args["path"], args.get("inputs") or {}, args["alias"], args.get("domain", "automation"))
+        # ---- deep-fusion round 10 ----
+        if name == "get_assist_pipelines":
+            return await _get_assist_pipelines(hass)
+        if name == "get_assist_pipeline":
+            return await _get_assist_pipeline(hass, args.get("pipeline_id"))
+        if name == "get_network_adapters":
+            return await _get_network_adapters(hass)
+        if name == "get_conversation_agents":
+            return await _get_conversation_agents(hass)
+        if name == "purge_recorder":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _purge_recorder(hass, int(args.get("keep_days", 10)),
+                                         bool(args.get("repack", False)),
+                                         bool(args.get("apply_filter", False)))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -3865,6 +3952,52 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "get_template_functions",
             "description": "Catalog the Jinja extensions available in THIS instance's template engine — globals/functions, filters and tests (including HA extras like states, area_id, device_id, expand). The authoring surface for templates.",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_assist_pipelines",
+            "description": "List all configured Assist (voice) pipelines with their STT/TTS/conversation engines and languages, plus which is preferred — the voice-assistant configuration surface.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_assist_pipeline",
+            "description": "One Assist pipeline's full definition (defaults to the preferred pipeline when no id given) — conversation/STT/TTS engines, languages, wake word, local-intent preference.",
+            "parameters": {"type": "object", "properties": {
+                "pipeline_id": {"type": "string", "description": "pipeline id (optional; default = preferred)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_network_adapters",
+            "description": "The network adapters HA sees (name, default, auto/enabled, IPv4/IPv6) — the networking view used for discovery and external-URL announcement.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_conversation_agents",
+            "description": "List the conversation/Assist agents that conversation_process can target via agent_id (the built-in Home Assistant agent plus any conversation entities from integrations).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "purge_recorder",
+            "description": "Trigger a recorder purge (recorder.purge service): drop history/state rows older than keep_days; optionally repack the DB to reclaim disk and apply the recorder include/exclude filter. Recorder housekeeping (write).",
+            "parameters": {"type": "object", "properties": {
+                "keep_days": {"type": "integer", "description": "keep rows newer than this many days (default 10)."},
+                "repack": {"type": "boolean", "description": "rewrite/compact the DB file (default false)."},
+                "apply_filter": {"type": "boolean", "description": "apply the recorder include/exclude filter (default false)."},
+            }},
         },
     },
 ]
