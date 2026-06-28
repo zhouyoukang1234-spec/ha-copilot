@@ -3345,6 +3345,13 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.search_blueprints(
                 hass, args.get("query", ""), int(args.get("limit", 15))
             )
+        if name == "list_repo_blueprints":
+            repo = args.get("repo") or args.get("full_name") or args.get("url")
+            if not repo:
+                return {"error": "missing required argument: repo (owner/name or GitHub URL)"}
+            return await resources.list_repo_blueprints(
+                hass, repo, int(args.get("limit", 30))
+            )
         if name == "recommend_resources":
             return await resources.recommend_resources(
                 hass, int(args.get("limit", 15))
@@ -4909,6 +4916,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "query": {"type": "string", "description": "optional keywords, e.g. 'motion light' or 'notify low battery'."},
                 "limit": {"type": "integer", "description": "max results (default 15, max 30)."},
             }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_repo_blueprints",
+            "description": "Resolve a GitHub repo (owner/name or URL) to the raw .yaml URLs of the blueprints it contains \u2014 closing the search\u2192import loop so you can feed a raw_url straight to import_blueprint without browsing the repo. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "repo": {"type": "string", "description": "owner/name (e.g. 'EPMatt/awesome-ha-blueprints') or a GitHub URL."},
+                "limit": {"type": "integer", "description": "max blueprint files (default 30)."},
+            }, "required": ["repo"]},
         },
     },
     {

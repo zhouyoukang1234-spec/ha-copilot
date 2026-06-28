@@ -291,6 +291,74 @@ async def search_blueprints(
     }
 
 
+_GITHUB_API = "https://api.github.com"
+_RAW_BASE = "https://raw.githubusercontent.com"
+
+
+async def list_repo_blueprints(
+    hass: HomeAssistant,
+    repo: str,
+    limit: int = 30,
+) -> dict[str, Any]:
+    """List directly-importable blueprint .yaml URLs inside a GitHub repo.
+
+    Closes the search -> import loop: ``search_blueprints`` finds repos, this
+    resolves a repo (``owner/name`` or a GitHub URL) to the raw URLs of the
+    blueprint files it contains, each ready to hand straight to
+    ``import_blueprint``. Detection is path-based (a ``.yaml``/``.yml`` under a
+    ``blueprints/`` directory), which covers the standard HA layout without
+    fetching every file; ``import_blueprint`` still validates the actual content
+    on import.
+    """
+    slug = repo.strip()
+    for pre in (f"{_RAW_BASE}/", "https://github.com/", "github.com/"):
+        if slug.startswith(pre):
+            slug = slug[len(pre):]
+            break
+    parts = [p for p in slug.split("/") if p]
+    if len(parts) < 2:
+        return {"error": f"expected owner/repo, got {repo!r}"}
+    owner, name = parts[0], parts[1]
+    try:
+        meta = await _fetch_json(hass, f"{_GITHUB_API}/repos/{owner}/{name}")
+        branch = meta.get("default_branch") or "main"
+        tree = await _fetch_json(
+            hass, f"{_GITHUB_API}/repos/{owner}/{name}/git/trees/{branch}?recursive=1"
+        )
+    except Exception as err:  # noqa: BLE001 - surface fetch/ratelimit errors
+        return {"error": f"{type(err).__name__}: {err}"}
+    results: list[dict[str, Any]] = []
+    for node in (tree or {}).get("tree", []):
+        if node.get("type") != "blob":
+            continue
+        path = node.get("path", "")
+        low = path.lower()
+        if not (low.endswith(".yaml") or low.endswith(".yml")):
+            continue
+        # Canonical HA layout: blueprints live under a ``blueprints/`` directory.
+        # Requiring that segment avoids false positives like GitHub issue
+        # templates (``.github/ISSUE_TEMPLATE/blueprint-*.yml``).
+        if "blueprints" not in low.split("/")[:-1]:
+            continue
+        results.append(
+            {
+                "path": path,
+                "raw_url": f"{_RAW_BASE}/{owner}/{name}/{branch}/{path}",
+            }
+        )
+        if len(results) >= max(1, limit):
+            break
+    return {
+        "ok": True,
+        "repo": f"{owner}/{name}",
+        "branch": branch,
+        "count": len(results),
+        "blueprints": results,
+        "truncated": bool((tree or {}).get("truncated")),
+        "note": "Pass any raw_url to import_blueprint to deploy it.",
+    }
+
+
 def _device_signals(hass: HomeAssistant) -> dict[str, Any]:
     """Collect brand/domain signals describing what the user actually owns."""
     manufacturers: dict[str, int] = {}

@@ -41,6 +41,7 @@
 | `read_logs` | 读取 HA 日志尾部用于排错 |
 | `search_community_resources` | 检索 **HACS** 全量目录（自定义集成 / 前端卡片 / 主题）按品牌·设备·关键词 |
 | `search_github` / `search_blueprints` | 在 GitHub 搜 HA 相关仓库/模板/示例、社区蓝图 |
+| `list_repo_blueprints` | 把一个 GitHub 仓库（`owner/name` 或 URL）解析成其中所有蓝图的 **可直接导入的 raw .yaml URL**，闭合 search→import 链路（免去手动翻仓库找路径） |
 | `recommend_resources` | **读取运行中 HA 的真实设备（厂商/集成/实体域），自动匹配最相关的 HACS 资源**（小白零参数即可被推荐） |
 | `import_blueprint` | 按 URL 把蓝图 YAML 导入运行中的 HA（自动备份并重载，受 `allow_write` 约束） |
 
