@@ -51,11 +51,15 @@ def _mcp_tools() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for spec in tools.TOOL_SPECS:
         fn = spec.get("function", {})
+        name = fn.get("name", "")
         out.append(
             {
-                "name": fn.get("name", ""),
+                "name": name,
                 "description": fn.get("description", ""),
                 "inputSchema": fn.get("parameters") or {"type": "object", "properties": {}},
+                # MCP tool annotations: let clients flag destructive ops and
+                # surface read-only tools safely (single source: tools module).
+                "annotations": tools.tool_annotations(name),
             }
         )
     return out
