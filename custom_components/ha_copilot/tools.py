@@ -3430,6 +3430,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.search_blueprints(
                 hass, args.get("query", ""), int(args.get("limit", 15))
             )
+        if name == "discover_resources":
+            return await resources.discover_resources(
+                hass, args.get("query", ""), int(args.get("limit", 8))
+            )
         if name == "list_repo_blueprints":
             repo = args.get("repo") or args.get("full_name") or args.get("url")
             if not repo:
@@ -3533,6 +3537,7 @@ _READ_ONLY_TOOLS = frozenset({
     "search_community_resources",
     "search_github",
     "search_blueprints",
+    "discover_resources",
     "recommend_resources",
     "recommend_blueprints",
     "recall_memory",
@@ -5066,6 +5071,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "query": {"type": "string", "description": "optional keywords, e.g. 'motion light' or 'notify low battery'."},
                 "limit": {"type": "integer", "description": "max results (default 15, max 30)."},
             }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "discover_resources",
+            "description": "One free-text query, every source at once: searches the HACS catalog (integrations/cards/themes), GitHub repos, and community blueprints concurrently and returns each source's results plus a fused, deduped 'top' list (ranked by cross-source presence then stars). A non-expert types a brand or a need ('xiaomi vacuum', 'low battery notification') and gets installable integrations/cards, example repos, and ready-to-import automations together. Each source degrades independently (failures in partial_errors). Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "what to find: a brand, device type, or desired automation, e.g. 'aqara motion' or 'notify when laundry done'."},
+                "limit": {"type": "integer", "description": "max results per source / in the fused top list (default 8)."},
+            }, "required": ["query"]},
         },
     },
     {
