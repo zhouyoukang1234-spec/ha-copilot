@@ -1,0 +1,10 @@
+# MacroDroid 手机控制 (OnePlus NE2210 · 192.168.31.40)
+rest_command:
+  macrodroid_cmd:
+    url: "http://192.168.31.40:8080/?cmd={{ cmd }}"
+    method: GET
+    timeout: 10
+  macrodroid_cmd_frp:
+    url: "http://60.205.171.100:8080/?cmd={{ cmd }}"
+    method: GET
+    timeout: 15

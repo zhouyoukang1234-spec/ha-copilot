@@ -1,0 +1,15 @@
+light_mode:
+  name: 灯光模式
+  options:
+  - 白天
+  - 夜晚
+  - 自动
+speaker_selector:
+  name: 选择音箱
+  options:
+  - 小米音箱Pro
+  - 小爱触屏音箱
+  - Sound音箱
+  - 红米音箱
+  - 小米机器人
+  - 全部音箱

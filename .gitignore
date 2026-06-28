@@ -24,3 +24,6 @@ secrets.yaml
 .vscode/
 ha_llat.txt
 ha_token.txt
+deploy/ha_token.txt
+__pycache__/
+*.pyc
