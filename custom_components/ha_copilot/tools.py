@@ -2745,9 +2745,57 @@ async def _update_todo_item(hass: HomeAssistant, entity_id: str, item: str,
             "updated": {k: v for k, v in data.items() if k != "item"}}
 
 
+async def _run_tools(
+    hass: HomeAssistant, store: dict, args: dict[str, Any]
+) -> dict[str, Any]:
+    """Run a sequence of tool calls in one request (sequential, ordered).
+
+    Lets an agent batch a plan — e.g. read a state, then act, then read back —
+    without a network/inference round-trip per step. Each item is
+    ``{"tool": <name>, "args": {...}}``; results are returned in order. With
+    ``stop_on_error`` the batch halts at the first failing call. ``run_tools``
+    cannot be nested (guarded) so a batch can never recurse into itself.
+    """
+    calls = args.get("calls") or args.get("tools") or args.get("steps")
+    if not isinstance(calls, list):
+        return {"error": "'calls' must be a list of {tool, args} objects"}
+    stop_on_error = bool(args.get("stop_on_error", False))
+    results: list[dict[str, Any]] = []
+    errors = 0
+    for i, call in enumerate(calls):
+        if not isinstance(call, dict):
+            res: dict[str, Any] = {"error": "each call must be an object {tool, args}"}
+            sub = None
+        else:
+            sub = call.get("tool")
+            sub_args = call.get("args")
+            if not isinstance(sub_args, dict):
+                sub_args = {}
+            if sub == "run_tools":
+                res = {"error": "run_tools cannot be nested"}
+            elif not sub or not isinstance(sub, str):
+                res = {"error": "missing 'tool' name"}
+            else:
+                res = await dispatch(hass, store, sub, sub_args)
+        is_err = isinstance(res, dict) and "error" in res
+        if is_err:
+            errors += 1
+        results.append({"index": i, "tool": sub, "result": res})
+        if is_err and stop_on_error:
+            break
+    return {
+        "ok": errors == 0,
+        "count": len(results),
+        "errors": errors,
+        "results": results,
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
+        if name == "run_tools":
+            return await _run_tools(hass, store, args)
         if name == "list_states":
             return await _list_states(hass, args.get("domain"))
         if name == "get_state":
@@ -3179,6 +3227,35 @@ def tool_annotations(name: str) -> dict[str, Any]:
 # OpenAI-style function specifications. Exposed to external agents verbatim via
 # the run_tool HTTP API and converted to MCP tool descriptors for the MCP server.
 TOOL_SPECS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "run_tools",
+            "description": "Run several tools in one call, in order, to batch a plan (e.g. read a state, act, then read back) without a round-trip per step. 'calls' is a list of {tool, args}. Returns each result in order with an error count. Set stop_on_error=true to halt at the first failure. Cannot be nested.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "calls": {
+                        "type": "array",
+                        "description": "Ordered tool calls to execute.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "tool": {"type": "string", "description": "Tool name, e.g. 'call_service'."},
+                                "args": {"type": "object", "description": "Arguments for that tool."},
+                            },
+                            "required": ["tool"],
+                        },
+                    },
+                    "stop_on_error": {
+                        "type": "boolean",
+                        "description": "Stop at the first failing call (default false: run all).",
+                    },
+                },
+                "required": ["calls"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
