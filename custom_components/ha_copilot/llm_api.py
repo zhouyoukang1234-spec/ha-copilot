@@ -141,6 +141,20 @@ def _exposed_entities_prompt(exposed: dict[str, dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def exposed_entities(
+    hass: HomeAssistant, assistant: str = "conversation"
+) -> dict[str, Any]:
+    """Raw exposed-entity map ``{entity_id: {areas, names, state}}``.
+
+    The structured counterpart to :func:`entity_context_block`, used by the MCP
+    ``resources`` capability to enumerate addressable per-entity resources.
+    Returns an empty dict when nothing is exposed or the HA helper is missing.
+    """
+    if not assistant or _get_exposed_entities is None:
+        return {}
+    return _get_exposed_entities(hass, assistant) or {}
+
+
 def entity_context_block(
     hass: HomeAssistant, assistant: str = "conversation"
 ) -> str:

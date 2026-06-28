@@ -97,6 +97,59 @@ def _context_prompt_messages(hass: HomeAssistant) -> list[dict[str, Any]]:
     return [{"role": "user", "content": {"type": "text", "text": text}}]
 
 
+# MCP resource URIs. Two aggregates plus one per exposed entity, so a
+# resource-oriented MCP client (one that browses ``resources/*`` rather than
+# calling tools) can still read live HA state.
+MCP_RES_AREAS = "ha://areas"
+MCP_RES_ENTITIES = "ha://entities"
+MCP_RES_ENTITY_PREFIX = "ha://entity/"
+
+
+def _mcp_resources(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """The MCP resource catalog (``resources/list``)."""
+    resources: list[dict[str, Any]] = [
+        {
+            "uri": MCP_RES_AREAS,
+            "name": "Areas",
+            "description": "All Home Assistant areas (id + name).",
+            "mimeType": "application/json",
+        },
+        {
+            "uri": MCP_RES_ENTITIES,
+            "name": "Exposed entities",
+            "description": "Entities exposed to Assist with current state.",
+            "mimeType": "application/json",
+        },
+    ]
+    for entity_id, info in sorted(llm_api.exposed_entities(hass).items()):
+        area = info.get("areas") or "Unassigned"
+        resources.append(
+            {
+                "uri": MCP_RES_ENTITY_PREFIX + entity_id,
+                "name": info.get("names") or entity_id,
+                "description": f"{area} · state={info.get('state', '')}",
+                "mimeType": "application/json",
+            }
+        )
+    return resources
+
+
+async def _read_resource(hass: HomeAssistant, uri: str) -> dict[str, Any] | None:
+    """Resolve an ``ha://`` resource URI to a tool result (``resources/read``).
+
+    Returns ``None`` for an unknown URI so the caller can emit a JSON-RPC error.
+    """
+    store = hass.data[DOMAIN][DATA_STORE]
+    if uri == MCP_RES_AREAS:
+        return await tools.dispatch(hass, store, "list_areas", {})
+    if uri == MCP_RES_ENTITIES:
+        return await tools.dispatch(hass, store, "list_states", {})
+    if uri.startswith(MCP_RES_ENTITY_PREFIX):
+        entity_id = uri[len(MCP_RES_ENTITY_PREFIX):]
+        return await tools.dispatch(hass, store, "get_state", {"entity_id": entity_id})
+    return None
+
+
 class CopilotConfigView(HomeAssistantView):
     """Expose the capability surface (no secrets, no model) for the panel."""
 
@@ -301,6 +354,9 @@ async def _dispatch_rpc(hass: HomeAssistant, req: Any) -> dict[str, Any] | None:
                     # Expose a context prompt (live exposed entities by area) so
                     # MCP clients get the same picture as the native LLM API.
                     "prompts": {"listChanged": False},
+                    # Expose areas/entities as addressable resources for clients
+                    # that browse resources rather than calling tools.
+                    "resources": {"subscribe": False, "listChanged": False},
                 },
                 "serverInfo": {"name": "ha-copilot", "version": "0.2.0"},
             },
@@ -320,6 +376,27 @@ async def _dispatch_rpc(hass: HomeAssistant, req: Any) -> dict[str, Any] | None:
             {
                 "description": "Live Home Assistant context (exposed entities by area).",
                 "messages": _context_prompt_messages(hass),
+            },
+        )
+    if method == "resources/list":
+        return _rpc_ok(rid, {"resources": _mcp_resources(hass)})
+    if method == "resources/read":
+        uri = params.get("uri")
+        if not uri:
+            return _rpc_error(rid, -32602, "missing resource uri")
+        result = await _read_resource(hass, uri)
+        if result is None:
+            return _rpc_error(rid, -32602, f"unknown resource: {uri}")
+        return _rpc_ok(
+            rid,
+            {
+                "contents": [
+                    {
+                        "uri": uri,
+                        "mimeType": "application/json",
+                        "text": json_dumps(result),
+                    }
+                ]
             },
         )
     if method == "tools/call":
