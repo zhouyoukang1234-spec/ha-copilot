@@ -296,6 +296,16 @@ def _run_tool(tool: str, args: dict):
     return result
 
 
+def cmd_tool(a):
+    """Generic passthrough: invoke ANY ha_copilot tool by name with JSON args.
+
+    Exposes the entire capability layer (every TOOL_SPECS entry, present and
+    future) through the CLI without needing a bespoke subcommand each time.
+    """
+    args = json.loads(a.args) if a.args else {}
+    out(_run_tool(a.tool, args))
+
+
 def cmd_conf_get(a):
     if ".." in pathlib.PurePosixPath(a.path).parts:
         raise SystemExit("path traversal not allowed")
@@ -362,6 +372,9 @@ def build_parser() -> argparse.ArgumentParser:
     add("automation-create", cmd_automation_create, [opt("id"), opt("json")])
     add("scene-create", cmd_scene_create, [opt("id"), opt("json")])
     add("script-create", cmd_script_create, [opt("id"), opt("json")])
+
+    # generic capability-layer passthrough (every tool, by name)
+    add("tool", cmd_tool, [opt("tool"), opt("--args", help="JSON object of tool arguments")])
 
     # raw config files
     add("conf-get", cmd_conf_get, [opt("path")])

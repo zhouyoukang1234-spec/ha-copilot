@@ -17,13 +17,18 @@ import yaml
 
 from homeassistant.components.recorder import get_instance as _recorder_get_instance
 from homeassistant.components.recorder import history as _recorder_history
-from homeassistant.core import HomeAssistant
+from homeassistant.components.recorder import statistics as _recorder_statistics
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import (
     area_registry as ar,
     device_registry as dr,
     entity_registry as er,
+    floor_registry as fr,
+    label_registry as lr,
 )
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.check_config import async_check_ha_config_file
+from homeassistant.helpers.script import Script
 from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify as _slugify
@@ -993,6 +998,278 @@ async def _reload_config_entry(hass: HomeAssistant, entry_id: str) -> dict[str, 
     }
 
 
+# --- deep-fusion round 1: introspection / registries / statistics / actions ---
+
+async def _get_core_config(hass: HomeAssistant) -> dict[str, Any]:
+    """Snapshot HA's core configuration (version, location, units, components)."""
+    c = hass.config
+    return {
+        "version": getattr(__import__("homeassistant.const", fromlist=["__version__"]), "__version__", None),
+        "location_name": c.location_name,
+        "latitude": c.latitude,
+        "longitude": c.longitude,
+        "elevation": c.elevation,
+        "time_zone": c.time_zone,
+        "currency": c.currency,
+        "country": c.country,
+        "language": c.language,
+        "unit_system": c.units.__class__.__name__,
+        "config_dir": c.config_dir,
+        "state": str(c.state) if getattr(c, "state", None) is not None else None,
+        "safe_mode": c.safe_mode,
+        "recovery_mode": c.recovery_mode,
+        "components_count": len(c.components),
+        "components": sorted(c.components)[:300],
+        "allowlist_external_dirs": sorted(str(p) for p in c.allowlist_external_dirs),
+    }
+
+
+async def _list_entities(
+    hass: HomeAssistant, domain: str | None = None, area: str | None = None,
+    label: str | None = None,
+) -> dict[str, Any]:
+    """Detailed entity-registry listing (area/device/labels/platform/state)."""
+    reg = er.async_get(hass)
+    area_id = _resolve_area_id(hass, area) if area else None
+    items = []
+    for e in reg.entities.values():
+        if domain and e.domain != domain:
+            continue
+        if area_id is not None and e.area_id != area_id:
+            continue
+        if label is not None and label not in e.labels:
+            continue
+        items.append({
+            "entity_id": e.entity_id,
+            "name": e.name or e.original_name,
+            "platform": e.platform,
+            "area_id": e.area_id,
+            "device_id": e.device_id,
+            "labels": sorted(e.labels),
+            "entity_category": e.entity_category,
+            "disabled": e.disabled_by is not None,
+            "hidden": e.hidden_by is not None,
+        })
+    items.sort(key=lambda x: x["entity_id"])
+    return {"count": len(items), "entities": items[:400]}
+
+
+async def _list_devices(
+    hass: HomeAssistant, area: str | None = None, label: str | None = None,
+) -> dict[str, Any]:
+    """List the device registry (id/name/manufacturer/model/area/labels)."""
+    reg = dr.async_get(hass)
+    area_id = _resolve_area_id(hass, area) if area else None
+    items = []
+    for d in reg.devices.values():
+        if area_id is not None and d.area_id != area_id:
+            continue
+        if label is not None and label not in d.labels:
+            continue
+        items.append({
+            "id": d.id,
+            "name": d.name_by_user or d.name,
+            "manufacturer": d.manufacturer,
+            "model": d.model,
+            "area_id": d.area_id,
+            "labels": sorted(d.labels),
+            "sw_version": d.sw_version,
+            "config_entries": sorted(d.config_entries),
+            "disabled": d.disabled_by is not None,
+        })
+    items.sort(key=lambda x: (x["name"] or "", x["id"]))
+    return {"count": len(items), "devices": items[:400]}
+
+
+async def _update_device(
+    hass: HomeAssistant, device_id: str, *, name: str | None = None,
+    area: str | None = None, labels: list[str] | None = None,
+) -> dict[str, Any]:
+    """Rename a device / assign its area / set its labels."""
+    reg = dr.async_get(hass)
+    if reg.async_get(device_id) is None:
+        return {"error": f"device '{device_id}' not found (use list_devices for ids)"}
+    kwargs: dict[str, Any] = {}
+    if name is not None:
+        kwargs["name_by_user"] = name
+    if area is not None:
+        if area == "":
+            kwargs["area_id"] = None
+        else:
+            area_id = _resolve_area_id(hass, area)
+            if area_id is None:
+                return {"error": f"area '{area}' not found; create it with create_area"}
+            kwargs["area_id"] = area_id
+    if labels is not None:
+        kwargs["labels"] = set(labels)
+    if not kwargs:
+        return {"error": "nothing to update (provide name, area, or labels)"}
+    d = reg.async_update_device(device_id, **kwargs)
+    return {"ok": True, "id": d.id, "name": d.name_by_user or d.name,
+            "area_id": d.area_id, "labels": sorted(d.labels)}
+
+
+async def _assign_entity_labels(
+    hass: HomeAssistant, entity_id: str, labels: list[str],
+) -> dict[str, Any]:
+    """Set the label set on a registry entity (resolves label names to ids)."""
+    reg = er.async_get(hass)
+    if reg.async_get(entity_id) is None:
+        return {"error": f"entity '{entity_id}' is not in the entity registry"}
+    lreg = lr.async_get(hass)
+    by_name = {x.name: x.label_id for x in lreg.async_list_labels()}
+    ids = {by_name.get(x, x) for x in labels}
+    unknown = [x for x, i in zip(labels, [by_name.get(x, x) for x in labels])
+               if lreg.async_get_label(i) is None]
+    if unknown:
+        return {"error": f"unknown label(s): {unknown}; create them with create_label"}
+    e = reg.async_update_entity(entity_id, labels=ids)
+    return {"ok": True, "entity_id": e.entity_id, "labels": sorted(e.labels)}
+
+
+async def _list_floors(hass: HomeAssistant) -> dict[str, Any]:
+    reg = fr.async_get(hass)
+    items = [{"floor_id": f.floor_id, "name": f.name, "level": f.level,
+              "icon": f.icon, "aliases": sorted(f.aliases)}
+             for f in reg.async_list_floors()]
+    items.sort(key=lambda x: (x["level"] if x["level"] is not None else 0, x["name"]))
+    return {"count": len(items), "floors": items}
+
+
+async def _create_floor(hass: HomeAssistant, name: str, level: int | None = None,
+                        icon: str | None = None) -> dict[str, Any]:
+    reg = fr.async_get(hass)
+    existing = next((f for f in reg.async_list_floors() if f.name == name), None)
+    if existing is not None:
+        return {"ok": True, "floor_id": existing.floor_id, "name": existing.name,
+                "existed": True}
+    f = reg.async_create(name, level=level, icon=icon)
+    return {"ok": True, "floor_id": f.floor_id, "name": f.name, "level": f.level}
+
+
+async def _delete_floor(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    reg = fr.async_get(hass)
+    f = reg.async_get_floor(identifier) or next(
+        (x for x in reg.async_list_floors() if x.name == identifier), None)
+    if f is None:
+        return {"error": f"floor '{identifier}' not found"}
+    reg.async_delete(f.floor_id)
+    return {"ok": True, "deleted": f.floor_id}
+
+
+async def _list_labels(hass: HomeAssistant) -> dict[str, Any]:
+    reg = lr.async_get(hass)
+    items = [{"label_id": x.label_id, "name": x.name, "color": x.color,
+              "icon": x.icon, "description": x.description}
+             for x in reg.async_list_labels()]
+    items.sort(key=lambda x: x["name"])
+    return {"count": len(items), "labels": items}
+
+
+async def _create_label(hass: HomeAssistant, name: str, color: str | None = None,
+                       icon: str | None = None, description: str | None = None) -> dict[str, Any]:
+    reg = lr.async_get(hass)
+    existing = next((x for x in reg.async_list_labels() if x.name == name), None)
+    if existing is not None:
+        return {"ok": True, "label_id": existing.label_id, "name": existing.name,
+                "existed": True}
+    x = reg.async_create(name, color=color, icon=icon, description=description)
+    return {"ok": True, "label_id": x.label_id, "name": x.name}
+
+
+async def _delete_label(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    reg = lr.async_get(hass)
+    x = reg.async_get_label(identifier) or next(
+        (y for y in reg.async_list_labels() if y.name == identifier), None)
+    if x is None:
+        return {"error": f"label '{identifier}' not found"}
+    reg.async_delete(x.label_id)
+    return {"ok": True, "deleted": x.label_id}
+
+
+async def _list_statistics(hass: HomeAssistant) -> dict[str, Any]:
+    """List long-term statistics ids tracked by the recorder."""
+    rows = await _recorder_get_instance(hass).async_add_executor_job(
+        _recorder_statistics.list_statistic_ids, hass, None, None)
+    items = [{"statistic_id": r["statistic_id"], "source": r["source"],
+              "unit": r.get("statistics_unit_of_measurement"),
+              "has_mean": r.get("has_mean"), "has_sum": r.get("has_sum"),
+              "name": r.get("name")} for r in rows]
+    items.sort(key=lambda x: x["statistic_id"])
+    return {"count": len(items), "statistics": items}
+
+
+async def _get_statistics(hass: HomeAssistant, statistic_ids: list[str],
+                         hours: int = 24, period: str = "hour") -> dict[str, Any]:
+    """Fetch long-term statistics for the given ids over the last N hours."""
+    if not statistic_ids:
+        return {"error": "statistic_ids is required (see list_statistics)"}
+    start = dt_util.utcnow() - timedelta(hours=hours)
+    types = {"mean", "min", "max", "sum", "state", "change"}
+    data = await _recorder_get_instance(hass).async_add_executor_job(
+        _recorder_statistics.statistics_during_period,
+        hass, start, None, set(statistic_ids), period, None, types)
+    out: dict[str, Any] = {}
+    for sid, rows in data.items():
+        compact = [{k: v for k, v in row.items() if k != "start" or True}
+                   for row in rows[-200:]]
+        out[sid] = {"points": len(rows), "rows": compact[-50:]}
+    return {"period": period, "hours": hours, "result": out}
+
+
+async def _execute_script(hass: HomeAssistant, sequence: Any,
+                         variables: dict | None = None) -> dict[str, Any]:
+    """Run an ad-hoc HA action sequence (the script engine) without persisting.
+
+    Accepts the same 'sequence' grammar as scripts/automations (service calls,
+    delay, wait_template, choose, repeat, variables, stop with response). Returns
+    any response/variables produced — the agent's general-purpose action runtime.
+    """
+    if isinstance(sequence, dict):
+        sequence = [sequence]
+    if not isinstance(sequence, list):
+        return {"error": "sequence must be an action (object) or list of actions"}
+    # Validate/compile through the script schema so 'service' is normalised and
+    # template strings become Template objects (runs inside the event loop).
+    sequence = cv.SCRIPT_SCHEMA(sequence)
+    script = Script(hass, sequence, "ha_copilot.execute_script", "ha_copilot")
+    result = await script.async_run(variables or {}, Context())
+    payload: dict[str, Any] = {"ok": True}
+    if result is not None:
+        if result.service_response is not None:
+            payload["response"] = result.service_response
+        if result.variables:
+            # Drop private keys and the run Context object (not JSON
+            # serializable by the MCP endpoint's stdlib encoder).
+            payload["variables"] = {
+                k: v for k, v in result.variables.items()
+                if not k.startswith("_") and k != "context"
+            }
+    return payload
+
+
+async def _fire_event(hass: HomeAssistant, event_type: str,
+                     event_data: dict | None = None) -> dict[str, Any]:
+    """Fire a custom event on HA's event bus (drives event-triggered automations)."""
+    hass.bus.async_fire(event_type, event_data or {})
+    return {"ok": True, "event_type": event_type, "event_data": event_data or {}}
+
+
+async def _list_persons(hass: HomeAssistant) -> dict[str, Any]:
+    """List person entities and their tracked state/location."""
+    items = []
+    for s in hass.states.async_all("person"):
+        items.append({
+            "entity_id": s.entity_id,
+            "name": s.attributes.get("friendly_name"),
+            "state": s.state,
+            "user_id": s.attributes.get("user_id"),
+            "gps": [s.attributes.get("latitude"), s.attributes.get("longitude")]
+            if s.attributes.get("latitude") is not None else None,
+        })
+    return {"count": len(items), "persons": items}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -1138,6 +1415,61 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _list_config_entries(hass, args.get("domain"))
         if name == "reload_config_entry":
             return await _reload_config_entry(hass, args["entry_id"])
+        if name == "get_core_config":
+            return await _get_core_config(hass)
+        if name == "list_entities":
+            return await _list_entities(hass, args.get("domain"), args.get("area"), args.get("label"))
+        if name == "list_devices":
+            return await _list_devices(hass, args.get("area"), args.get("label"))
+        if name == "update_device":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            did = args.get("device_id") or args.get("id") or args.get("identifier")
+            if not did:
+                return {"error": "missing required argument: device_id"}
+            return await _update_device(hass, did, name=args.get("name"),
+                                        area=args.get("area"), labels=args.get("labels"))
+        if name == "assign_entity_labels":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _assign_entity_labels(hass, args["entity_id"], args.get("labels") or [])
+        if name == "list_floors":
+            return await _list_floors(hass)
+        if name == "create_floor":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _create_floor(hass, args["name"], args.get("level"), args.get("icon"))
+        if name == "delete_floor":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _delete_floor(hass, args.get("identifier") or args.get("floor_id") or args.get("name"))
+        if name == "list_labels":
+            return await _list_labels(hass)
+        if name == "create_label":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _create_label(hass, args["name"], args.get("color"),
+                                       args.get("icon"), args.get("description"))
+        if name == "delete_label":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _delete_label(hass, args.get("identifier") or args.get("label_id") or args.get("name"))
+        if name == "list_statistics":
+            return await _list_statistics(hass)
+        if name == "get_statistics":
+            sids = args.get("statistic_ids") or ([args["statistic_id"]] if args.get("statistic_id") else [])
+            return await _get_statistics(hass, sids, args.get("hours", 24), args.get("period", "hour"))
+        if name == "execute_script":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            seq = args.get("sequence") or args.get("action")
+            return await _execute_script(hass, seq, args.get("variables"))
+        if name == "fire_event":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _fire_event(hass, args["event_type"], args.get("event_data"))
+        if name == "list_persons":
+            return await _list_persons(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -1682,6 +2014,210 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entry_id": {"type": "string"}},
                 "required": ["entry_id"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_core_config",
+            "description": "Snapshot HA's core configuration: version, location (lat/lon/elevation), time zone, unit system, currency, country, language, config_dir, safe/recovery mode, and the list of loaded components/integrations.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_entities",
+            "description": "Detailed entity-registry listing (richer than list_states): entity_id, name, platform, area_id, device_id, labels, entity_category, disabled/hidden flags. Optionally filter by domain, area (name or id) or label.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "area": {"type": "string", "description": "Area name or area_id"},
+                    "label": {"type": "string", "description": "label_id"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_devices",
+            "description": "List the device registry: id, name, manufacturer, model, area_id, labels, sw_version, config_entries. Optionally filter by area or label.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "area": {"type": "string", "description": "Area name or area_id"},
+                    "label": {"type": "string", "description": "label_id"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_device",
+            "description": "Update a device registry entry: rename it (name), assign/clear its area (pass '' to clear), and/or set its labels. Get device_id from list_devices.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device_id": {"type": "string"},
+                    "name": {"type": "string", "description": "User-facing name override"},
+                    "area": {"type": "string", "description": "Area name/id, or '' to clear"},
+                    "labels": {"type": "array", "items": {"type": "string"}, "description": "Full label_id set to apply"},
+                },
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_entity_labels",
+            "description": "Set the label set on a registry entity. Accepts label ids or label names (names are resolved; unknown labels are rejected — create them first with create_label).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "labels": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["entity_id", "labels"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_floors",
+            "description": "List floors in the floor registry (floor_id, name, level, icon, aliases). Floors group areas vertically.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_floor",
+            "description": "Create a floor (idempotent by name). Optionally set level (integer, for ordering) and icon.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "level": {"type": "integer"},
+                    "icon": {"type": "string"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_floor",
+            "description": "Delete a floor by floor_id or name.",
+            "parameters": {
+                "type": "object",
+                "properties": {"identifier": {"type": "string"}},
+                "required": ["identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_labels",
+            "description": "List labels in the label registry (label_id, name, color, icon, description). Labels are cross-cutting tags for entities/devices/areas.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_label",
+            "description": "Create a label (idempotent by name). Optionally set color, icon, description.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "color": {"type": "string"},
+                    "icon": {"type": "string"},
+                    "description": {"type": "string"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_label",
+            "description": "Delete a label by label_id or name.",
+            "parameters": {
+                "type": "object",
+                "properties": {"identifier": {"type": "string"}},
+                "required": ["identifier"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_statistics",
+            "description": "List long-term statistics ids the recorder tracks (statistic_id, source, unit, has_mean/has_sum). These power the Energy dashboard and long-term graphs — distinct from raw state history.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_statistics",
+            "description": "Fetch long-term statistics for one or more statistic_ids over the last N hours, aggregated per period (5minute/hour/day/week/month). Returns mean/min/max/sum/state/change rows.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_ids": {"type": "array", "items": {"type": "string"}},
+                    "hours": {"type": "integer", "description": "Lookback window (default 24)"},
+                    "period": {"type": "string", "description": "5minute|hour|day|week|month (default hour)"},
+                },
+                "required": ["statistic_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_script",
+            "description": "Run an ad-hoc action sequence through HA's script engine WITHOUT persisting it — the general-purpose action runtime. 'sequence' uses the same grammar as scripts/automations (service calls, delay, wait_template, choose, repeat, variables, stop with response_variable). Returns any service_response/variables produced. Use this to orchestrate multi-step actions or fetch service responses (e.g. weather.get_forecasts).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sequence": {"description": "An action object or list of actions (HA script syntax)"},
+                    "variables": {"type": "object", "description": "Optional run variables available to templates"},
+                },
+                "required": ["sequence"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fire_event",
+            "description": "Fire a custom event on HA's event bus. Drives event-triggered automations and lets the agent emit signals into the system.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_type": {"type": "string"},
+                    "event_data": {"type": "object"},
+                },
+                "required": ["event_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_persons",
+            "description": "List person entities with their tracked presence state, linked user_id and GPS location (when available).",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
 ]

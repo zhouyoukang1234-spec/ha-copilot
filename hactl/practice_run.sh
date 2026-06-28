@@ -63,4 +63,35 @@ hactl history "$L0" --hours 1 | head -10
 H "raw config plane: read the generated YAML the editor wrote"
 hactl conf-get automations.yaml | head -10
 
+# ---- deep-fusion round 1: introspection / registries / statistics / actions ----
+H "introspection plane: HA core config (version, units, components)"
+hactl tool get_core_config | python -c "import sys,json;d=json.load(sys.stdin);print('version',d['version'],'| components',d['components_count'],'| units',d['unit_system'])"
+
+H "detailed entity registry (platform/area/device/labels)"
+hactl tool list_entities --args "{\"domain\":\"light\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('light entities:',d['count'])"
+
+H "floor registry: create -> list -> delete"
+hactl tool create_floor --args '{"name":"演练二楼","level":2}'
+hactl tool list_floors | python -c "import sys,json;print('floors:',json.load(sys.stdin)['count'])"
+hactl tool delete_floor --args '{"identifier":"演练二楼"}'
+
+H "label registry: create -> assign to a light -> filter -> clear -> delete"
+hactl tool create_label --args '{"name":"演练标签","color":"green"}'
+hactl tool assign_entity_labels --args "{\"entity_id\":\"$L0\",\"labels\":[\"演练标签\"]}"
+hactl tool list_entities --args '{"label":"yan_lian_biao_qian"}' | python -c "import sys,json;print('entities with label:',json.load(sys.stdin)['count'])"
+hactl tool assign_entity_labels --args "{\"entity_id\":\"$L0\",\"labels\":[]}"
+hactl tool delete_label --args '{"identifier":"演练标签"}'
+
+H "statistics plane: list long-term stat ids + fetch one"
+SID=$(hactl tool list_statistics | python -c "import sys,json;s=json.load(sys.stdin)['statistics'];print(s[0]['statistic_id'] if s else '')")
+echo "first statistic_id: ${SID:-<none>}"
+if [ -n "$SID" ]; then hactl tool get_statistics --args "{\"statistic_ids\":[\"$SID\"],\"hours\":72,\"period\":\"day\"}" | python -c "import sys,json;d=json.load(sys.stdin)['result'];print('points:',list(d.values())[0]['points'] if d else 0)"; fi
+
+H "action runtime: run an ad-hoc script (turn light on, wait, off) without persisting"
+hactl tool execute_script --args "{\"sequence\":[{\"service\":\"light.turn_on\",\"target\":{\"entity_id\":\"$L0\"}},{\"delay\":{\"milliseconds\":50}},{\"service\":\"light.turn_off\",\"target\":{\"entity_id\":\"$L0\"}}]}"
+hactl get "$L0"
+
+H "event bus: fire a custom event"
+hactl tool fire_event --args '{"event_type":"ha_copilot_practice_event","event_data":{"src":"practice_run"}}'
+
 echo; echo "### practice run complete"
