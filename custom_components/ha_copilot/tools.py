@@ -3073,6 +3073,50 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         return {"error": f"{type(err).__name__}: {err}"}
 
 
+# --- Tool safety classification (single source) ------------------------------
+# Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
+# idempotentHint) so off-the-shelf MCP clients can flag destructive operations
+# and surface read-only tools safely. Read/write here mirrors the same intent as
+# the allow_write gate enforced inside ``dispatch``.
+_READ_ONLY_PREFIXES = (
+    "list_", "get_", "read_", "describe_", "validate_", "wait_for_",
+)
+_READ_ONLY_TOOLS = frozenset({
+    "check_config",
+    "registry_overview",
+    "render_template",
+    "evaluate_condition",
+    "get_template_functions",
+})
+# Irreversible / disruptive operations (removal, data purge, full restart).
+_DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics"})
+
+
+def _is_read_only(name: str) -> bool:
+    return name.startswith(_READ_ONLY_PREFIXES) or name in _READ_ONLY_TOOLS
+
+
+def _is_destructive(name: str) -> bool:
+    return name.startswith("delete_") or name in _DESTRUCTIVE_TOOLS
+
+
+def tool_annotations(name: str) -> dict[str, Any]:
+    """MCP tool annotations for ``name`` (per the MCP tool-annotations spec).
+
+    ``readOnlyHint`` marks tools with no side effects; ``destructiveHint`` marks
+    irreversible ones (delete/purge/restart); ``idempotentHint`` marks calls
+    whose repetition is a no-op (deletes). ``title`` is a human-readable label.
+    """
+    read_only = _is_read_only(name)
+    destructive = (not read_only) and _is_destructive(name)
+    return {
+        "title": name.replace("_", " ").title(),
+        "readOnlyHint": read_only,
+        "destructiveHint": destructive,
+        "idempotentHint": name.startswith("delete_"),
+    }
+
+
 # OpenAI-style function specifications. Exposed to external agents verbatim via
 # the run_tool HTTP API and converted to MCP tool descriptors for the MCP server.
 TOOL_SPECS: list[dict[str, Any]] = [
