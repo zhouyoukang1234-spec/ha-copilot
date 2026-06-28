@@ -136,6 +136,35 @@ async def _write_file(hass: HomeAssistant, store: dict, path: str, content: str)
     return {"ok": True, "path": path, "bytes": len(content.encode("utf-8"))}
 
 
+async def _list_dir(hass: HomeAssistant, path: str = "") -> dict[str, Any]:
+    """List files and sub-directories under a config-relative path."""
+    target = _safe_path(hass, path)
+    if not os.path.isdir(target):
+        return {"error": f"directory '{path or '.'}' not found"}
+
+    def _scan() -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for name in sorted(os.listdir(target)):
+            if name.startswith(".") or name.endswith(".copilot.bak"):
+                continue
+            full = os.path.join(target, name)
+            is_dir = os.path.isdir(full)
+            out.append(
+                {
+                    "name": name,
+                    "path": os.path.join(path, name) if path else name,
+                    "type": "dir" if is_dir else "file",
+                    "size": (os.path.getsize(full) if not is_dir else None),
+                }
+            )
+        # Directories first, then files - both alphabetical.
+        out.sort(key=lambda e: (e["type"] != "dir", e["name"].lower()))
+        return out
+
+    entries = await hass.async_add_executor_job(_scan)
+    return {"path": path, "entries": entries}
+
+
 async def _check_config(hass: HomeAssistant) -> dict[str, Any]:
     res = await async_check_ha_config_file(hass)
     if res.errors:
@@ -365,6 +394,8 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 if key not in ("domain", "service", "data") and key not in data:
                     data[key] = val
             return await _call_service(hass, args["domain"], args["service"], data)
+        if name == "list_dir":
+            return await _list_dir(hass, args.get("path", ""))
         if name == "read_config_file":
             return await _read_file(hass, args["path"])
         if name == "write_config_file":
@@ -414,7 +445,8 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         return {"error": f"{type(err).__name__}: {err}"}
 
 
-# OpenAI-style function specifications advertised to the model.
+# OpenAI-style function specifications. Exposed to external agents verbatim via
+# the run_tool HTTP API and converted to MCP tool descriptors for the MCP server.
 TOOL_SPECS: list[dict[str, Any]] = [
     {
         "type": "function",
@@ -467,6 +499,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "data": {"type": "object", "description": "Optional extra service params, e.g. {brightness: 255}"},
                 },
                 "required": ["domain", "service"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_dir",
+            "description": "List files and sub-directories inside the HA config directory. Pass an empty path for the config root.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string", "description": "Config-relative directory (default: root)"}},
             },
         },
     },

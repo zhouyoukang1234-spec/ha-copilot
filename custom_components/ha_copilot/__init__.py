@@ -1,13 +1,19 @@
-"""HA-Copilot: an AI co-pilot fused into Home Assistant.
+"""HA-Copilot: a capability layer fused into Home Assistant.
 
-Setup via configuration.yaml:
+HA-Copilot bundles **no model** and calls **no external inference endpoint**. It
+exposes the full Home Assistant operating surface as one deterministic tool layer
+(:mod:`tools`), reachable through two foundations:
+
+* Direct — the ``ha_copilot.run_tool`` service and the authenticated HTTP
+  endpoints ``/api/ha_copilot/tools`` and ``/api/ha_copilot/run_tool``.
+* MCP — the authenticated MCP server endpoint ``/api/ha_copilot/mcp``.
+
+The agent is always external (any MCP client / operator). Setup via
+configuration.yaml is optional and only carries safety toggles:
 
     ha_copilot:
-      base_url: "http://localhost:11434/v1"   # any OpenAI-compatible endpoint
-      model: "qwen2.5:3b"
-      # api_key: "sk-..."                      # only for cloud endpoints
-      allow_write: true
-      allow_restart: false
+      allow_write: true      # let tools write config files
+      allow_restart: false   # let tools restart Home Assistant
 """
 from __future__ import annotations
 
@@ -21,29 +27,24 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.typing import ConfigType
 
-from .agent import run_agent
 from .const import (
     CONF_ALLOW_RESTART,
     CONF_ALLOW_WRITE,
-    CONF_API_KEY,
-    CONF_BASE_URL,
-    CONF_MAX_STEPS,
-    CONF_MODEL,
-    CONF_TEMPERATURE,
     DATA_STORE,
     DEFAULT_ALLOW_RESTART,
     DEFAULT_ALLOW_WRITE,
-    DEFAULT_BASE_URL,
-    DEFAULT_MAX_STEPS,
-    DEFAULT_MODEL,
-    DEFAULT_TEMPERATURE,
     DOMAIN,
     PANEL_ICON,
     PANEL_TITLE,
     PANEL_URL_PATH,
     STATIC_URL_BASE,
 )
-from .http_api import CopilotChatView, CopilotConfigView
+from .http_api import (
+    CopilotConfigView,
+    CopilotMcpView,
+    CopilotRunToolView,
+    CopilotToolsView,
+)
 from .tools import dispatch as dispatch_tool
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,11 +53,6 @@ CONFIG_SCHEMA = vol.Schema(
     {
         DOMAIN: vol.Schema(
             {
-                vol.Optional(CONF_BASE_URL, default=DEFAULT_BASE_URL): cv.string,
-                vol.Optional(CONF_MODEL, default=DEFAULT_MODEL): cv.string,
-                vol.Optional(CONF_API_KEY): cv.string,
-                vol.Optional(CONF_TEMPERATURE, default=DEFAULT_TEMPERATURE): vol.Coerce(float),
-                vol.Optional(CONF_MAX_STEPS, default=DEFAULT_MAX_STEPS): cv.positive_int,
                 vol.Optional(CONF_ALLOW_WRITE, default=DEFAULT_ALLOW_WRITE): cv.boolean,
                 vol.Optional(CONF_ALLOW_RESTART, default=DEFAULT_ALLOW_RESTART): cv.boolean,
             }
@@ -67,28 +63,25 @@ CONFIG_SCHEMA = vol.Schema(
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up HA-Copilot from configuration.yaml."""
+    """Set up the HA-Copilot capability layer."""
     conf = config.get(DOMAIN) or {}
     store = {
-        CONF_BASE_URL: conf.get(CONF_BASE_URL, DEFAULT_BASE_URL),
-        CONF_MODEL: conf.get(CONF_MODEL, DEFAULT_MODEL),
-        CONF_API_KEY: conf.get(CONF_API_KEY),
-        CONF_TEMPERATURE: conf.get(CONF_TEMPERATURE, DEFAULT_TEMPERATURE),
-        CONF_MAX_STEPS: conf.get(CONF_MAX_STEPS, DEFAULT_MAX_STEPS),
         CONF_ALLOW_WRITE: conf.get(CONF_ALLOW_WRITE, DEFAULT_ALLOW_WRITE),
         CONF_ALLOW_RESTART: conf.get(CONF_ALLOW_RESTART, DEFAULT_ALLOW_RESTART),
     }
     hass.data.setdefault(DOMAIN, {})[DATA_STORE] = store
 
-    # HTTP API for the panel.
-    hass.http.register_view(CopilotChatView(hass))
+    # HTTP surface: capability info, tool catalog, deterministic run, MCP server.
     hass.http.register_view(CopilotConfigView(hass))
+    hass.http.register_view(CopilotToolsView(hass))
+    hass.http.register_view(CopilotRunToolView(hass))
+    hass.http.register_view(CopilotMcpView(hass))
 
     # Serve the panel's static assets.
     panel_dir = os.path.join(os.path.dirname(__file__), "panel")
     await _register_static(hass, STATIC_URL_BASE, panel_dir)
 
-    # Register the sidebar panel (a custom web component).
+    # Register the sidebar panel (a deterministic, model-free workspace).
     try:
         await panel_custom.async_register_panel(
             hass,
@@ -98,29 +91,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             sidebar_title=PANEL_TITLE,
             sidebar_icon=PANEL_ICON,
             require_admin=True,
-            config={"base_url": store[CONF_BASE_URL], "model": store[CONF_MODEL]},
             embed_iframe=False,
         )
     except ValueError:
         # Already registered (e.g. after a reload) - safe to ignore.
         pass
 
-    # A service so the copilot can also be driven from automations / dev-tools.
-    async def _handle_ask(call: ServiceCall) -> dict:
-        result = await run_agent(hass, store, call.data["message"], [])
-        return {"reply": result.get("reply", ""), "steps": result.get("steps", [])}
-
-    hass.services.async_register(
-        DOMAIN,
-        "ask",
-        _handle_ask,
-        schema=vol.Schema({vol.Required("message"): cv.string}),
-        supports_response="only",
-    )
-
-    # Directly invoke a single copilot tool (bypassing the LLM). Useful from
-    # automations/scripts that already know exactly which low-level operation
-    # they want, and for deterministic testing of the tool layer.
+    # Directly invoke a single tool (no LLM). The canonical deterministic entry
+    # point for automations/scripts and external operators.
     async def _handle_run_tool(call: ServiceCall) -> dict:
         return await dispatch_tool(
             hass, store, call.data["tool"], call.data.get("args") or {}
@@ -137,9 +115,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     )
 
     _LOGGER.info(
-        "HA-Copilot ready - model=%s endpoint=%s (write=%s restart=%s)",
-        store[CONF_MODEL],
-        store[CONF_BASE_URL],
+        "HA-Copilot ready - capability layer (write=%s restart=%s); "
+        "drive via run_tool service, /api/ha_copilot/run_tool, or MCP at /api/ha_copilot/mcp",
         store[CONF_ALLOW_WRITE],
         store[CONF_ALLOW_RESTART],
     )
