@@ -303,20 +303,36 @@ def _resolve_label_id(hass: HomeAssistant, label: str) -> str | None:
     return match.label_id if match else None
 
 
+def _resolve_device_id(hass: HomeAssistant, device: str) -> str | None:
+    reg = dr.async_get(hass)
+    if reg.async_get(device) is not None:
+        return device
+    match = next(
+        (
+            d
+            for d in reg.devices.values()
+            if device in (d.name_by_user, d.name)
+        ),
+        None,
+    )
+    return match.id if match else None
+
+
 def _resolve_service_target(
     hass: HomeAssistant, data: dict[str, Any]
 ) -> dict[str, list[str]] | dict[str, str]:
-    """Pop AssistAPI-style area/floor/label targets from ``data`` and resolve
-    their names to registry ids, returning an HA service ``target`` dict.
+    """Pop AssistAPI-style area/floor/label/device targets from ``data`` and
+    resolve their names to registry ids, returning an HA service ``target`` dict.
 
-    Lets a model act on a whole area/floor/label without first enumerating
-    entity_ids; HA expands floor -> areas -> entities natively. Returns
-    ``{"__error__": "..."}`` if any named target can't be resolved.
+    Lets a model act on a whole area/floor/label/device without first
+    enumerating entity_ids; HA expands floor -> areas -> devices -> entities
+    natively. Returns ``{"__error__": "..."}`` if a named target can't resolve.
     """
     resolvers = {
         ("area", "areas", "area_id"): ("area_id", _resolve_area_id),
         ("floor", "floors", "floor_id"): ("floor_id", _resolve_floor_id),
         ("label", "labels", "label_id"): ("label_id", _resolve_label_id),
+        ("device", "devices", "device_id"): ("device_id", _resolve_device_id),
     }
     target: dict[str, list[str]] = {}
     for keys, (target_key, resolve) in resolvers.items():
@@ -3455,7 +3471,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "call_service",
-            "description": "Call any Home Assistant service, e.g. domain='light', service='turn_on', entity_id='light.living_room'. Target by 'entity_id' (full id) OR by 'area'/'floor'/'label' (name or id, string or list) to act on a whole group without enumerating entities — HA expands floor->areas->entities. Extra params like brightness go in 'data'.",
+            "description": "Call any Home Assistant service, e.g. domain='light', service='turn_on', entity_id='light.living_room'. Target by 'entity_id' (full id) OR by 'area'/'floor'/'label'/'device' (name or id, string or list) to act on a whole group without enumerating entities — HA expands floor->areas->devices->entities. Extra params like brightness go in 'data'.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -3479,6 +3495,11 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "type": ["string", "array"],
                         "items": {"type": "string"},
                         "description": "Target label(s) by name or label_id. From list_labels.",
+                    },
+                    "device": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Target device(s) by name or device_id, e.g. 'Living Room TV'. From list_devices; acts on all the device's entities.",
                     },
                     "data": {"type": "object", "description": "Optional extra service params, e.g. {brightness: 255}"},
                 },
