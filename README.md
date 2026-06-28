@@ -42,7 +42,19 @@
 
 ## 安装
 
-把 `custom_components/ha_copilot/` 复制到你的 HA config 目录下的 `custom_components/`。配置是**可选**的，且只含安全开关（没有模型相关项）：
+### 方式一 · HACS（推荐，一键安装）
+
+本仓库自带 `hacs.json`，可作为 **HACS 自定义仓库**安装：
+
+1. HACS → 右上角菜单 → **Custom repositories**；
+2. 仓库填 `https://github.com/zhouyoukang1234-spec/ha-copilot`，类别选 **Integration**，添加；
+3. 在 HACS 中搜索 **HA-Copilot** 并下载，重启 HA。
+
+### 方式二 · 手动
+
+把 `custom_components/ha_copilot/` 复制到你的 HA config 目录下的 `custom_components/`。
+
+配置是**可选**的，且只含安全开关（没有模型相关项）：
 
 ```yaml
 ha_copilot:
