@@ -41,6 +41,8 @@ from .const import (
 )
 from .http_api import (
     CopilotConfigView,
+    CopilotMcpMessagesView,
+    CopilotMcpSseView,
     CopilotMcpView,
     CopilotRunToolView,
     CopilotToolsView,
@@ -77,6 +79,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.http.register_view(CopilotToolsView(hass))
     hass.http.register_view(CopilotRunToolView(hass))
     hass.http.register_view(CopilotMcpView(hass))
+    # Standard MCP HTTP+SSE transport so off-the-shelf MCP clients connect as-is.
+    hass.http.register_view(CopilotMcpSseView(hass))
+    hass.http.register_view(CopilotMcpMessagesView(hass))
 
     # Native LLM API: expose the deterministic tool layer to every conversation
     # agent (OpenAI / Anthropic / Google / local) via homeassistant.helpers.llm.

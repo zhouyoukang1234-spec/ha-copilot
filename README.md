@@ -83,12 +83,27 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
   http://<HA>/api/ha_copilot/run_tool
 ```
 
-- MCP（需 HA 长效令牌）：把 `/api/ha_copilot/mcp` 作为 MCP 服务器端点接入任意 MCP 客户端；`Authorization: Bearer <TOKEN>`。
+- MCP（需 HA 长效令牌），两种传输，同一工具层：
+  - **HTTP（JSON-RPC）**：把 `/api/ha_copilot/mcp` 作为端点直接 POST。
 
 ```bash
 curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
   http://<HA>/api/ha_copilot/mcp
+```
+
+  - **标准 SSE 传输（2024-11-05）**：开箱即连 Claude Desktop / Cline 等现成 MCP 客户端。客户端连接 `GET /api/ha_copilot/mcp/sse` 收到 `endpoint` 事件后，把 JSON-RPC POST 到该 endpoint，回复经同一 SSE 流返回。
+
+```jsonc
+// Claude Desktop / 通用 MCP 客户端配置（SSE）
+{
+  "mcpServers": {
+    "ha-copilot": {
+      "url": "http://<HA>/api/ha_copilot/mcp/sse",
+      "headers": { "Authorization": "Bearer <TOKEN>" }
+    }
+  }
+}
 ```
 
 > `get_history` 需要在 `configuration.yaml` 中启用 `recorder:`（或 `default_config:`）。
