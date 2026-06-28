@@ -1,0 +1,38 @@
+sensor:
+- platform: integration
+  source: sensor.sonoff_total_power_usage
+  name: devin_sonoff_total_power_energy
+  unit_prefix: k
+  round: 3
+  method: trapezoidal
+- platform: integration
+  source: sensor.river_2_max_total_output_power
+  name: devin_river_2_max_total_output_energy
+  unit_prefix: k
+  round: 3
+  method: trapezoidal
+- platform: integration
+  source: sensor.delta2_1838_slave_out_power
+  name: devin_delta2_1838_slave_out_energy
+  unit_prefix: k
+  round: 3
+  method: trapezoidal
+- platform: integration
+  source: sensor.devin_jia_ting_zong_gong_lu
+  name: devin_devin_jia_ting_zong_gong_lu_energy
+  unit_prefix: k
+  round: 3
+  method: trapezoidal
+utility_meter:
+  devin_sonoff_total_power_daily:
+    source: sensor.devin_sonoff_total_power_energy
+    cycle: daily
+  devin_river_2_max_total_output_daily:
+    source: sensor.devin_river_2_max_total_output_energy
+    cycle: daily
+  devin_delta2_1838_slave_out_daily:
+    source: sensor.devin_delta2_1838_slave_out_energy
+    cycle: daily
+  devin_devin_jia_ting_zong_gong_lu_daily:
+    source: sensor.devin_devin_jia_ting_zong_gong_lu_energy
+    cycle: daily

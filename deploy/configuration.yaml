@@ -1,0 +1,93 @@
+homeassistant:
+  name: 道生一之家
+  latitude: 31.23
+  longitude: 121.47
+  elevation: 10
+  unit_system: metric
+  time_zone: Asia/Shanghai
+  country: CN
+
+default_config:
+
+frontend:
+
+http:
+  server_host: 0.0.0.0
+  server_port: 8123
+
+logger:
+  default: warning
+  logs:
+    custom_components.ha_copilot: debug
+
+recorder:
+
+# Operable demo entities for the copilot to act on
+input_boolean:
+  living_room_light:
+    name: 客厅继电器
+    icon: mdi:electric-switch
+  bedroom_light:
+    name: 卧室继电器
+    icon: mdi:electric-switch
+  porch_light:
+    name: 门廊继电器
+    icon: mdi:electric-switch
+
+input_number:
+  ac_temperature:
+    name: 空调温度
+    min: 16
+    max: 30
+    step: 1
+    unit_of_measurement: "°C"
+
+# Real light.* entities (template lights backed by the input_booleans above).
+# unique_id makes them registry-backed so the copilot's registry write tools
+# (rename_entity / assign_entity_area / set_entity_enabled) can act on them.
+template:
+  - light:
+      - name: "客厅灯"
+        unique_id: ha_copilot_living_room
+        state: "{{ is_state('input_boolean.living_room_light', 'on') }}"
+        turn_on:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.living_room_light
+        turn_off:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.living_room_light
+      - name: "卧室灯"
+        unique_id: ha_copilot_bedroom
+        state: "{{ is_state('input_boolean.bedroom_light', 'on') }}"
+        turn_on:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.bedroom_light
+        turn_off:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.bedroom_light
+      - name: "门廊灯"
+        unique_id: ha_copilot_porch
+        state: "{{ is_state('input_boolean.porch_light', 'on') }}"
+        turn_on:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.porch_light
+        turn_off:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.porch_light
+
+# HA-Copilot: the AI fused into this instance
+ha_copilot:
+  base_url: "http://host.docker.internal:11434/v1"
+  model: "qwen2.5:3b"
+  allow_write: true
+  allow_restart: false
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml

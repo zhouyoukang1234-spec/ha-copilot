@@ -1,0 +1,6 @@
+# Devin 推演新增: 自包含 shell_command 定义。
+# 修复冷启动缺陷: automations.yaml 的「每日下载必应壁纸」调用了未定义的
+# shell_command.download_bing_wallpaper (CONFIG_FIXES.md 中原列为"待用户决策")。
+# 这里用一个仅依赖 curl + python3 (HA 容器自带) 的自包含脚本实现, 无需外部集成。
+shell_command:
+  download_bing_wallpaper: bash /config/shell/download_bing_wallpaper.sh

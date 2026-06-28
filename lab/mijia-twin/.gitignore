@@ -1,0 +1,19 @@
+# HA runtime artifacts — never commit
+config/.storage/
+config/.cloud/
+config/deps/
+config/tts/
+config/*.db
+config/*.db-*
+config/*.log
+config/.HA_VERSION
+config/.uuid
+config/.ha_run.lock
+**/__pycache__/
+
+# 部署引擎拉取的第三方社区集成不入库 — 仅保留我们自有的 lab_sim 与用户原样 ha_tools_manager;
+# 第三方集成由 deployed_integrations.json 登记, 用 lab/tools/deploy_integration.py 复现。
+config/custom_components/*
+!config/custom_components/lab_sim/
+!config/custom_components/ha_tools_manager/
+config/custom_components/*.bak/

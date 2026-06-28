@@ -1,0 +1,645 @@
+# 智能家居 Dashboard (来自米家配置)
+
+title: 智能家居中枢
+views:
+- cards:
+  - content: '# 🏠 欢迎回家
+
+      ### {{ now().strftime(''%Y年%m月%d日 %A %H:%M'') }}
+
+      📷 2台摄像头 | 💡 {{ states.light|selectattr(''state'',''eq'',''on'')|list|count }}灯亮
+      | 🌡️ {{ states(''sensor.miaomiaoc_cn_blt_3_1ioerl71o4g02_t9_temperature_p_3_1001'')
+      }}°C'
+    type: markdown
+  - camera_view: live
+    entity: camera.chuangmi_021a04_d678_camera_control
+    name: 📷 云台Pro 2K
+    show_state: true
+    type: picture-entity
+  - camera_view: live
+    entity: camera.chuangmi_039c01_60bf_camera_control
+    name: 📷 C400
+    show_state: true
+    type: picture-entity
+  - entities:
+    - entity: sensor.miaomiaoc_cn_blt_3_1ioerl71o4g02_t9_temperature_p_3_1001
+      name: 室内温度
+    - entity: sensor.miaomiaoc_cn_blt_3_1ioerl71o4g02_t9_relative_humidity_p_3_1002
+      name: 室内湿度
+    - entity: sensor.unknown_battery_level
+      name: 📱 手机电量
+    - entity: sensor.quest_battery_level
+      name: 🥽 Quest3
+    title: 🌡️ 环境
+    type: entities
+  - entities:
+    - entity: sensor.zong_yong_dian_liang
+      name: 总用电
+    - entity: sensor.you_kang_chuang_cha_tou_jin_ri_yong_dian
+      name: 今日用电
+    - entity: sensor.you_kang_chuang_cha_tou_neng_hao
+      name: 友康累计
+    title: ⚡ 电力
+    type: entities
+  - cards:
+    - entity: light.yi_hao_deng
+      name: 一号灯
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.er_hao_deng
+      name: 二号灯
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.san_hao_deng
+      name: 三号灯
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.si_hao_deng
+      name: 四号灯
+      tap_action:
+        action: toggle
+      type: button
+    type: horizontal-stack
+  - cards:
+    - entity: light.wu_hao_deng
+      name: 五号灯
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.chuang_di_deng
+      name: 床底灯
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.philips_strip3_12ad_light
+      name: 灯带
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.tong_deng_1
+      name: 筒灯
+      tap_action:
+        action: toggle
+      type: button
+    type: horizontal-stack
+  icon: mdi:home
+  path: home
+  title: 总览
+- cards:
+  - camera_view: live
+    entity: camera.chuangmi_021a04_d678_camera_control
+    name: Mi 360° 2K Pro
+    type: picture-entity
+  - entities:
+    - entity: switch.chuangmi_021a04_d678_switch_status
+      name: 📷 开关
+    - entity: switch.chuangmi_021a04_d678_motion_detection
+      name: 🔍 移动侦测
+    - entity: switch.chuangmi_021a04_d678_motion_tracking
+      name: 🎯 移动追踪
+    - entity: select.chuangmi_021a04_d678_night_shot
+      name: 🌙 夜视
+    - entity: select.chuangmi_021a04_d678_recording_mode
+      name: 🔴 录制
+    - entity: select.chuangmi_021a04_d678_detection_sensitivity
+      name: 📊 灵敏度
+    - entity: switch.chuangmi_021a04_d678_wide_dynamic_range_mode
+      name: WDR
+    - entity: switch.chuangmi_021a04_d678_glimmer_full_color
+      name: 微光全彩
+    - entity: light.chuangmi_021a04_d678_indicator_light
+      name: 💡 指示灯
+    - entity: sensor.chuangmi_021a04_d678_status
+      name: 💾 SD状态
+    - entity: sensor.chuangmi_021a04_d678_storage_free_space
+      name: 💾 剩余
+    title: 云台Pro 控制
+    type: entities
+  - camera_view: live
+    entity: camera.chuangmi_039c01_60bf_camera_control
+    name: Xiaomi C400
+    type: picture-entity
+  - entities:
+    - entity: switch.chuangmi_039c01_60bf_switch_status
+      name: 📷 开关
+    - entity: switch.chuangmi_039c01_60bf_motion_detection
+      name: 🔍 移动侦测
+    - entity: switch.chuangmi_039c01_60bf_motion_tracking
+      name: 🎯 移动追踪
+    - entity: select.chuangmi_039c01_60bf_night_shot
+      name: 🌙 夜视
+    - entity: select.chuangmi_039c01_60bf_recording_mode
+      name: 🔴 录制
+    - entity: select.chuangmi_039c01_60bf_detection_sensitivity
+      name: 📊 灵敏度
+    - entity: switch.chuangmi_039c01_60bf_wide_dynamic_range_mode
+      name: WDR
+    - entity: switch.chuangmi_039c01_60bf_glimmer_full_color
+      name: 微光全彩
+    - entity: switch.chuangmi_039c01_60bf_cruise_switch
+      name: 🔄 巡航
+    - entity: light.chuangmi_039c01_60bf_indicator_light
+      name: 💡 指示灯
+    - entity: sensor.chuangmi_039c01_60bf_status
+      name: 💾 SD状态
+    - entity: sensor.chuangmi_039c01_60bf_storage_free_space
+      name: 💾 剩余
+    title: C400 控制
+    type: entities
+  icon: mdi:shield-home
+  path: security
+  title: 安防
+- cards:
+  - cards:
+    - entity: light.yi_hao_deng
+      name: 一号灯
+      show_state: true
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.er_hao_deng
+      name: 二号灯
+      show_state: true
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.san_hao_deng
+      name: 三号灯
+      show_state: true
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.si_hao_deng
+      name: 四号灯
+      show_state: true
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.wu_hao_deng
+      name: 五号灯
+      show_state: true
+      tap_action:
+        action: toggle
+      type: button
+    - entity: light.chuang_di_deng
+      name: 床底灯
+      show_state: true
+      tap_action:
+        action: toggle
+      type: button
+    columns: 3
+    square: true
+    type: grid
+  - entities:
+    - entity: light.ding_deng_1
+      name: 顶灯1
+    - entity: light.ding_deng_2
+      name: 顶灯2
+    - entity: light.tong_deng_1
+      name: 筒灯1(左)
+    - entity: light.tong_deng_2
+      name: 筒灯2(右)
+    title: 筒灯/顶灯
+    type: entities
+  - entities:
+    - entity: light.philips_strip3_12ad_light
+      name: 飞利浦灯带
+    - entity: light.gw_531616941
+      name: 灯带(网关)
+    title: 灯带
+    type: entities
+  - entities:
+    - entity: light.b650m_aorus_elite_ax_0
+      name: 主板LED总控
+    - entity: light.b650m_aorus_elite_ax_0_led_2
+    - entity: light.b650m_aorus_elite_ax_0_led_3
+    - entity: light.b650m_aorus_elite_ax_0_led_4
+    - entity: light.b650m_aorus_elite_ax_0_led_5
+    title: RGB/LED灯效
+    type: entities
+  - entities:
+    - entity: light.xiaomi_hub1_99d3_indicator_light
+      name: 中枢网关
+    - entity: light.chuangmi_021a04_d678_indicator_light
+      name: 摄像头Pro
+    - entity: light.chuangmi_039c01_60bf_indicator_light
+      name: C400
+    - entity: light.dmaker_p221_5b47_indicator_light
+      name: 落地扇
+    title: 指示灯
+    type: entities
+  icon: mdi:lightbulb-group
+  path: lights
+  title: 灯光
+- cards:
+  - entity: media_player.xiaomi_lx06_6dfd_play_control
+    type: media-control
+  - entity: media_player.xiaomi_x08e_8219_play_control
+    type: media-control
+  - entity: media_player.xiaomi_l16a_0be7_play_control
+    type: media-control
+  - entity: media_player.xiaomi_lx06_72f9_play_control
+    type: media-control
+  - entity: media_player.xiaomi_lx04_12e4_play_control_2
+    type: media-control
+  icon: mdi:speaker-multiple
+  path: media
+  title: 音箱
+- cards:
+  - entities:
+    - entity: switch.chuangmi_021a04_d678_switch_status
+      name: 云台Pro 开关
+    - entity: switch.chuangmi_039c01_60bf_switch_status
+      name: C400 开关
+    - entity: camera.chuangmi_021a04_d678_camera_control
+      name: 云台Pro
+    - entity: camera.chuangmi_039c01_60bf_camera_control
+      name: C400
+    title: 📷 摄像头
+    type: entities
+  - entities:
+    - entity: fan.dmaker_cn_643663298_p221_s_2
+      name: 落地扇
+    - entity: fan.dmaker_p221_5b47_fan
+      name: 落地扇(本地)
+    title: 🌀 风扇
+    type: entities
+  - entities:
+    - entity: light.xiaomi_hub1_99d3_indicator_light
+      name: 中枢网关指示灯
+    title: 📡 网关
+    type: entities
+  - entities:
+    - entity: sensor.miaomiaoc_cn_blt_3_1ioerl71o4g02_t9_temperature_p_3_1001
+      name: 温湿度计 温度
+    - entity: sensor.miaomiaoc_cn_blt_3_1ioerl71o4g02_t9_relative_humidity_p_3_1002
+      name: 温湿度计 湿度
+    title: 🌡️ 传感器
+    type: entities
+  - entities:
+    - entity: sensor.zong_yong_dian_liang
+      name: Sonoff总能耗
+    - entity: sensor.you_kang_chuang_cha_tou_neng_hao
+      name: 友康床累计
+    - entity: sensor.zhong_yang_3hao_cha_tou_neng_hao
+      name: 中央3号累计
+    - entity: sensor.zhong_yang_5hao_cha_tou_neng_hao
+      name: 中央5号累计
+    title: ⚡ 电力
+    type: entities
+  - entities:
+    - entity: sensor.unknown_battery_level
+      name: 三星手机
+    - entity: sensor.quest_battery_level
+      name: Quest3
+    - entity: sensor.sm_n986u1_battery_level
+      name: SM-N986U1
+    title: 📱 设备电量
+    type: entities
+  icon: mdi:devices
+  path: devices
+  title: 设备
+- cards:
+  - entities:
+    - entity: automation.ledzao_chen_mo_shi
+      name: 早晨
+    - entity: automation.ledxia_wu_mo_shi
+      name: 下午
+    - entity: automation.ledbang_wan_mo_shi
+      name: 傍晚
+    - entity: automation.ledye_wan_mo_shi
+      name: 夜晚
+    - entity: automation.ledshen_ye_guan_bi
+      name: 深夜关闭
+    - entity: automation.ledcai_hong_xun_huan
+      name: 彩虹循环
+    - entity: automation.ledzhou_mo_you_xi_mo_shi
+      name: 周末游戏
+    - entity: automation.ledgong_zuo_ri_zhuan_zhu_mo_shi
+      name: 工作日专注
+    - entity: automation.ledgen_sui_fen_wei_deng_dai
+      name: 跟随氛围
+    show_header_toggle: false
+    title: 🎨 LED氛围
+    type: entities
+  - entities:
+    - entity: automation.tong_bu_suo_you_yin_xiang_yin_liang
+      name: 同步音量
+    - entity: automation.tong_yi_bo_fang_suo_you_yin_xiang_qiang_hua_ban
+      name: 统一播放
+    - entity: automation.tong_yi_zan_ting_suo_you_yin_xiang_gai_jin
+      name: 统一暂停
+    - entity: automation.tong_yi_zhi_ling_yi_chuan_si
+      name: 一传四
+    - entity: automation.tong_yi_zhi_ling_yi_chuan_er
+      name: 一传二
+    show_header_toggle: false
+    title: 🔊 音箱联动
+    type: entities
+  - entities:
+    - entity: automation.guan_bi_hu_wai_dian_yuan_cha_tou
+      name: 充满关闭户外电源
+    - entity: automation.qin_shi_fang_tiao_zha
+      name: 总功率保护
+    - entity: automation.gong_lu_bao_hu_guan_bi_you_kang_chuang_cha_tou
+      name: 功率保护
+    show_header_toggle: false
+    title: 🔋 电力保护
+    type: entities
+  - entities:
+    - entity: automation.openrgb_bai_tian_you_ren
+      name: 白天有人
+    - entity: automation.openrgb_wan_shang_you_ren
+      name: 晚上有人
+    - entity: automation.openrgb_shen_ye_you_ren
+      name: 深夜有人
+    - entity: automation.openrgb_wu_ren_guan_bi
+      name: 无人关闭
+    show_header_toggle: false
+    title: 🏠 OpenRGB
+    type: entities
+  - entities:
+    - entity: automation.mei_ri_xia_zai_bi_ying_bi_zhi
+      name: 每日壁纸
+    - entity: automation.shou_ji_di_dian_liang_yuan_cheng_ti_xing
+      name: 手机低电量
+    - entity: automation.zhao_shou_ji
+      name: 找手机
+    show_header_toggle: false
+    title: 🗓️ 其他
+    type: entities
+  icon: mdi:robot
+  path: auto
+  title: 自动化
+
+
+# === ui-lovelace.yaml ===
+
+views:
+  - title: 首页
+    path: default_view
+    icon: mdi:home
+    badges: []
+    cards:
+      - type: custom:mushroom-title-card
+        title: "欢迎回家！🏠"
+        subtitle: "{{ now().strftime('%Y年%m月%d日 %A') }}"
+
+      - type: custom:mushroom-chips-card
+        chips:
+          - type: template
+            icon: mdi:thermometer
+            content: "{{ states('sensor.miaomiaoce_t9_0582_temperature') }}°C"
+            icon_color: "{% if states('sensor.miaomiaoce_t9_0582_temperature')|float > 28 %}red{% elif states('sensor.miaomiaoce_t9_0582_temperature')|float < 18 %}blue{% else %}green{% endif %}"
+          - type: template
+            icon: mdi:water-percent
+            content: "{{ states('sensor.miaomiaoce_t9_0582_relative_humidity') }}%"
+            icon_color: "{% if states('sensor.miaomiaoce_t9_0582_relative_humidity')|float > 70 %}blue{% elif states('sensor.miaomiaoce_t9_0582_relative_humidity')|float < 30 %}orange{% else %}green{% endif %}"
+          - type: template
+            icon: mdi:power-plug
+            content: "{{ states('sensor.sonoff_total_power_usage') }}W"
+            icon_color: "{% if states('sensor.sonoff_total_power_usage')|float(0) > 1000 %}red{% else %}green{% endif %}"
+          - type: template
+            icon: mdi:cellphone
+            content: "{{ states('sensor.unknown_battery_level') }}%"
+            icon_color: "{% if states('sensor.unknown_battery_level')|int < 20 %}red{% elif states('sensor.unknown_battery_level')|int < 50 %}orange{% else %}green{% endif %}"
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.miaomiaoce_t9_0582_temperature
+            name: 室内温度
+            icon: mdi:thermometer
+            primary_info: state
+            secondary_info: last-updated
+            icon_color: deep-orange
+          - type: custom:mushroom-entity-card
+            entity: sensor.miaomiaoce_t9_0582_relative_humidity
+            name: 室内湿度
+            icon: mdi:water-percent
+            primary_info: state
+            secondary_info: last-updated
+            icon_color: blue
+
+      - type: custom:mushroom-title-card
+        title: ⚡ 功率监控
+
+      - type: sensor
+        entity: sensor.sonoff_total_power_usage
+        graph: line
+        name: 总功率趋势
+        hours_to_show: 24
+        detail: 2
+
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.sonoff_10022cf6a2_power
+            name: 有康床
+            icon: mdi:bed
+            primary_info: state
+            icon_color: amber
+          - type: custom:mushroom-entity-card
+            entity: sensor.sonoff_10022cf71d_power
+            name: 中央一号
+            icon: mdi:power-socket-eu
+            primary_info: state
+            icon_color: amber
+          - type: custom:mushroom-entity-card
+            entity: sensor.sonoff_100235142b_power
+            name: 户外电源
+            icon: mdi:solar-power
+            primary_info: state
+            icon_color: amber
+
+      - type: custom:mushroom-title-card
+        title: 💡 灯光控制
+
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: custom:mushroom-light-card
+            entity: light.yi_hao_deng
+            name: 一号灯
+            use_light_color: true
+            show_brightness_control: true
+            show_color_control: false
+          - type: custom:mushroom-light-card
+            entity: light.er_hao_deng
+            name: 二号灯
+            use_light_color: true
+            show_brightness_control: true
+          - type: custom:mushroom-light-card
+            entity: light.san_hao_deng
+            name: 三号灯
+            use_light_color: true
+            show_brightness_control: true
+          - type: custom:mushroom-light-card
+            entity: light.ding_deng_1
+            name: 顶灯1
+            use_light_color: true
+            show_brightness_control: true
+          - type: custom:mushroom-light-card
+            entity: light.ding_deng_2
+            name: 顶灯2
+            use_light_color: true
+            show_brightness_control: true
+          - type: custom:mushroom-light-card
+            entity: light.philips_strip3_12ad_light
+            name: 灯带
+            use_light_color: true
+            show_brightness_control: true
+            show_color_control: true
+
+      - type: custom:mushroom-title-card
+        title: 🔌 开关控制
+
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: switch.sonoff_10022dede9_1
+            tap_action:
+              action: toggle
+            icon_color: "{% if is_state('switch.sonoff_10022dede9_1', 'on') %}green{% else %}grey{% endif %}"
+          - type: custom:mushroom-entity-card
+            entity: switch.sonoff_10022dedc7_1
+            tap_action:
+              action: toggle
+            icon_color: "{% if is_state('switch.sonoff_10022dedc7_1', 'on') %}green{% else %}grey{% endif %}"
+          - type: custom:mushroom-entity-card
+            entity: switch.yszn01_ys2102_08c6_dryer
+            name: 晾衣架干燥
+            tap_action:
+              action: toggle
+            icon_color: "{% if is_state('switch.yszn01_ys2102_08c6_dryer', 'on') %}orange{% else %}grey{% endif %}"
+          - type: custom:mushroom-entity-card
+            entity: switch.yszn01_ys2102_08c6_uv
+            name: 晾衣架UV杀菌
+            tap_action:
+              action: toggle
+            icon_color: "{% if is_state('switch.yszn01_ys2102_08c6_uv', 'on') %}purple{% else %}grey{% endif %}"
+
+      - type: custom:mushroom-title-card
+        title: 🔋 设备电量
+
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: custom:mushroom-entity-card
+            entity: sensor.unknown_battery_level
+            name: 手机
+            icon: mdi:cellphone
+            primary_info: state
+            icon_color: "{% if states('sensor.unknown_battery_level')|int < 20 %}red{% elif states('sensor.unknown_battery_level')|int < 50 %}orange{% else %}green{% endif %}"
+          - type: custom:mushroom-entity-card
+            entity: sensor.su7_battery_level
+            name: SU7
+            icon: mdi:car-electric
+            primary_info: state
+            icon_color: "{% if states('sensor.su7_battery_level')|int < 20 %}red{% elif states('sensor.su7_battery_level')|int < 50 %}orange{% else %}green{% endif %}"
+          - type: custom:mushroom-entity-card
+            entity: sensor.quest_battery_level
+            name: Quest3
+            icon: mdi:virtual-reality
+            primary_info: state
+            icon_color: "{% if states('sensor.quest_battery_level')|int < 20 %}red{% elif states('sensor.quest_battery_level')|int < 50 %}orange{% else %}green{% endif %}"
+          - type: custom:mushroom-entity-card
+            entity: sensor.river_2_max_total_output_power
+            name: 移动电源
+            icon: mdi:battery-charging
+            primary_info: state
+            icon_color: green
+          - type: custom:mushroom-entity-card
+            entity: sensor.miaomiaoce_t9_0582_battery_level
+            name: 温湿度计
+            icon: mdi:thermometer
+            primary_info: state
+            icon_color: teal
+          - type: custom:mushroom-entity-card
+            entity: sensor.ne2210_battery_level
+            name: OnePlus
+            icon: mdi:cellphone
+            primary_info: state
+            icon_color: "{% if states('sensor.ne2210_battery_level')|int < 20 %}red{% else %}green{% endif %}"
+
+  - title: 设备
+    path: devices
+    icon: mdi:devices
+    badges: []
+    cards:
+      - type: custom:mushroom-title-card
+        title: 所有设备
+        subtitle: 查看和控制你的智能设备
+
+      - type: entities
+        title: 🔌 开关
+        show_header_toggle: true
+        entities:
+          - entity: switch.sonoff_10022dede9_1
+            secondary_info: last-changed
+          - entity: switch.sonoff_10022dedc7_1
+            secondary_info: last-changed
+
+      - type: entities
+        title: 📊 传感器
+        show_header_toggle: false
+        entities:
+          - entity: sensor.sonoff_total_power_usage
+            secondary_info: last-updated
+          - entity: sensor.river_2_max_total_output_power
+            secondary_info: last-updated
+
+  - title: 能源
+    path: energy
+    icon: mdi:lightning-bolt
+    badges: []
+    cards:
+      - type: custom:mushroom-title-card
+        title: ⚡ 能源监控
+        subtitle: 实时功耗统计
+
+      - type: sensor
+        entity: sensor.sonoff_total_power_usage
+        graph: line
+        name: 总功率趋势
+        hours_to_show: 24
+        detail: 2
+
+      - type: sensor
+        entity: sensor.river_2_max_total_output_power
+        graph: line
+        name: 移动电源趋势
+        hours_to_show: 24
+        detail: 2
+
+      - type: grid
+        columns: 2
+        square: true
+        cards:
+          - type: gauge
+            entity: sensor.sonoff_total_power_usage
+            name: 当前功率
+            min: 0
+            max: 3000
+            severity:
+              green: 0
+              yellow: 1500
+              red: 2500
+          - type: gauge
+            entity: sensor.river_2_max_total_output_power
+            name: 移动电源
+            min: 0
+            max: 1000
+
+resources: !include lovelace/resources.yaml

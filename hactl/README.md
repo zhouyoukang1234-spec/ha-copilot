@@ -25,8 +25,9 @@ python bootstrap_token.py     # mints a long-lived token into ../.ha_token (giti
 
 Token resolution: `$HA_TOKEN`, else `../.ha_token`.
 Endpoint: `$HA_BASE` (default `http://localhost:8123`).
-Raw-config access shells through WSL (`$HA_WSL_DISTRO`, default `Ubuntu`;
-`$HA_CONFIG_DIR`, default `/root/ha-config`).
+Raw-config access (`conf-get`/`conf-set`) is routed through the `ha_copilot`
+tool API, so it works against any deployment (Docker, bare metal, WSL) with no
+extra configuration.
 
 ## Command surface
 

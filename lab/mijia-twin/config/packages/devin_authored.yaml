@@ -1,0 +1,60 @@
+automation:
+- id: devin_devin_7a895947
+  alias: Devin · 联动:占用即开灯 (编程授作)
+  mode: single
+  trigger:
+  - platform: state
+    entity_id: binary_sensor.xiaomi_cn_blt_3_1kd2sgr5oco00_03_occupancy_status_p_2_1078
+    to: 'on'
+  action:
+  - service: light.turn_on
+    target:
+      entity_id: light.san_hao_deng
+- id: devin_devin_acbf7896
+  alias: Devin 蓝图·人来灯亮
+  use_blueprint:
+    path: homeassistant/motion_light.yaml
+    input:
+      motion_entity: binary_sensor.f22078f9c82516c9e8d4e563176a1ca7_smart_motion_human
+      light_target:
+        entity_id: light.b650m_aorus_elite_ax_0_led_2
+      no_motion_wait: 120
+input_boolean:
+  devin_demo_mode:
+    name: Devin 演示模式
+    icon: mdi:test-tube
+counter:
+  devin_action_counter:
+    name: Devin 操作计数
+    initial: 0
+    step: 1
+timer:
+  devin_demo_timer:
+    name: Devin 演示计时
+    duration: 00:05:00
+input_number:
+  devin_target_temp:
+    name: Devin 目标温度
+    min: 16
+    max: 30
+    step: 0.5
+    initial: 24
+    unit_of_measurement: °C
+scene:
+- id: devin_devin_39e1e311
+  name: Devin 影院模式
+  entities:
+    light.ke_ting_deng:
+      state: 'on'
+      brightness: 40
+script:
+  devin_db3cd1ad:
+    alias: Devin 一键晚安
+    mode: single
+    sequence:
+    - service: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.devin_demo_mode
+    - service: counter.increment
+      target:
+        entity_id: counter.devin_action_counter

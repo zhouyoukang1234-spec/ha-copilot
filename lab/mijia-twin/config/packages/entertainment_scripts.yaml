@@ -1,0 +1,33 @@
+# 娱乐页面 Automations（script 块已删除：与 scripts.yaml 重复，HA 拒绝重复 script id）
+automation:
+- id: sync_all_speakers_volume
+  alias: 同步所有音箱音量
+  description: 当音量滑块变化时，同步调节所有音箱音量
+  trigger:
+  - platform: state
+    entity_id: input_number.all_speakers_volume
+  condition:
+  - condition: template
+    value_template: '{{ trigger.to_state.state != trigger.from_state.state }}'
+  action:
+  - service: script.set_all_speakers_volume
+    data:
+      volume_level: '{{ states(''input_number.all_speakers_volume'') | float / 100
+        }}'
+  mode: restart
+- id: init_speakers_volume_slider
+  alias: 初始化音量滑块
+  description: Home Assistant启动时，将滑块设置为主音箱的当前音量
+  trigger:
+  - platform: homeassistant
+    event: start
+  action:
+  - delay:
+      seconds: 10
+  - service: input_number.set_value
+    data:
+      entity_id: input_number.all_speakers_volume
+      value: '{{ (state_attr(''media_player.xiaomi_lx06_6dfd_play_control'', ''volume_level'')
+        | float(0.5) * 100) | int }}
+
+        '

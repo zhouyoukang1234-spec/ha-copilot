@@ -1,4 +1,8 @@
-# The snapshot/ directory is an archived, sanitized copy of the user's real
-# Home Assistant config plus throwaway operator/twin helper scripts. It is
-# reference material, not maintained source, so it is excluded from linting.
-extend-exclude = ["snapshot"]
+# Lint our own code only. The user's real Home Assistant config is mirrored
+# verbatim under lab/mijia-twin/config for the digital twin; its vendored
+# third-party custom components are not ours to modify, so they are excluded
+# from linting. Our own twin layer (lab_sim) is still linted.
+extend-exclude = [
+    "lab/mijia-twin/config/custom_components/ha_tools_manager",
+    "lab/mijia-twin/config/blueprints",
+]
