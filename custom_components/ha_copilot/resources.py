@@ -463,12 +463,18 @@ _CARD_HINTS = {
 async def recommend_resources(
     hass: HomeAssistant,
     limit: int = 15,
+    include_blueprints: bool = True,
 ) -> dict[str, Any]:
-    """Recommend HACS resources matched to the running HA's real devices.
+    """Recommend resources matched to the running HA's real devices, fusing
+    every source in one call.
 
     Reads device manufacturers, configured integrations and entity domains, then
-    ranks HACS integrations and frontend cards that complement that hardware.
-    The headline "match my devices to the right resources" capability.
+    ranks: (1) HACS integrations and (2) HACS frontend cards that complement that
+    hardware, and (3) ready-made community automation blueprints for the intents
+    those devices usually want. The headline "match my devices to the right
+    resources" capability — a non-expert gets integrations + cards + automations
+    from a single call. Blueprint fusion degrades gracefully: a GitHub hiccup
+    never breaks the (HACS-only) integration/card recommendations.
     """
     signals = _device_signals(hass)
     brand_terms = [m.lower() for m in signals["manufacturers"]]
@@ -528,7 +534,7 @@ async def recommend_resources(
                     "name", "full_name", "description", "stars", "url")}
             )
 
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "signals": {
             "manufacturers": signals["manufacturers"],
@@ -542,6 +548,20 @@ async def recommend_resources(
             "the given GitHub url, or import a blueprint with import_blueprint."
         ),
     }
+
+    # Cross-source fusion: ready-made automation blueprints for this home.
+    if include_blueprints:
+        try:
+            bp = await recommend_blueprints(hass, limit=min(limit, 6))
+        except Exception as err:  # noqa: BLE001 - never break HACS recs
+            out["blueprint_recommendations"] = []
+            out["blueprint_note"] = f"blueprint fusion unavailable: {type(err).__name__}: {err}"
+        else:
+            out["blueprint_recommendations"] = bp.get("recommendations", [])
+            if bp.get("partial_errors"):
+                out["blueprint_note"] = f"partial: {bp['partial_errors']}"
+
+    return out
 
 
 # Real entity domains -> the automation intents a user typically wants for them.

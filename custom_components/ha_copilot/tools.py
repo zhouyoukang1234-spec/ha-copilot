@@ -3439,7 +3439,8 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             )
         if name == "recommend_resources":
             return await resources.recommend_resources(
-                hass, int(args.get("limit", 15))
+                hass, int(args.get("limit", 15)),
+                include_blueprints=bool(args.get("include_blueprints", True)),
             )
         if name == "recommend_blueprints":
             pref = await memory.recall(hass, "preferred_blueprint_intents")
@@ -5082,9 +5083,10 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "recommend_resources",
-            "description": "Inspect the running HA's real devices (manufacturers), configured integrations and entity domains, then recommend HACS integrations and frontend cards matched to that hardware \u2014 with a reason for each. The 'match my devices to the right resources' capability: an operator can call this with zero arguments to surface what a non-expert user would otherwise never find. Read-only.",
+            "description": "Inspect the running HA's real devices (manufacturers), configured integrations and entity domains, then recommend, fused in one call: HACS integrations, HACS frontend cards, and ready-made community automation blueprints \u2014 all matched to that hardware with a reason for each. The 'match my devices to the right resources' capability: an operator can call this with zero arguments to surface what a non-expert user would otherwise never find. Read-only.",
             "parameters": {"type": "object", "properties": {
                 "limit": {"type": "integer", "description": "max recommendations per kind (default 15)."},
+                "include_blueprints": {"type": "boolean", "description": "also fuse in device-matched automation blueprints (default true; set false to skip the GitHub lookups)."},
             }},
         },
     },
