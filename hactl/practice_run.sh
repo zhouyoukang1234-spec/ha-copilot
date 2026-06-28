@@ -212,4 +212,25 @@ H "import_statistics: backfill external long-term statistics (energy dashboard)"
 NOW=$(python -c "import datetime;n=datetime.datetime.now(datetime.timezone.utc).replace(minute=0,second=0,microsecond=0);import json;print(json.dumps([{'start':(n-datetime.timedelta(hours=2)).isoformat(),'sum':10,'state':10},{'start':(n-datetime.timedelta(hours=1)).isoformat(),'sum':25,'state':15}]))")
 hactl tool import_statistics --args "{\"statistic_id\":\"ha_copilot:practice_energy\",\"statistics\":$NOW,\"unit\":\"kWh\",\"name\":\"Copilot Practice Energy\",\"has_sum\":true}" | python -c "import sys,json;d=json.load(sys.stdin);print('imported points:',d.get('imported'),'| external:',d.get('external'))"
 
+# ---- deep-fusion round 8: script/scene config / device automations / stats period + clear ----
+H "get_script_config: the sequence behind a script entity (by object_id)"
+hactl tool get_script_config --args '{"identifier":"home_mode"}' | python -c "import sys,json;d=json.load(sys.stdin);c=d.get('config',{});print('found:',d['found'],'| alias:',c.get('alias'),'| steps:',len(c.get('sequence',[])))"
+
+H "get_scene_config: the entity states a scene restores"
+hactl tool get_scene_config --args '{"identifier":"回家模式"}' | python -c "import sys,json;d=json.load(sys.stdin);print('found:',d['found'],'| entities in scene:',d.get('entity_count'))"
+
+H "get_device_automations: device-based trigger capabilities of the first device"
+DID=$(hactl tool list_devices | python -c "import sys,json;d=json.load(sys.stdin).get('devices',[]);print(d[0]['id'] if d else '')")
+if [ -n "$DID" ]; then hactl tool get_device_automations --args "{\"device_id\":\"$DID\",\"type\":\"trigger\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('device triggers available:',d.get('count'))"; fi
+
+H "import + get_statistics_during_period + clear: a clean long-term-stats round trip"
+NOW8=$(python -c "import datetime,json;n=datetime.datetime.now(datetime.timezone.utc).replace(minute=0,second=0,microsecond=0);print(json.dumps({'pts':[{'start':(n-datetime.timedelta(hours=3)).isoformat(),'sum':5,'state':5},{'start':(n-datetime.timedelta(hours=2)).isoformat(),'sum':9,'state':4}],'from':(n-datetime.timedelta(hours=4)).isoformat(),'to':n.isoformat()}))")
+PTS=$(echo "$NOW8" | python -c "import sys,json;print(json.dumps(json.load(sys.stdin)['pts']))")
+FROM=$(echo "$NOW8" | python -c "import sys,json;print(json.load(sys.stdin)['from'])")
+TO=$(echo "$NOW8" | python -c "import sys,json;print(json.load(sys.stdin)['to'])")
+hactl tool import_statistics --args "{\"statistic_id\":\"ha_copilot:practice_r8\",\"statistics\":$PTS,\"unit\":\"kWh\",\"has_sum\":true}" >/dev/null
+sleep 3
+hactl tool get_statistics_during_period --args "{\"statistic_ids\":[\"ha_copilot:practice_r8\"],\"start\":\"$FROM\",\"end\":\"$TO\",\"period\":\"hour\"}" | python -c "import sys,json;d=json.load(sys.stdin);r=d['result'].get('ha_copilot:practice_r8',{});print('period rows:',r.get('points'))"
+hactl tool clear_statistics --args '{"statistic_ids":["ha_copilot:practice_r8"]}' | python -c "import sys,json;d=json.load(sys.stdin);print('cleared:',d.get('cleared'))"
+
 echo; echo "### practice run complete"

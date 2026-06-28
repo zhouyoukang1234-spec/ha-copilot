@@ -2044,6 +2044,111 @@ async def _import_statistics(hass: HomeAssistant, statistic_id: str,
             "imported": len(points)}
 
 
+async def _get_script_config(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Return a script's full definition (alias/sequence/mode/icon) from
+    scripts.yaml, matched by object_id, 'script.<id>', or alias. The
+    configuration behind the script entity."""
+    object_id = identifier
+    if identifier.startswith("script."):
+        object_id = identifier.split(".", 1)[1]
+    path = _safe_path(hass, "scripts.yaml")
+    if not os.path.isfile(path):
+        return {"error": "scripts.yaml not found"}
+
+    def _load() -> dict:
+        with open(path, encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or {}
+
+    items = await hass.async_add_executor_job(_load)
+    if object_id in items:
+        return {"found": True, "object_id": object_id, "config": items[object_id]}
+    for key, cfg in items.items():
+        if isinstance(cfg, dict) and cfg.get("alias") == identifier:
+            return {"found": True, "object_id": key, "config": cfg}
+    return {"found": False, "error": f"script '{identifier}' not found in scripts.yaml"}
+
+
+async def _get_scene_config(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Return a scene's full definition (name/entities/snapshot) from
+    scenes.yaml, matched by name or id. The configuration behind the scene
+    entity, including the exact entity states it restores."""
+    path = _safe_path(hass, "scenes.yaml")
+    if not os.path.isfile(path):
+        return {"error": "scenes.yaml not found"}
+
+    def _load() -> list:
+        with open(path, encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or []
+
+    items = await hass.async_add_executor_job(_load)
+    for item in items:
+        if item.get("name") == identifier or str(item.get("id")) == str(identifier):
+            return {"found": True, "config": item,
+                    "entity_count": len(item.get("entities") or {})}
+    return {"found": False, "error": f"scene '{identifier}' not found in scenes.yaml"}
+
+
+async def _clear_statistics(hass: HomeAssistant, statistic_ids: list[str]) -> dict[str, Any]:
+    """Delete all long-term statistics for the given statistic_ids (recorder
+    write). The cleanup counterpart to import_statistics — removes the series
+    from history/energy entirely."""
+    if not statistic_ids:
+        return {"error": "statistic_ids is required"}
+    _recorder_get_instance(hass).async_clear_statistics(list(statistic_ids))
+    return {"ok": True, "cleared": statistic_ids,
+            "note": "deletion is queued on the recorder thread"}
+
+
+async def _get_device_automations(hass: HomeAssistant, device_id: str,
+                                  automation_type: str = "trigger") -> dict[str, Any]:
+    """List the device-automation capabilities a device exposes —
+    triggers / conditions / actions usable in device-based automations
+    (the 'Device' option in the automation editor)."""
+    from homeassistant.components.device_automation import (
+        DeviceAutomationType,
+        async_get_device_automations,
+    )
+    dreg = dr.async_get(hass)
+    if dreg.async_get(device_id) is None:
+        return {"error": f"device '{device_id}' not found (see list_devices)"}
+    try:
+        dat = DeviceAutomationType[automation_type.upper()]
+    except KeyError:
+        return {"error": "automation_type must be one of trigger/condition/action"}
+    result = await async_get_device_automations(hass, dat, [device_id])
+    items = result.get(device_id, [])
+    return {"device_id": device_id, "type": automation_type,
+            "count": len(items), "automations": items}
+
+
+async def _get_statistics_during_period(hass: HomeAssistant, statistic_ids: list[str],
+                                        start: str, end: str | None = None,
+                                        period: str = "hour") -> dict[str, Any]:
+    """Pure-period statistics retrieval: rows strictly between an explicit
+    start and end (ISO8601, UTC), at the requested period (5minute/hour/day/
+    week/month). Unlike get_statistics (last-N-hours), this is a clean window."""
+    if not statistic_ids:
+        return {"error": "statistic_ids is required (see list_statistics)"}
+    start_dt = dt_util.parse_datetime(start)
+    if start_dt is None:
+        return {"error": f"invalid 'start': {start}"}
+    start_dt = dt_util.as_utc(start_dt)
+    end_dt = None
+    if end:
+        end_dt = dt_util.parse_datetime(end)
+        if end_dt is None:
+            return {"error": f"invalid 'end': {end}"}
+        end_dt = dt_util.as_utc(end_dt)
+    types = {"mean", "min", "max", "sum", "state", "change"}
+    data = await _recorder_get_instance(hass).async_add_executor_job(
+        _recorder_statistics.statistics_during_period,
+        hass, start_dt, end_dt, set(statistic_ids), period, None, types)
+    out: dict[str, Any] = {}
+    for sid, rows in data.items():
+        out[sid] = {"points": len(rows), "rows": rows[:200]}
+    return {"period": period, "start": start, "end": end, "result": out}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -2344,6 +2449,20 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 unit=args.get("unit"), name=args.get("name"),
                 has_mean=bool(args.get("has_mean", False)),
                 has_sum=bool(args.get("has_sum", False)))
+        # ---- deep-fusion round 8 ----
+        if name == "get_script_config":
+            return await _get_script_config(hass, args.get("identifier") or args.get("entity_id") or args.get("id"))
+        if name == "get_scene_config":
+            return await _get_scene_config(hass, args.get("identifier") or args.get("name") or args.get("id"))
+        if name == "get_device_automations":
+            return await _get_device_automations(hass, args["device_id"], args.get("type", "trigger"))
+        if name == "get_statistics_during_period":
+            return await _get_statistics_during_period(
+                hass, args["statistic_ids"], args["start"], args.get("end"), args.get("period", "hour"))
+        if name == "clear_statistics":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _clear_statistics(hass, args["statistic_ids"])
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -3461,6 +3580,60 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "has_mean": {"type": "boolean"},
                 "has_sum": {"type": "boolean"},
             }, "required": ["statistic_id", "statistics"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_script_config",
+            "description": "Return a script's full definition (alias/sequence/mode/icon) from scripts.yaml, matched by object_id, 'script.<id>', or alias. The configuration behind the script entity.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "script object_id, 'script.<id>', or alias."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_scene_config",
+            "description": "Return a scene's full definition (name/entities/states it restores) from scenes.yaml, matched by name or id. The configuration behind the scene entity.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "scene name or id."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_device_automations",
+            "description": "List the device-automation capabilities a device exposes — triggers / conditions / actions usable in device-based automations (the 'Device' option in the automation editor). Get device_id from list_devices.",
+            "parameters": {"type": "object", "properties": {
+                "device_id": {"type": "string"},
+                "type": {"type": "string", "description": "trigger | condition | action (default trigger)."},
+            }, "required": ["device_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_statistics_during_period",
+            "description": "Pure-period statistics retrieval: rows strictly between an explicit start and end (ISO8601 UTC), at the requested period (5minute/hour/day/week/month). Unlike get_statistics (last-N-hours), this is a clean window.",
+            "parameters": {"type": "object", "properties": {
+                "statistic_ids": {"type": "array", "items": {"type": "string"}},
+                "start": {"type": "string", "description": "ISO8601 UTC start."},
+                "end": {"type": "string", "description": "ISO8601 UTC end (optional)."},
+                "period": {"type": "string", "description": "5minute|hour|day|week|month (default hour)."},
+            }, "required": ["statistic_ids", "start"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clear_statistics",
+            "description": "Delete all long-term statistics for the given statistic_ids (recorder write) — the cleanup counterpart to import_statistics. Removes the series from history/energy entirely.",
+            "parameters": {"type": "object", "properties": {
+                "statistic_ids": {"type": "array", "items": {"type": "string"}},
+            }, "required": ["statistic_ids"]},
         },
     },
 ]
