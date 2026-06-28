@@ -548,21 +548,29 @@ async def recommend_resources(
 # Drives device-matched blueprint discovery (the "what can I automate with what
 # I own" question) without the user knowing any search terms.
 _DOMAIN_INTENTS = {
-    "binary_sensor": ["motion activated light", "presence detection"],
+    "binary_sensor": [
+        "motion activated light",
+        "presence detection",
+        "water leak alert",
+        "door open notification",
+    ],
     "light": ["motion activated light"],
-    "sensor": ["low battery notification"],
-    "lock": ["lock notification"],
+    "sensor": ["low battery notification", "humidity alert", "temperature alert"],
+    "lock": ["lock notification", "door left unlocked reminder"],
     "climate": ["thermostat schedule"],
     "cover": ["cover open reminder"],
-    "person": ["presence detection"],
+    "person": ["presence detection", "leaving home reminder"],
     "device_tracker": ["presence detection"],
     "vacuum": ["vacuum notification"],
+    "alarm_control_panel": ["alarm notification"],
 }
 
 
 async def recommend_blueprints(
     hass: HomeAssistant,
     limit: int = 12,
+    preferred_intents: list[str] | None = None,
+    imported_repos: set[str] | None = None,
 ) -> dict[str, Any]:
     """Recommend community blueprints matched to the home's real entity domains.
 
@@ -572,17 +580,29 @@ async def recommend_blueprints(
     and returns them deduped with the intent that surfaced each — so a non-expert
     gets "here are automations for what you own", then feeds a result to
     list_repo_blueprints -> import_blueprint. Bounded to a few searches.
+
+    Memory-aware: ``preferred_intents`` (from the agent's memory) are searched
+    first so the user's stated focus surfaces; repos in ``imported_repos`` (the
+    import history) are flagged ``already_imported`` and demoted so fresh
+    suggestions come first. Both are supplied by the dispatch layer, keeping
+    this module decoupled from the memory store.
     """
     signals = _device_signals(hass)
     present = signals["entity_domains"]
-    intents: list[str] = []
+    device_intents: list[str] = []
     seen_intent: set[str] = set()
+    # Preferred intents (remembered) lead, then device-derived intents.
+    for intent in (preferred_intents or []):
+        if intent and intent not in seen_intent:
+            seen_intent.add(intent)
+            device_intents.append(intent)
+    pref_count = len(device_intents)
     for dom in sorted(present, key=lambda d: present[d], reverse=True):
         for intent in _DOMAIN_INTENTS.get(dom, []):
             if intent not in seen_intent:
                 seen_intent.add(intent)
-                intents.append(intent)
-    intents = intents[:4]  # cap external searches
+                device_intents.append(intent)
+    intents = device_intents[:4]  # cap external searches
     if not intents:
         return {
             "ok": True,
@@ -591,6 +611,7 @@ async def recommend_blueprints(
             "note": "No entity domains map to known automation intents yet.",
         }
 
+    imported = imported_repos or set()
     recs: list[dict[str, Any]] = []
     seen_repo: set[str] = set()
     errors: list[str] = []
@@ -604,16 +625,22 @@ async def recommend_blueprints(
             if not fn or fn in seen_repo:
                 continue
             seen_repo.add(fn)
-            recs.append({**item, "matched_intent": intent})
+            recs.append({
+                **item,
+                "matched_intent": intent,
+                "already_imported": fn in imported,
+            })
             if len(recs) >= limit:
                 break
         if len(recs) >= limit:
             break
-    recs.sort(key=lambda r: r.get("stars", 0), reverse=True)
+    # Fresh (not-yet-imported) first, then by stars.
+    recs.sort(key=lambda r: (r.get("already_imported", False), -r.get("stars", 0)))
     out: dict[str, Any] = {
         "ok": True,
         "matched_domains": [d for d in present if d in _DOMAIN_INTENTS],
         "intents": intents,
+        "preferred_intents_applied": intents[:pref_count],
         "count": len(recs),
         "recommendations": recs,
         "note": (
