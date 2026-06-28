@@ -85,11 +85,35 @@ def _safe_path(hass: HomeAssistant, rel_path: str) -> str:
     return target
 
 
+def _request_headers(url: str) -> dict[str, str]:
+    """Base headers, plus GitHub auth when a token is available.
+
+    Unauthenticated GitHub search is limited to ~10 requests/minute, which a
+    live deployment hits quickly. If the operator exports a token
+    (``GITHUB_TOKEN`` / ``GH_TOKEN``) it is attached to api.github.com calls,
+    lifting the limit to 30/min (search) / 5000/hr (core). No token is ever
+    stored by ha_copilot; this only reads the process environment.
+    """
+    headers = {"User-Agent": _USER_AGENT}
+    if "api.github.com" in url:
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 async def _fetch_json(hass: HomeAssistant, url: str, timeout: float = 20.0) -> Any:
     session = async_get_clientsession(hass)
     async with session.get(
-        url, headers={"User-Agent": _USER_AGENT}, timeout=timeout
+        url, headers=_request_headers(url), timeout=timeout
     ) as resp:
+        if resp.status == 403 and "api.github.com" in url:
+            remaining = resp.headers.get("X-RateLimit-Remaining")
+            if remaining == "0":
+                raise RuntimeError(
+                    "GitHub API rate limit exceeded. Export a GITHUB_TOKEN "
+                    "(or GH_TOKEN) for the HA process to raise the limit."
+                )
         resp.raise_for_status()
         return await resp.json(content_type=None)
 
@@ -259,13 +283,36 @@ async def search_blueprints(
 
     Matches blueprint repositories/collections by free-text so an operator can
     locate ready-made automations to import via ``import_blueprint``.
+
+    GitHub repo search ANDs every word, so a natural multi-word phrase plus the
+    "home assistant blueprint" context easily over-constrains to zero hits. We
+    therefore try progressively-relaxed queries and return the first that hits,
+    so a non-expert phrase like "low battery notification" still surfaces
+    results instead of an empty list.
     """
-    # Free-text against name/description/readme finds far more real blueprint
-    # collections than the (rarely used) topic tag would.
-    q = f"{query.strip()} home assistant blueprint".strip()
-    params = f"?q={_url_quote(q)}&sort=stars&order=desc&per_page={max(1, min(limit, 30))}"
+    base = query.strip()
+    # Most specific -> least specific, but always floored at a home-assistant
+    # context: dropping it entirely returns unrelated repos (e.g. random
+    # "reminder" projects), so we never relax below that.
+    candidates = [
+        f"{base} home assistant blueprint",
+        f"{base} home-assistant blueprint",
+        f"{base} home-assistant",
+    ]
+    seen: set[str] = set()
+    ladder = [c.strip() for c in candidates if c.strip() and not (c.strip() in seen or seen.add(c.strip()))]
+    if not ladder:
+        ladder = ["home assistant blueprint"]
+    per_page = max(1, min(limit, 30))
+    data: dict[str, Any] = {}
+    q = ladder[0]
     try:
-        data = await _fetch_json(hass, GITHUB_SEARCH + params)
+        for cand in ladder:
+            q = cand
+            params = f"?q={_url_quote(q)}&sort=stars&order=desc&per_page={per_page}"
+            data = await _fetch_json(hass, GITHUB_SEARCH + params)
+            if (data or {}).get("total_count", 0):
+                break
     except Exception as err:  # noqa: BLE001 - surface fetch/ratelimit errors
         return {"error": f"{type(err).__name__}: {err}"}
     items = []
@@ -277,8 +324,8 @@ async def search_blueprints(
                 "stars": r.get("stargazers_count") or 0,
                 "url": r.get("html_url"),
                 "import_hint": (
-                    "Pass a raw blueprint .yaml URL from this repo to "
-                    "import_blueprint."
+                    "Call list_repo_blueprints with this full_name to get "
+                    "ready-to-import raw .yaml URLs for import_blueprint."
                 ),
             }
         )
