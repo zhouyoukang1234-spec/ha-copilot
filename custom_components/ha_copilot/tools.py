@@ -1360,24 +1360,31 @@ async def _delete_category(hass: HomeAssistant, scope: str,
 
 async def _list_dashboards(hass: HomeAssistant) -> dict[str, Any]:
     """List Lovelace dashboards (default + storage + YAML), with mode."""
-    from homeassistant.components.lovelace.const import LOVELACE_DATA
-    data = hass.data.get(LOVELACE_DATA)
+    from homeassistant.components.lovelace.const import DOMAIN as LOVELACE_DOMAIN
+    data = hass.data.get(LOVELACE_DOMAIN)
+    if data is None:
+        return {"count": 0, "dashboards": []}
+    # HA 2025.x stores a plain dict at hass.data["lovelace"]; older releases
+    # exposed an object with .dashboards / .yaml_dashboards attributes.
+    if isinstance(data, dict):
+        dashboards = data.get("dashboards") or {}
+        yaml_dashboards = data.get("yaml_dashboards") or {}
+    else:
+        dashboards = getattr(data, "dashboards", {}) or {}
+        yaml_dashboards = getattr(data, "yaml_dashboards", {}) or {}
     items = []
-    if data is not None:
-        for url_path, cfg in data.dashboards.items():
-            items.append({
-                "url_path": url_path or "lovelace",
-                "is_default": url_path is None,
-                "mode": getattr(cfg, "mode", None),
-            })
-        for url_path, ycfg in (data.yaml_dashboards or {}).items():
-            items.append({
-                "url_path": url_path,
-                "title": ycfg.get("title"),
-                "icon": ycfg.get("icon"),
-                "mode": "yaml",
-                "show_in_sidebar": ycfg.get("show_in_sidebar", True),
-            })
+    for url_path, cfg in dashboards.items():
+        entry = {
+            "url_path": url_path or "lovelace",
+            "is_default": url_path is None,
+            "mode": getattr(cfg, "mode", None),
+        }
+        ymeta = yaml_dashboards.get(url_path)
+        if ymeta:
+            entry["title"] = ymeta.get("title")
+            entry["icon"] = ymeta.get("icon")
+            entry["show_in_sidebar"] = ymeta.get("show_in_sidebar", True)
+        items.append(entry)
     return {"count": len(items), "dashboards": items}
 
 
