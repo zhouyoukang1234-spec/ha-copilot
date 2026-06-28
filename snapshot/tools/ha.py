@@ -1,12 +1,16 @@
 """Home Assistant API + native ha_copilot MCP helper (local HA on this VM)."""
-import urllib.request, urllib.parse, json, os
+import json
+import os
+import urllib.parse
+import urllib.request
 
 BASE = "http://localhost:8123"
 CID = BASE + "/"
 
 
 def _post_json(path, body, headers=None):
-    h = {"Content-Type": "application/json"}; h.update(headers or {})
+    h = {"Content-Type": "application/json"}
+    h.update(headers or {})
     req = urllib.request.Request(BASE + path, data=json.dumps(body).encode(), headers=h, method="POST")
     try:
         return json.loads(urllib.request.urlopen(req, timeout=60).read())

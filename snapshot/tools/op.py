@@ -3,7 +3,10 @@
 Usage: python op.py <scene_entity_id>
 Calls scene.turn_on through the MCP call_service tool and prints a power snapshot.
 """
-import sys, time, ha
+import sys
+import time
+
+import ha
 
 def snap():
     tot = ha.get("/api/states/sensor.sonoff_total_power_usage")
@@ -14,7 +17,7 @@ def snap():
 
 def main():
     scene = sys.argv[1]
-    r = ha.tool("call_service", domain="scene", service="turn_on", entity_id=scene)
+    ha.tool("call_service", domain="scene", service="turn_on", entity_id=scene)
     print(f"[MCP] scene.turn_on {scene} -> ok")
     time.sleep(4)
     print(f"     total power = {snap()} W")

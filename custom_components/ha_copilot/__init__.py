@@ -45,6 +45,7 @@ from .http_api import (
     CopilotRunToolView,
     CopilotToolsView,
 )
+from .llm_api import async_register_llm_api
 from .tools import dispatch as dispatch_tool
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,6 +77,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.http.register_view(CopilotToolsView(hass))
     hass.http.register_view(CopilotRunToolView(hass))
     hass.http.register_view(CopilotMcpView(hass))
+
+    # Native LLM API: expose the deterministic tool layer to every conversation
+    # agent (OpenAI / Anthropic / Google / local) via homeassistant.helpers.llm.
+    async_register_llm_api(hass)
 
     # Serve the panel's static assets.
     panel_dir = os.path.join(os.path.dirname(__file__), "panel")
@@ -116,7 +121,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     _LOGGER.info(
         "HA-Copilot ready - capability layer (write=%s restart=%s); "
-        "drive via run_tool service, /api/ha_copilot/run_tool, or MCP at /api/ha_copilot/mcp",
+        "drive via run_tool service, /api/ha_copilot/run_tool, MCP at "
+        "/api/ha_copilot/mcp, or the native LLM API (any conversation agent)",
         store[CONF_ALLOW_WRITE],
         store[CONF_ALLOW_RESTART],
     )

@@ -213,10 +213,12 @@ def on_message(c, u, msg):
     parts = topic.split("/")
     # twin/<obj>/set | twin/<obj>/pct/set | twin/<obj>/bri/set | twin/<obj>/press
     if topic.endswith("/pct/set"):
-        obj = parts[1]; pub(f"{BASE}/{obj}/pct", payload)
+        obj = parts[1]
+        pub(f"{BASE}/{obj}/pct", payload)
         return
     if topic.endswith("/bri/set"):
-        obj = parts[1]; pub(f"{BASE}/{obj}/bri", payload)
+        obj = parts[1]
+        pub(f"{BASE}/{obj}/bri", payload)
         set_state(obj, "ON")
         return
     if topic.endswith("/press"):
