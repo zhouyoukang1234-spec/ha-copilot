@@ -41,7 +41,7 @@
 | `read_logs` | 读取 HA 日志尾部用于排错 |
 | `search_community_resources` | 检索 **HACS** 全量目录（自定义集成 / 前端卡片 / 主题）按品牌·设备·关键词 |
 | `search_github` / `search_blueprints` | 在 GitHub 搜 HA 相关仓库/模板/示例、社区蓝图（蓝图检索带**逐级放宽召回阶梯**：自然多词短语也不会返回 0 结果） |
-| `discover_resources` | **一句自由文本，一次并发搜全部来源**（HACS 目录 + GitHub 仓库 + 社区蓝图），返回各来源结果与一份**跨源去重融合的 `top` 榜**（按跨源命中数→stars 排序）。小白输入品牌或需求即可同时拿到可装集成/卡片、示例仓库、可导入蓝图 |
+| `discover_resources` | **一句自由文本，一次并发搜全部来源**（HACS 目录 + GitHub 仓库 + 社区蓝图 + Zigbee 设备库），返回各来源结果与一份**跨源去重融合的 `top` 榜**（按跨源命中数→stars 排序）。小白输入品牌或需求即可同时拿到“硬件是否被 zigbee2mqtt/zha 支持”+ 可装集成/卡片 + 示例仓库 + 可导入蓝图 |
 | `search_zigbee_devices` | 在社区 **Zigbee 设备库**（blakadder，约 2700 款）里按品牌/型号查设备，返回它被哪些桥接支持——尤其是否 **zigbee2mqtt** / zha——及设备参考页。接入蓝图流水线前先确认硬件受支持及所属技术栈 |
 | `list_repo_blueprints` | 把一个 GitHub 仓库（`owner/name` 或 URL）解析成其中所有蓝图的 **可直接导入的 raw .yaml URL**，闭合 search→import 链路（两级探测：标准 `blueprints/` 目录 + 根目录单文件内容嗅探） |
 | `recommend_resources` | **读取运行中 HA 的真实设备（厂商/集成/实体域），一次调用融合推荐 HACS 集成 + 前端卡片 + 现成自动化蓝图**（各带匹配理由；小白零参数即可被推荐） |
@@ -55,7 +55,7 @@
 
 `resources.py` 把"散落在全网的 Home Assistant / 智能家居资源"收敛成确定性工具，两条互补路径取之于网：
 
-- **查询驱动**：`discover_resources(query)` 一句自由文本并发搜 HACS 目录 + GitHub 仓库 + 社区蓝图，跨源去重融合成一份 `top` 榜。
+- **查询驱动**：`discover_resources(query)` 一句自由文本并发搜 HACS 目录 + GitHub 仓库 + 社区蓝图 + Zigbee 设备库，跨源去重融合成一份 `top` 榜（并附 zigbee 段告知硬件是否受支持）。
 - **设备驱动**：`recommend_resources()` 零参数读取用户 HA 里真实的设备厂商与实体域，反向融合推荐该装的集成、前端卡片与现成自动化蓝图——用户什么都不懂，也能被精准推荐。
 
 命中后用 `list_repo_blueprints` → `import_blueprint` → `validate_blueprint_inputs` → `create_automation_from_blueprint` 一条链把蓝图变成运行中的自动化/脚本（域自动识别、导入即校验可加载性、参数别名无缝衔接）。任一来源失败（限流/网络）都独立降级、不影响其它来源（见 `partial_errors`）。全程只读取公开数据、无模型、无外部推理端点；唯一的写操作 `import_blueprint` 受 `allow_write` 约束且限制在 config 目录内。可选导出 `GITHUB_TOKEN` / `GH_TOKEN` 为 HA 进程鉴权以提高 GitHub 检索速率上限。
