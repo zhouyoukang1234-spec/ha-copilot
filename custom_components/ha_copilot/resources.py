@@ -775,6 +775,29 @@ async def recommend_resources(
             if bp.get("partial_errors"):
                 out["blueprint_note"] = f"partial: {bp['partial_errors']}"
 
+    # Device-driven Zigbee cross-check: which of the brands the user actually
+    # owns have zigbee2mqtt-supported hardware in the community database — so a
+    # non-expert learns their gear is pairable via Zigbee2MQTT without knowing
+    # to look. Degrades independently; never breaks the HACS recommendations.
+    zigbee_support: list[dict[str, Any]] = []
+    try:
+        for brand in list(signals["manufacturers"])[:6]:
+            zr = await search_zigbee_devices(hass, brand, limit=5)
+            z2m = [
+                {"model": d["model"], "name": d["name"], "url": d["url"]}
+                for d in (zr.get("results") or [])
+                if d.get("zigbee2mqtt_supported")
+            ]
+            if z2m:
+                zigbee_support.append(
+                    {"brand": brand, "matched": len(zr.get("results") or []),
+                     "zigbee2mqtt_examples": z2m[:3]}
+                )
+    except Exception:  # noqa: BLE001 - Zigbee cross-check is best-effort
+        zigbee_support = []
+    if zigbee_support:
+        out["zigbee_support"] = zigbee_support
+
     return out
 
 
