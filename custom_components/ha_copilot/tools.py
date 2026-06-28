@@ -2149,6 +2149,170 @@ async def _get_statistics_during_period(hass: HomeAssistant, statistic_ids: list
     return {"period": period, "start": start, "end": end, "result": out}
 
 
+async def _get_entity_relations(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Entity-centric relationship graph: the entity's registry entry resolved
+    up through its device → area → floor, plus sibling entities on the same
+    device, its config entry and labels. The inverse view of describe_area."""
+    ereg = er.async_get(hass)
+    dreg = dr.async_get(hass)
+    areg = ar.async_get(hass)
+    freg = fr.async_get(hass)
+    e = ereg.async_get(entity_id)
+    if e is None:
+        return {"error": f"entity '{entity_id}' not in the entity registry"}
+    device = None
+    siblings: list[dict[str, Any]] = []
+    area_id = e.area_id
+    if e.device_id:
+        d = dreg.async_get(e.device_id)
+        if d is not None:
+            device = {"id": d.id, "name": d.name_by_user or d.name,
+                      "manufacturer": d.manufacturer, "model": d.model,
+                      "area_id": d.area_id}
+            if area_id is None:
+                area_id = d.area_id
+            siblings = [{"entity_id": s.entity_id, "name": s.name or s.original_name}
+                        for s in ereg.entities.values()
+                        if s.device_id == e.device_id and s.entity_id != entity_id]
+    area = None
+    floor = None
+    if area_id:
+        a = areg.async_get_area(area_id)
+        if a is not None:
+            area = {"id": a.id, "name": a.name, "floor_id": a.floor_id}
+            if a.floor_id:
+                fl = freg.async_get_floor(a.floor_id)
+                if fl is not None:
+                    floor = {"floor_id": fl.floor_id, "name": fl.name, "level": fl.level}
+    return {
+        "entity_id": e.entity_id,
+        "platform": e.platform,
+        "config_entry_id": e.config_entry_id,
+        "device": device,
+        "area": area,
+        "floor": floor,
+        "labels": sorted(e.labels),
+        "sibling_count": len(siblings),
+        "siblings": siblings,
+    }
+
+
+async def _get_floor(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Resolve a floor (by floor_id or name) into the areas it contains and a
+    total effective entity count — completes the floor→area→entity graph."""
+    freg = fr.async_get(hass)
+    areg = ar.async_get(hass)
+    dreg = dr.async_get(hass)
+    ereg = er.async_get(hass)
+    floor = freg.async_get_floor(identifier)
+    if floor is None:
+        floor = next((f for f in freg.floors.values() if f.name == identifier), None)
+    if floor is None:
+        return {"error": f"floor '{identifier}' not found"}
+    areas = [a for a in areg.async_list_areas() if a.floor_id == floor.floor_id]
+    area_out: list[dict[str, Any]] = []
+    total_entities = 0
+    for a in areas:
+        dev_ids = {d.id for d in dreg.devices.values() if d.area_id == a.id}
+        n = sum(1 for e in ereg.entities.values()
+                if e.area_id == a.id or (e.area_id is None and e.device_id in dev_ids))
+        total_entities += n
+        area_out.append({"id": a.id, "name": a.name, "entity_count": n})
+    return {
+        "floor_id": floor.floor_id,
+        "name": floor.name,
+        "level": floor.level,
+        "area_count": len(area_out),
+        "areas": area_out,
+        "entity_count": total_entities,
+    }
+
+
+def _flatten_blueprint_inputs(meta_input: dict) -> dict[str, dict]:
+    """Flatten a blueprint's input definition (sections may nest inputs)."""
+    flat: dict[str, dict] = {}
+    for key, val in (meta_input or {}).items():
+        if isinstance(val, dict) and "input" in val:
+            flat.update(_flatten_blueprint_inputs(val["input"]))
+        else:
+            flat[key] = val if isinstance(val, dict) else {}
+    return flat
+
+
+async def _get_blueprint_metadata(hass: HomeAssistant, domain: str, path: str):
+    if domain == "automation":
+        from homeassistant.components.automation.helpers import async_get_blueprints
+    elif domain == "script":
+        from homeassistant.components.script.helpers import async_get_blueprints
+    else:
+        return None, f"unsupported blueprint domain '{domain}' (automation|script)"
+    domain_bps = async_get_blueprints(hass)
+    try:
+        bp = await domain_bps.async_get_blueprint(path)
+    except Exception as exc:  # noqa: BLE001
+        return None, f"blueprint '{path}' not found: {exc}"
+    return bp, None
+
+
+async def _validate_blueprint_inputs(hass: HomeAssistant, path: str,
+                                     inputs: dict, domain: str = "automation") -> dict[str, Any]:
+    """Check that a set of inputs satisfies a blueprint's schema BEFORE
+    instantiating it — reports missing required inputs (those without a
+    default) and any unknown keys. Precursor to create_automation_from_blueprint."""
+    bp, err = await _get_blueprint_metadata(hass, domain, path)
+    if err:
+        return {"error": err}
+    meta = bp.metadata or {}
+    flat = _flatten_blueprint_inputs(meta.get("input") or {})
+    required = [k for k, v in flat.items() if "default" not in (v or {})]
+    provided = set((inputs or {}).keys())
+    missing = [k for k in required if k not in provided]
+    unknown = [k for k in provided if k not in flat]
+    return {
+        "valid": not missing and not unknown,
+        "blueprint": meta.get("name"),
+        "all_inputs": sorted(flat.keys()),
+        "required": sorted(required),
+        "missing": sorted(missing),
+        "unknown": sorted(unknown),
+    }
+
+
+async def _create_automation_from_blueprint(hass: HomeAssistant, path: str,
+                                            inputs: dict, alias: str,
+                                            domain: str = "automation") -> dict[str, Any]:
+    """Instantiate a blueprint into a real automation (writes a use_blueprint
+    entry to automations.yaml and reloads). Inputs are validated against the
+    blueprint schema first; instantiation is rejected on any missing input."""
+    check = await _validate_blueprint_inputs(hass, path, inputs, domain)
+    if "error" in check:
+        return check
+    if check["missing"]:
+        return {"error": f"missing required inputs: {check['missing']}",
+                "required": check["required"]}
+    automation = {"alias": alias, "use_blueprint": {"path": path, "input": inputs}}
+    result = await _create_automation(hass, automation)
+    result["blueprint"] = path
+    result["from_blueprint"] = True
+    return result
+
+
+async def _get_template_functions(hass: HomeAssistant) -> dict[str, Any]:
+    """Catalog the Jinja extensions available in THIS instance's template
+    engine — globals/functions, filters and tests (including HA extras like
+    states, area_id, device_id, expand). The authoring surface for templates."""
+    from homeassistant.helpers.template import TemplateEnvironment
+    env = TemplateEnvironment(hass)
+    globals_ = sorted(k for k in env.globals if not k.startswith("_"))
+    filters_ = sorted(env.filters.keys())
+    tests_ = sorted(env.tests.keys())
+    return {
+        "globals_count": len(globals_), "globals": globals_,
+        "filters_count": len(filters_), "filters": filters_,
+        "tests_count": len(tests_), "tests": tests_,
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -2463,6 +2627,20 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _clear_statistics(hass, args["statistic_ids"])
+        # ---- deep-fusion round 9 ----
+        if name == "get_entity_relations":
+            return await _get_entity_relations(hass, args["entity_id"])
+        if name == "get_floor":
+            return await _get_floor(hass, args.get("identifier") or args.get("floor_id") or args.get("name"))
+        if name == "validate_blueprint_inputs":
+            return await _validate_blueprint_inputs(hass, args["path"], args.get("inputs") or {}, args.get("domain", "automation"))
+        if name == "get_template_functions":
+            return await _get_template_functions(hass)
+        if name == "create_automation_from_blueprint":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _create_automation_from_blueprint(
+                hass, args["path"], args.get("inputs") or {}, args["alias"], args.get("domain", "automation"))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -3634,6 +3812,59 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "statistic_ids": {"type": "array", "items": {"type": "string"}},
             }, "required": ["statistic_ids"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_entity_relations",
+            "description": "Entity-centric relationship graph: an entity resolved UP through its device → area → floor, plus sibling entities on the same device, its config entry and labels. The inverse view of describe_area (which is area-centric).",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_floor",
+            "description": "Resolve a floor (by floor_id or name) into the areas it contains + a total effective entity count — completes the floor→area→entity graph (complements list_floors / describe_area).",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "floor_id or floor name."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "validate_blueprint_inputs",
+            "description": "Check that a set of inputs satisfies a blueprint's schema BEFORE instantiating it — reports missing required inputs (those without a default) and unknown keys. Precursor to create_automation_from_blueprint.",
+            "parameters": {"type": "object", "properties": {
+                "path": {"type": "string", "description": "blueprint path, e.g. 'homeassistant/motion_light.yaml'."},
+                "inputs": {"type": "object", "description": "input name -> value."},
+                "domain": {"type": "string", "description": "automation | script (default automation)."},
+            }, "required": ["path"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_automation_from_blueprint",
+            "description": "Instantiate a blueprint into a real automation (writes a use_blueprint entry to automations.yaml and reloads). Inputs are validated against the blueprint schema first; rejected on any missing input.",
+            "parameters": {"type": "object", "properties": {
+                "path": {"type": "string", "description": "blueprint path, e.g. 'homeassistant/motion_light.yaml'."},
+                "inputs": {"type": "object", "description": "input name -> value (see get_blueprint / validate_blueprint_inputs)."},
+                "alias": {"type": "string", "description": "name for the new automation."},
+                "domain": {"type": "string", "description": "automation | script (default automation)."},
+            }, "required": ["path", "alias"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_template_functions",
+            "description": "Catalog the Jinja extensions available in THIS instance's template engine — globals/functions, filters and tests (including HA extras like states, area_id, device_id, expand). The authoring surface for templates.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
 ]

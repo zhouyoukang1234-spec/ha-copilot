@@ -233,4 +233,19 @@ sleep 3
 hactl tool get_statistics_during_period --args "{\"statistic_ids\":[\"ha_copilot:practice_r8\"],\"start\":\"$FROM\",\"end\":\"$TO\",\"period\":\"hour\"}" | python -c "import sys,json;d=json.load(sys.stdin);r=d['result'].get('ha_copilot:practice_r8',{});print('period rows:',r.get('points'))"
 hactl tool clear_statistics --args '{"statistic_ids":["ha_copilot:practice_r8"]}' | python -c "import sys,json;d=json.load(sys.stdin);print('cleared:',d.get('cleared'))"
 
+# ---- deep-fusion round 9: entity relations / floor graph / blueprint validate+instantiate / template fns ----
+H "get_entity_relations: resolve one entity UP to device→area→floor + siblings"
+EID=$(hactl tool list_states --args '{"domain":"light"}' | python -c "import sys,json;e=json.load(sys.stdin).get('entities',[]);print(e[0]['entity_id'] if e else 'sun.sun')")
+hactl tool get_entity_relations --args "{\"entity_id\":\"$EID\"}" | python -c "import sys,json;d=json.load(sys.stdin);a=d.get('area') or {};f=d.get('floor') or {};print('area:',a.get('name'),'| floor:',f.get('name'),'| siblings:',d.get('sibling_count'))"
+
+H "get_floor: the floor→area→entity graph"
+hactl tool get_floor --args '{"identifier":"yi_lou"}' | python -c "import sys,json;d=json.load(sys.stdin);print('floor:',d.get('name'),'| areas:',d.get('area_count'),'| entities:',d.get('entity_count'))" 2>/dev/null || echo "(no floor registered)"
+
+H "get_template_functions: the Jinja authoring surface of THIS instance"
+hactl tool get_template_functions | python -c "import sys,json;d=json.load(sys.stdin);g=d.get('globals',[]);print('globals:',d.get('globals_count'),'filters:',d.get('filters_count'),'tests:',d.get('tests_count'),'| states?',('states' in g),'area_id?',('area_id' in g))"
+
+H "validate_blueprint_inputs + create_automation_from_blueprint: instantiate a blueprint safely"
+hactl tool validate_blueprint_inputs --args '{"path":"homeassistant/motion_light.yaml","inputs":{"motion_entity":"binary_sensor.x","light_target":{"entity_id":"light.y"}}}' | python -c "import sys,json;d=json.load(sys.stdin);print('valid:',d.get('valid'),'| required:',d.get('required'))"
+hactl tool create_automation_from_blueprint --args "{\"path\":\"homeassistant/motion_light.yaml\",\"alias\":\"practice 蓝图实例\",\"inputs\":{\"motion_entity\":\"binary_sensor.lab_motion\",\"light_target\":{\"entity_id\":\"$EID\"}}}" | python -c "import sys,json;d=json.load(sys.stdin);print('instantiated:',d.get('ok'),'| from_blueprint:',d.get('from_blueprint'),'| id:',d.get('automation_id'))"
+
 echo; echo "### practice run complete"
