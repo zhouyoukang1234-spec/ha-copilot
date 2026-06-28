@@ -3464,6 +3464,18 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 hass, store, args["url"], args.get("domain")
             )
             if isinstance(result, dict) and result.get("ok"):
+                # Verify this HA can actually load the blueprint (e.g. an
+                # incompatible selector key fails only at load time). Surface
+                # that at import instead of letting it bite later.
+                check = await _validate_blueprint_inputs(
+                    hass, result.get("blueprint_path") or "", {},
+                    result.get("domain") or "automation",
+                )
+                if isinstance(check, dict) and check.get("error"):
+                    result["loadable"] = False
+                    result["load_error"] = check["error"]
+                else:
+                    result["loadable"] = True
                 repo = _github_repo_from_url(args["url"])
                 await memory.remember(
                     hass,
@@ -5090,7 +5102,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "import_blueprint",
-            "description": "Fetch a blueprint YAML by URL (GitHub blob/raw/gist) and import it into the running HA under blueprints/<domain>/ha_copilot/. Keeps a .copilot.bak backup and reloads the domain. Domain is read from the blueprint ('automation'/'script'/'template') unless overridden. Write op \u2014 gated by allow_write.",
+            "description": "Fetch a blueprint YAML by URL (GitHub blob/raw/gist) and import it into the running HA under blueprints/<domain>/ha_copilot/. Keeps a .copilot.bak backup and reloads the domain. Domain is read from the blueprint ('automation'/'script'/'template') unless overridden. Returns 'loadable' (and 'load_error') verifying THIS HA version can actually parse the blueprint. Write op \u2014 gated by allow_write.",
             "parameters": {"type": "object", "properties": {
                 "url": {"type": "string", "description": "URL to the blueprint .yaml (a GitHub blob url is auto-converted to raw)."},
                 "domain": {"type": "string", "description": "optional override: 'automation', 'script', or 'template'."},
