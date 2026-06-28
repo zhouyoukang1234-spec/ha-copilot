@@ -44,6 +44,8 @@
 | `list_repo_blueprints` | 把一个 GitHub 仓库（`owner/name` 或 URL）解析成其中所有蓝图的 **可直接导入的 raw .yaml URL**，闭合 search→import 链路（免去手动翻仓库找路径） |
 | `recommend_resources` | **读取运行中 HA 的真实设备（厂商/集成/实体域），自动匹配最相关的 HACS 资源**（小白零参数即可被推荐） |
 | `import_blueprint` | 按 URL 把蓝图 YAML 导入运行中的 HA（自动备份并重载，受 `allow_write` 约束） |
+| `remember_memory` / `recall_memory` / `list_memory` / `forget_memory` | **跨会话持久记忆**：记住用户偏好/设备备注/历史决策（按 `category` 分类、带时间戳，落盘 `.storage`） |
+| `snapshot_device_profile` | 把当前真实设备信号（厂商/集成域/实体域计数）快照进记忆 `devices` 分类，供后续会话直接调用、并据此发现变化 |
 
 ### Resource Hub · 把全网资源收敛为可调用的底层
 
