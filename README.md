@@ -40,21 +40,34 @@
 | `list_areas` / `registry_overview` | 区域、实体/设备/区域注册表概览 |
 | `read_logs` | 读取 HA 日志尾部用于排错 |
 | `search_community_resources` | 检索 **HACS** 全量目录（自定义集成 / 前端卡片 / 主题）按品牌·设备·关键词 |
-| `search_github` / `search_blueprints` | 在 GitHub 搜 HA 相关仓库/模板/示例、社区蓝图 |
-| `list_repo_blueprints` | 把一个 GitHub 仓库（`owner/name` 或 URL）解析成其中所有蓝图的 **可直接导入的 raw .yaml URL**，闭合 search→import 链路（免去手动翻仓库找路径） |
-| `recommend_resources` | **读取运行中 HA 的真实设备（厂商/集成/实体域），自动匹配最相关的 HACS 资源**（小白零参数即可被推荐） |
-| `import_blueprint` | 按 URL 把蓝图 YAML 导入运行中的 HA（自动备份并重载，受 `allow_write` 约束） |
+| `search_github` / `search_blueprints` | 在 GitHub 搜 HA 相关仓库/模板/示例、社区蓝图（蓝图检索带**逐级放宽召回阶梯**：自然多词短语也不会返回 0 结果） |
+| `discover_resources` | **一句自由文本，一次并发搜全部来源**（HACS 目录 + GitHub 仓库 + 社区蓝图），返回各来源结果与一份**跨源去重融合的 `top` 榜**（按跨源命中数→stars 排序）。小白输入品牌或需求即可同时拿到可装集成/卡片、示例仓库、可导入蓝图 |
+| `list_repo_blueprints` | 把一个 GitHub 仓库（`owner/name` 或 URL）解析成其中所有蓝图的 **可直接导入的 raw .yaml URL**，闭合 search→import 链路（两级探测：标准 `blueprints/` 目录 + 根目录单文件内容嗅探） |
+| `recommend_resources` | **读取运行中 HA 的真实设备（厂商/集成/实体域），一次调用融合推荐 HACS 集成 + 前端卡片 + 现成自动化蓝图**（各带匹配理由；小白零参数即可被推荐） |
+| `recommend_blueprints` | 把真实实体域映射成意图、给出**针对你设备的现成蓝图**；记忆感知（偏好意图前置、已导入仓库降权） |
+| `import_blueprint` | 按 URL 把蓝图 YAML 导入运行中的 HA（自动按蓝图内容识别 automation/script/template 域、备份并重载，受 `allow_write` 约束；返回 `loadable` 校验本 HA 版本能否真正加载该蓝图） |
+| `validate_blueprint_inputs` / `create_automation_from_blueprint` | 校验/实例化蓝图为真实 automation 或 script（**域自动识别**，script 域蓝图正确落入 `scripts.yaml`；接受 `blueprint_path` 别名，与导入输出无缝衔接） |
 | `remember_memory` / `recall_memory` / `list_memory` / `forget_memory` | **跨会话持久记忆**：记住用户偏好/设备备注/历史决策（按 `category` 分类、带时间戳，落盘 `.storage`） |
 | `snapshot_device_profile` | 把当前真实设备信号（厂商/集成域/实体域计数）快照进记忆 `devices` 分类，供后续会话直接调用、并据此发现变化 |
 
 ### Resource Hub · 把全网资源收敛为可调用的底层
 
-`resources.py` 把"散落在全网的 Home Assistant / 智能家居资源"收敛成确定性工具：操作者（外部 agent）随时可检索 **HACS** 目录、**GitHub** 仓库与社区**蓝图**，并以 `recommend_resources` **读取用户 HA 里真实的设备厂商与集成，反向匹配最该装的集成与前端卡片**——用户什么都不懂，也能被精准推荐、再用 `import_blueprint` 一步把蓝图导入。全程只读取公开数据、无模型、无外部推理端点；唯一的写操作 `import_blueprint` 受 `allow_write` 约束且限制在 config 目录内。
+`resources.py` 把"散落在全网的 Home Assistant / 智能家居资源"收敛成确定性工具，两条互补路径取之于网：
+
+- **查询驱动**：`discover_resources(query)` 一句自由文本并发搜 HACS 目录 + GitHub 仓库 + 社区蓝图，跨源去重融合成一份 `top` 榜。
+- **设备驱动**：`recommend_resources()` 零参数读取用户 HA 里真实的设备厂商与实体域，反向融合推荐该装的集成、前端卡片与现成自动化蓝图——用户什么都不懂，也能被精准推荐。
+
+命中后用 `list_repo_blueprints` → `import_blueprint` → `validate_blueprint_inputs` → `create_automation_from_blueprint` 一条链把蓝图变成运行中的自动化/脚本（域自动识别、导入即校验可加载性、参数别名无缝衔接）。任一来源失败（限流/网络）都独立降级、不影响其它来源（见 `partial_errors`）。全程只读取公开数据、无模型、无外部推理端点；唯一的写操作 `import_blueprint` 受 `allow_write` 约束且限制在 config 目录内。可选导出 `GITHUB_TOKEN` / `GH_TOKEN` 为 HA 进程鉴权以提高 GitHub 检索速率上限。
 
 ```bash
-# 例：按品牌检索 HACS 集成
+# 例：设备驱动——零参数读真实设备，融合推荐集成/卡片/蓝图
 curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
   -d '{"tool":"recommend_resources","args":{}}' \
+  http://<HA>/api/ha_copilot/run_tool
+
+# 例：查询驱动——一句话搜全部来源
+curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"tool":"discover_resources","args":{"query":"xiaomi vacuum"}}' \
   http://<HA>/api/ha_copilot/run_tool
 ```
 
