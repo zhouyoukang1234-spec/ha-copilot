@@ -1921,6 +1921,129 @@ async def _get_recorder_info(hass: HomeAssistant) -> dict[str, Any]:
     }
 
 
+async def _set_state(hass: HomeAssistant, entity_id: str, state: str,
+                     attributes: dict | None = None) -> dict[str, Any]:
+    """Directly set/override an entity's state in the state machine.
+
+    A virtual write to hass.states — useful to seed a test value so an agent can
+    exercise templates/automations against it, or to push a value for an entity
+    no integration backs. Note: a real integration may overwrite this on its
+    next update; this does not persist to any device.
+    """
+    if "." not in entity_id:
+        return {"error": "entity_id must be in '<domain>.<object_id>' form"}
+    prev = hass.states.get(entity_id)
+    hass.states.async_set(entity_id, state, attributes or {})
+    new = hass.states.get(entity_id)
+    return {"ok": True, "entity_id": entity_id,
+            "previous_state": prev.state if prev else None,
+            "state": new.state if new else None,
+            "attributes": dict(new.attributes) if new else {}}
+
+
+async def _get_automation_config(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Return an automation's full definition (alias/trigger/condition/action/
+    mode) from automations.yaml, matched by id, alias, or entity_id. The
+    configuration behind the entity, complementing get_automation_trace."""
+    ereg = er.async_get(hass)
+    target_id = identifier
+    if identifier.startswith("automation."):
+        ent = ereg.async_get(identifier)
+        if ent and ent.unique_id:
+            target_id = ent.unique_id
+    path = _safe_path(hass, "automations.yaml")
+    if not os.path.isfile(path):
+        return {"error": "automations.yaml not found"}
+
+    def _load() -> list:
+        with open(path, encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or []
+
+    items = await hass.async_add_executor_job(_load)
+    for item in items:
+        if str(item.get("id")) == str(target_id) or item.get("alias") == identifier:
+            return {"found": True, "config": item}
+    return {"found": False, "error": f"automation '{identifier}' not found in automations.yaml"}
+
+
+async def _validate_automation_config(hass: HomeAssistant, config: dict) -> dict[str, Any]:
+    """Validate an automation config against HA's schema WITHOUT saving it —
+    returns ok or the precise validation error, so an agent can author a correct
+    automation before create_automation/update_automation."""
+    from homeassistant.components.automation.config import async_validate_config_item
+    try:
+        validated = await async_validate_config_item(hass, "automation", config)
+    except Exception as exc:  # noqa: BLE001 - validation errors are user-facing
+        return {"valid": False, "error": f"{type(exc).__name__}: {exc}"}
+    if validated is None:
+        return {"valid": False, "error": "config did not produce a valid automation"}
+    return {"valid": True, "alias": config.get("alias"),
+            "trigger_count": len(config.get("triggers") or config.get("trigger") or []),
+            "action_count": len(config.get("actions") or config.get("action") or [])}
+
+
+async def _list_config_flows(hass: HomeAssistant) -> dict[str, Any]:
+    """Integrations that support a UI config flow + any flows currently
+    in-progress (handler/step/source) — the integration setup surface."""
+    from homeassistant.loader import async_get_config_flows
+    domains = sorted(await async_get_config_flows(hass))
+    in_progress = [{
+        "flow_id": f.get("flow_id"),
+        "handler": f.get("handler"),
+        "step_id": f.get("step_id"),
+        "source": (f.get("context") or {}).get("source"),
+    } for f in hass.config_entries.flow.async_progress()]
+    return {"supported_count": len(domains), "supported_domains": domains,
+            "in_progress_count": len(in_progress), "in_progress": in_progress}
+
+
+async def _import_statistics(hass: HomeAssistant, statistic_id: str,
+                             statistics: list[dict], unit: str | None = None,
+                             name: str | None = None,
+                             has_mean: bool = False,
+                             has_sum: bool = False) -> dict[str, Any]:
+    """Insert long-term statistics points for a statistic_id (recorder write).
+
+    Enables backfilling history for energy dashboards / custom metrics. If the
+    id contains ':' it is treated as an EXTERNAL statistic (its own source);
+    otherwise it is an internal (recorder-source) statistic. Each point needs a
+    UTC hour-aligned `start` plus some of mean/min/max/sum/state.
+    """
+    from homeassistant.components.recorder.statistics import (
+        async_add_external_statistics,
+        async_import_statistics,
+    )
+    external = ":" in statistic_id
+    source = statistic_id.split(":", 1)[0] if external else "recorder"
+    if not has_mean and not has_sum:
+        has_mean = any("mean" in s for s in statistics)
+        has_sum = any("sum" in s for s in statistics)
+    metadata = {
+        "has_mean": has_mean,
+        "has_sum": has_sum,
+        "name": name,
+        "source": source,
+        "statistic_id": statistic_id,
+        "unit_of_measurement": unit,
+    }
+    points = []
+    for s in statistics:
+        start = dt_util.parse_datetime(s["start"]) if isinstance(s.get("start"), str) else s.get("start")
+        if start is None:
+            return {"error": f"invalid 'start' in point: {s.get('start')}"}
+        pt: dict[str, Any] = {"start": dt_util.as_utc(start)}
+        for k in ("mean", "min", "max", "sum", "state"):
+            if k in s:
+                pt[k] = s[k]
+        points.append(pt)
+    if external:
+        async_add_external_statistics(hass, metadata, points)
+    else:
+        async_import_statistics(hass, metadata, points)
+    return {"ok": True, "statistic_id": statistic_id, "external": external,
+            "imported": len(points)}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -2202,6 +2325,25 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _get_loaded_integrations(hass)
         if name == "call_service_response":
             return await _call_service_response(hass, args["domain"], args["service"], args.get("data"))
+        # ---- deep-fusion round 7 ----
+        if name == "get_automation_config":
+            return await _get_automation_config(hass, args.get("identifier") or args.get("id") or args.get("entity_id"))
+        if name == "validate_automation_config":
+            return await _validate_automation_config(hass, args["config"])
+        if name == "list_config_flows":
+            return await _list_config_flows(hass)
+        if name == "set_state":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_state(hass, args["entity_id"], args["state"], args.get("attributes"))
+        if name == "import_statistics":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _import_statistics(
+                hass, args["statistic_id"], args["statistics"],
+                unit=args.get("unit"), name=args.get("name"),
+                has_mean=bool(args.get("has_mean", False)),
+                has_sum=bool(args.get("has_sum", False)))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -3264,6 +3406,61 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "service": {"type": "string"},
                 "data": {"type": "object", "description": "Service call data/target."},
             }, "required": ["domain", "service"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_automation_config",
+            "description": "Return an automation's full definition (alias/triggers/conditions/actions/mode) from automations.yaml, matched by id, alias, or entity_id. The configuration behind the entity, complementing get_automation_trace.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "automation id, alias, or entity_id."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "validate_automation_config",
+            "description": "Validate an automation config dict against HA's schema WITHOUT saving — returns valid:true or the precise validation error. Use before create_automation/update_automation to author a correct automation.",
+            "parameters": {"type": "object", "properties": {
+                "config": {"type": "object", "description": "Automation config (alias, triggers, conditions, actions, mode)."},
+            }, "required": ["config"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_config_flows",
+            "description": "Integrations that support a UI config flow + any flows currently in-progress (handler/step/source) — the integration setup surface.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_state",
+            "description": "Directly set/override an entity's state in the state machine (virtual write to hass.states). Useful to seed a test value so templates/automations can be exercised, or to push a value for an entity no integration backs. A real integration may overwrite it on its next update; does not persist to a device.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string"},
+                "state": {"type": "string"},
+                "attributes": {"type": "object", "description": "Optional state attributes."},
+            }, "required": ["entity_id", "state"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "import_statistics",
+            "description": "Insert long-term statistics points for a statistic_id (recorder write) — backfill energy-dashboard/custom-metric history. If the id contains ':' it is an EXTERNAL statistic (own source); otherwise internal. Each point needs a UTC hour-aligned 'start' plus some of mean/min/max/sum/state.",
+            "parameters": {"type": "object", "properties": {
+                "statistic_id": {"type": "string", "description": "e.g. 'sensor.energy' or external 'ha_copilot:my_metric'."},
+                "statistics": {"type": "array", "description": "List of points: {start: ISO8601, mean?/min?/max?/sum?/state?}.", "items": {"type": "object"}},
+                "unit": {"type": "string"},
+                "name": {"type": "string"},
+                "has_mean": {"type": "boolean"},
+                "has_sum": {"type": "boolean"},
+            }, "required": ["statistic_id", "statistics"]},
         },
     },
 ]

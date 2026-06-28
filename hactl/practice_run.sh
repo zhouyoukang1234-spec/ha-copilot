@@ -194,4 +194,22 @@ H "service response: weather.get_forecasts returns a payload (not just ok)"
 WID=$(hactl tool list_states --args '{"domain":"weather"}' | python -c "import sys,json;e=json.load(sys.stdin)['entities'];print(e[0]['entity_id'] if e else '')")
 if [ -n "$WID" ]; then hactl tool call_service_response --args "{\"domain\":\"weather\",\"service\":\"get_forecasts\",\"data\":{\"entity_id\":\"$WID\",\"type\":\"daily\"}}" | python -c "import sys,json;d=json.load(sys.stdin);print('ok:',d.get('ok'),'| response entities:',list((d.get('response') or {}).keys()))"; fi
 
+# ---- deep-fusion round 7: set_state / automation config + validate / config flows / import statistics ----
+H "set_state: seed a virtual sensor value, then read it back via a template"
+hactl tool set_state --args '{"entity_id":"sensor.copilot_practice_probe","state":"42","attributes":{"unit_of_measurement":"W"}}' >/dev/null
+hactl tool render_template --args '{"template":"{{ states(\"sensor.copilot_practice_probe\") }}"}' | python -c "import sys,json;print('virtual sensor renders:',json.load(sys.stdin)['result'])"
+
+H "validate_automation_config: check an automation config against HA's schema before saving"
+hactl tool validate_automation_config --args '{"config":{"alias":"practice ok","triggers":[{"trigger":"state","entity_id":"sun.sun"}],"actions":[{"action":"homeassistant.update_entity","target":{"entity_id":"sun.sun"}}]}}' | python -c "import sys,json;d=json.load(sys.stdin);print('valid:',d['valid'],'| triggers:',d.get('trigger_count'),'| actions:',d.get('action_count'))"
+
+H "get_automation_config: the definition behind an automation entity"
+hactl tool get_automation_config --args '{"identifier":"download_bing_wallpaper_daily"}' | python -c "import sys,json;d=json.load(sys.stdin);c=d.get('config',{});print('found:',d['found'],'| alias:',c.get('alias'),'| mode:',c.get('mode'))"
+
+H "list_config_flows: how many integrations support a UI setup flow"
+hactl tool list_config_flows | python -c "import sys,json;d=json.load(sys.stdin);print('config-flow integrations:',d['supported_count'],'| in-progress:',d['in_progress_count'])"
+
+H "import_statistics: backfill external long-term statistics (energy dashboard)"
+NOW=$(python -c "import datetime;n=datetime.datetime.now(datetime.timezone.utc).replace(minute=0,second=0,microsecond=0);import json;print(json.dumps([{'start':(n-datetime.timedelta(hours=2)).isoformat(),'sum':10,'state':10},{'start':(n-datetime.timedelta(hours=1)).isoformat(),'sum':25,'state':15}]))")
+hactl tool import_statistics --args "{\"statistic_id\":\"ha_copilot:practice_energy\",\"statistics\":$NOW,\"unit\":\"kWh\",\"name\":\"Copilot Practice Energy\",\"has_sum\":true}" | python -c "import sys,json;d=json.load(sys.stdin);print('imported points:',d.get('imported'),'| external:',d.get('external'))"
+
 echo; echo "### practice run complete"
