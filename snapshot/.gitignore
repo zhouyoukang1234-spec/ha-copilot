@@ -1,0 +1,14 @@
+# secrets & state
+secrets.yaml
+.storage/
+*.db
+*.db-*
+*.log
+*.log.*
+.HA_VERSION
+# python
+__pycache__/
+*.pyc
+venv/
+# vendor (install via HACS)
+www/community/
