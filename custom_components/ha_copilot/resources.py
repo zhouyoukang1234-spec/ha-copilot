@@ -21,6 +21,7 @@ config directory (same guarantees as the rest of the tool layer).
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from typing import Any
@@ -379,11 +380,12 @@ async def discover_resources(
                 "'low battery notification')"
             )
         }
-    hacs, github, blueprints, zigbee = await asyncio.gather(
+    hacs, github, blueprints, zigbee, tasmota = await asyncio.gather(
         search_community_resources(hass, q, "all", limit),
         search_github(hass, q, "stars", limit),
         search_blueprints(hass, q, limit),
         search_zigbee_devices(hass, q, limit),
+        search_tasmota_devices(hass, q, limit),
         return_exceptions=True,
     )
     errors: list[str] = []
@@ -401,6 +403,7 @@ async def discover_resources(
     github_r = _section("github", github)
     blueprint_r = _section("blueprints", blueprints)
     zigbee_r = _section("zigbee", zigbee)
+    tasmota_r = _section("tasmota", tasmota)
 
     # Fused top list: dedupe by repo full_name, keep the highest-starred, tag
     # each with which source(s) surfaced it.
@@ -435,10 +438,12 @@ async def discover_resources(
         "github": github_r,
         "blueprints": blueprint_r,
         "zigbee": zigbee_r,
+        "tasmota": tasmota_r,
         "note": (
             "Install HACS items as a custom repository by url; for a blueprint "
             "call list_repo_blueprints then import_blueprint. zigbee entries "
-            "show whether the hardware is supported (zigbee2mqtt_supported/zha)."
+            "show whether the hardware is supported (zigbee2mqtt_supported/zha); "
+            "tasmota entries carry a ready-to-flash template."
         ),
     }
     if errors:
@@ -552,6 +557,152 @@ async def search_zigbee_devices(
             "zigbee2mqtt_supported=true means it works with the Zigbee2MQTT "
             "bridge; pair it there, then use discover_resources/search_blueprints "
             "to find automations for the matching HA entity."
+        ),
+    }
+
+
+# Community Tasmota device-template database (blakadder): a device -> ready
+# Tasmota template (GPIO config) you flash onto ESP8266/ESP32 hardware. Free,
+# no auth. The published JSON contains a few malformed entries, so we extract
+# and parse objects individually and skip the bad ones rather than failing.
+_TASMOTA_DB_URL = "https://templates.blakadder.com/templates.json"
+_TASMOTA_SITE = "https://templates.blakadder.com"
+_TASMOTA_TTL = 6 * 3600
+_tasmota_cache: dict[str, Any] = {"devices": None, "ts": 0.0}
+
+
+def _extract_json_objects(text: str, start: int) -> list[str]:
+    """Yield each top-level ``{...}`` object string inside an array.
+
+    A string/escape-aware brace scanner: tolerates malformed sibling objects
+    (the caller parses each independently and skips failures) and nested
+    objects (e.g. a ``template`` mapping)."""
+    objs: list[str] = []
+    depth = 0
+    instr = False
+    esc = False
+    buf: list[str] = []
+    i, n = start, len(text)
+    while i < n:
+        c = text[i]
+        if depth == 0:
+            if c == "{":
+                depth = 1
+                buf = ["{"]
+            elif c == "]":
+                break
+            i += 1
+            continue
+        buf.append(c)
+        if instr:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                instr = False
+        elif c == '"':
+            instr = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                objs.append("".join(buf))
+        i += 1
+    return objs
+
+
+async def _fetch_tasmota_db(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Return the Tasmota template list, fetching+caching with a TTL.
+
+    Parses each device object independently so a handful of malformed entries
+    in the upstream file don't blank the whole database."""
+    now = time.time()
+    cached = _tasmota_cache.get("devices")
+    if cached is not None and (now - _tasmota_cache.get("ts", 0.0)) < _TASMOTA_TTL:
+        return cached
+    text = await _fetch_text(hass, _TASMOTA_DB_URL, timeout=30.0)
+    start = text.find("[", text.find('"templates"'))
+    devices: list[dict[str, Any]] = []
+    if start != -1:
+        for chunk in _extract_json_objects(text, start):
+            try:
+                d = json.loads(chunk)
+            except Exception:  # noqa: BLE001 - skip malformed upstream entries
+                continue
+            if isinstance(d, dict):
+                devices.append(d)
+    if devices:
+        _tasmota_cache["devices"] = devices
+        _tasmota_cache["ts"] = now
+    return devices
+
+
+async def search_tasmota_devices(
+    hass: HomeAssistant,
+    query: str,
+    limit: int = 15,
+) -> dict[str, Any]:
+    """Look a device up in the community Tasmota template database (blakadder).
+
+    A non-expert types a brand/model ("sonoff basic", "athom plug") and gets
+    the ready-to-flash **Tasmota template** (GPIO config) plus the reference
+    page — so DIY/ESP hardware is matched to a working firmware config without
+    hunting forums. Ranks exact model match first, then name/model/type word
+    overlap. Read-only.
+    """
+    q = (query or "").strip()
+    if not q:
+        return {"error": "provide a device brand or model (e.g. 'sonoff basic' or 'athom plug')"}
+    try:
+        devices = await _fetch_tasmota_db(hass)
+    except Exception as err:  # noqa: BLE001 - surface fetch errors cleanly
+        return {"error": f"{type(err).__name__}: {err}"}
+    if not devices:
+        return {"error": "tasmota template database unavailable or empty"}
+
+    words = [w for w in q.lower().split() if w]
+
+    def _hay(d: dict[str, Any]) -> str:
+        return " ".join(
+            str(d.get(k) or "") for k in ("name", "model", "type", "category")
+        ).lower()
+
+    scored: list[tuple[int, dict[str, Any]]] = []
+    for d in devices:
+        model = str(d.get("model") or "").lower()
+        hay = _hay(d)
+        if q.lower() == model:
+            score = 1000
+        else:
+            hits = sum(1 for w in words if w in hay)
+            if hits < len(words):
+                continue
+            score = hits
+        scored.append((score, d))
+
+    scored.sort(key=lambda t: t[0], reverse=True)
+    results = []
+    for _, d in scored[: max(1, limit)]:
+        link = d.get("link") or ""
+        results.append({
+            "name": d.get("name"),
+            "model": d.get("model"),
+            "type": d.get("type"),
+            "category": d.get("category"),
+            "tasmota_template": d.get("template"),
+            "url": f"{_TASMOTA_SITE}{link}" if link.startswith("/") else (link or None),
+        })
+    return {
+        "ok": True,
+        "query": q,
+        "count": len(results),
+        "results": results,
+        "source": "blakadder tasmota template database",
+        "note": (
+            "tasmota_template is the GPIO config to paste into Tasmota "
+            "(Configuration > Configure Template) after flashing the device."
         ),
     }
 
