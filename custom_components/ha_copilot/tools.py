@@ -2362,18 +2362,33 @@ def _flatten_blueprint_inputs(meta_input: dict) -> dict[str, dict]:
 
 
 async def _get_blueprint_metadata(hass: HomeAssistant, domain: str, path: str):
-    if domain == "automation":
-        from homeassistant.components.automation.helpers import async_get_blueprints
-    elif domain == "script":
-        from homeassistant.components.script.helpers import async_get_blueprints
-    else:
-        return None, f"unsupported blueprint domain '{domain}' (automation|script)"
-    domain_bps = async_get_blueprints(hass)
-    try:
-        bp = await domain_bps.async_get_blueprint(path)
-    except Exception as exc:  # noqa: BLE001
-        return None, f"blueprint '{path}' not found: {exc}"
-    return bp, None
+    """Resolve a blueprint's metadata, auto-detecting its domain.
+
+    A blueprint's domain (automation vs script) is intrinsic to the file, but
+    callers (and agents chaining import -> validate -> create) routinely omit
+    it and fall back to the 'automation' default. So we try the requested
+    domain first, then the others, returning the domain that actually holds the
+    blueprint — making the chain robust regardless of whether domain was
+    threaded through. Returns (bp, resolved_domain, err)."""
+    order = [domain] + [d for d in ("automation", "script") if d != domain]
+    last_exc = None
+    for dom in order:
+        if dom == "automation":
+            from homeassistant.components.automation.helpers import (
+                async_get_blueprints,
+            )
+        elif dom == "script":
+            from homeassistant.components.script.helpers import (
+                async_get_blueprints,
+            )
+        else:
+            continue
+        try:
+            bp = await async_get_blueprints(hass).async_get_blueprint(path)
+            return bp, dom, None
+        except Exception as exc:  # noqa: BLE001 - try the next domain
+            last_exc = exc
+    return None, domain, f"blueprint '{path}' not found: {last_exc}"
 
 
 async def _validate_blueprint_inputs(hass: HomeAssistant, path: str,
@@ -2381,7 +2396,7 @@ async def _validate_blueprint_inputs(hass: HomeAssistant, path: str,
     """Check that a set of inputs satisfies a blueprint's schema BEFORE
     instantiating it — reports missing required inputs (those without a
     default) and any unknown keys. Precursor to create_automation_from_blueprint."""
-    bp, err = await _get_blueprint_metadata(hass, domain, path)
+    bp, resolved_domain, err = await _get_blueprint_metadata(hass, domain, path)
     if err:
         return {"error": err}
     meta = bp.metadata or {}
@@ -2393,6 +2408,7 @@ async def _validate_blueprint_inputs(hass: HomeAssistant, path: str,
     return {
         "valid": not missing and not unknown,
         "blueprint": meta.get("name"),
+        "domain": resolved_domain,
         "all_inputs": sorted(flat.keys()),
         "required": sorted(required),
         "missing": sorted(missing),
@@ -2403,20 +2419,58 @@ async def _validate_blueprint_inputs(hass: HomeAssistant, path: str,
 async def _create_automation_from_blueprint(hass: HomeAssistant, path: str,
                                             inputs: dict, alias: str,
                                             domain: str = "automation") -> dict[str, Any]:
-    """Instantiate a blueprint into a real automation (writes a use_blueprint
-    entry to automations.yaml and reloads). Inputs are validated against the
-    blueprint schema first; instantiation is rejected on any missing input."""
+    """Instantiate a blueprint into a real automation or script.
+
+    Writes a ``use_blueprint`` entry to automations.yaml (automation domain) or
+    scripts.yaml (script domain) and reloads. The blueprint's domain is
+    auto-detected, so a script blueprint is correctly instantiated as a script
+    even if the caller did not pass domain=script. Inputs are validated first;
+    instantiation is rejected on any missing input."""
     check = await _validate_blueprint_inputs(hass, path, inputs, domain)
     if "error" in check:
         return check
     if check["missing"]:
         return {"error": f"missing required inputs: {check['missing']}",
                 "required": check["required"]}
-    automation = {"alias": alias, "use_blueprint": {"path": path, "input": inputs}}
-    result = await _create_automation(hass, automation)
+    resolved_domain = check.get("domain", domain)
+    if resolved_domain == "script":
+        result = await _create_script_from_blueprint(hass, alias, path, inputs)
+    else:
+        automation = {"alias": alias, "use_blueprint": {"path": path, "input": inputs}}
+        result = await _create_automation(hass, automation)
     result["blueprint"] = path
+    result["domain"] = resolved_domain
     result["from_blueprint"] = True
     return result
+
+
+async def _create_script_from_blueprint(hass: HomeAssistant, alias: str,
+                                        path: str, inputs: dict) -> dict[str, Any]:
+    """Append a use_blueprint script entry to scripts.yaml (keyed by slug) and reload."""
+    yaml_path = _safe_path(hass, "scripts.yaml")
+    slug = _slugify(alias) or "copilot_script"
+
+    def _append() -> str:
+        existing: dict = {}
+        if os.path.isfile(yaml_path):
+            with open(yaml_path, encoding="utf-8") as f:
+                loaded = yaml.safe_load(f)
+                if isinstance(loaded, dict):
+                    existing = loaded
+        key = slug
+        i = 2
+        while key in existing:
+            key = f"{slug}_{i}"
+            i += 1
+        existing[key] = {"alias": alias, "use_blueprint": {"path": path, "input": inputs}}
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(existing, f, allow_unicode=True, sort_keys=False)
+        return key
+
+    key = await hass.async_add_executor_job(_append)
+    if hass.services.has_service("script", "reload"):
+        await hass.services.async_call("script", "reload", {}, blocking=True)
+    return {"ok": True, "script_entity_id": f"script.{key}"}
 
 
 async def _get_template_functions(hass: HomeAssistant) -> dict[str, Any]:
