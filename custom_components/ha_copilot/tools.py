@@ -225,7 +225,21 @@ async def _create_automation(hass: HomeAssistant, automation: dict) -> dict[str,
     total = await hass.async_add_executor_job(_append)
     if hass.services.has_service("automation", "reload"):
         await hass.services.async_call("automation", "reload", {}, blocking=True)
-    return {"ok": True, "automation_id": automation.get("id"), "total_automations": total}
+    # Resolve the entity_id HA assigned: the automation entity exposes its
+    # config id as an attribute, but its entity_id is derived from the alias
+    # slug. Return it so callers can verify/control/delete what they created.
+    target_id = automation.get("id")
+    entity_id = next(
+        (st.entity_id for st in hass.states.async_all("automation")
+         if st.attributes.get("id") == target_id),
+        None,
+    )
+    return {
+        "ok": True,
+        "automation_id": target_id,
+        "entity_id": entity_id,
+        "total_automations": total,
+    }
 
 
 async def _reload(hass: HomeAssistant, domain: str) -> dict[str, Any]:
@@ -776,6 +790,21 @@ def _purge_restored_entities(
                 hass.states.async_remove(st.entity_id)
             purged.append(st.entity_id)
     return purged
+
+
+def _resolve_automation_identifier(hass: HomeAssistant, identifier: str) -> str:
+    """Map an ``automation.<slug>`` entity_id to its config id.
+
+    automations.yaml is keyed by config ``id``/``alias``, but the chain
+    create -> (returns entity_id) -> delete/update naturally hands back an
+    entity_id. The automation entity exposes its config id as a state
+    attribute, so resolve through it; fall back to the raw value (which still
+    matches by id/alias) when no state is found."""
+    if isinstance(identifier, str) and identifier.startswith("automation."):
+        st = hass.states.get(identifier)
+        if st and st.attributes.get("id") is not None:
+            return str(st.attributes["id"])
+    return identifier
 
 
 async def _delete_automation(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
@@ -3109,18 +3138,16 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not ident or not new_alias:
                 return {"error": "missing required arguments: identifier + new_alias"}
             if name == "update_automation":
-                return await _update_automation(hass, ident, new_alias)
+                return await _update_automation(hass, _resolve_automation_identifier(hass, ident), new_alias)
             return await _update_script(hass, ident, new_alias)
         if name in ("delete_automation", "delete_scene", "delete_script"):
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
-            ident = args.get("identifier") or args.get("id") or args.get("name")
-            if name == "delete_script":
-                ident = ident or args.get("entity_id")
+            ident = args.get("identifier") or args.get("id") or args.get("name") or args.get("entity_id")
             if not ident:
-                return {"error": "missing required argument: identifier"}
+                return {"error": "missing required argument: identifier (id, alias or entity_id)"}
             if name == "delete_automation":
-                return await _delete_automation(hass, ident)
+                return await _delete_automation(hass, _resolve_automation_identifier(hass, ident))
             if name == "delete_scene":
                 return await _delete_scene(hass, ident)
             return await _delete_script(hass, ident)
