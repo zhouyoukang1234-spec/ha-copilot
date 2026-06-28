@@ -443,6 +443,112 @@ async def discover_resources(
 _GITHUB_API = "https://api.github.com"
 _RAW_BASE = "https://raw.githubusercontent.com"
 
+# Community Zigbee device database (blakadder): one machine-readable JSON of
+# ~2700 Zigbee devices with the bridges each is compatible with (zigbee2mqtt,
+# zha, deconz, tasmota, …). Free, no auth.
+_ZIGBEE_DB_URL = "https://zigbee.blakadder.com/devices.json"
+_ZIGBEE_SITE = "https://zigbee.blakadder.com"
+_ZIGBEE_TTL = 6 * 3600
+# Module-level cache so a 1 MB database is fetched at most once per TTL across
+# the many tool calls a session makes.
+_zigbee_cache: dict[str, Any] = {"devices": None, "ts": 0.0}
+
+
+async def _fetch_zigbee_db(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Return the Zigbee device list, fetching+caching with a TTL."""
+    now = time.time()
+    cached = _zigbee_cache.get("devices")
+    if cached is not None and (now - _zigbee_cache.get("ts", 0.0)) < _ZIGBEE_TTL:
+        return cached
+    data = await _fetch_json(hass, _ZIGBEE_DB_URL, timeout=30.0)
+    devices = data.get("devices", []) if isinstance(data, dict) else (data or [])
+    if isinstance(devices, list) and devices:
+        _zigbee_cache["devices"] = devices
+        _zigbee_cache["ts"] = now
+    return devices if isinstance(devices, list) else []
+
+
+async def search_zigbee_devices(
+    hass: HomeAssistant,
+    query: str,
+    limit: int = 15,
+) -> dict[str, Any]:
+    """Look a Zigbee device up in the community database (blakadder).
+
+    A non-expert types a brand or a model on the box ("aqara motion",
+    "RTCGQ11LM", "sonoff plug") and gets back which bridges support it —
+    crucially whether **zigbee2mqtt** does — plus the device's reference page.
+    This closes the gap before the blueprint pipeline: confirm the hardware is
+    supported (and by which stack) before searching for automations for it.
+
+    Scores: exact model / zigbeemodel match first, then vendor+name substring
+    matches, ranked by how many query words hit. Read-only.
+    """
+    q = (query or "").strip()
+    if not q:
+        return {"error": "provide a device brand or model (e.g. 'aqara motion' or 'RTCGQ11LM')"}
+    try:
+        devices = await _fetch_zigbee_db(hass)
+    except Exception as err:  # noqa: BLE001 - surface fetch errors cleanly
+        return {"error": f"{type(err).__name__}: {err}"}
+    if not devices:
+        return {"error": "zigbee device database unavailable or empty"}
+
+    words = [w for w in q.lower().split() if w]
+
+    def _haystack(d: dict[str, Any]) -> str:
+        parts = [
+            str(d.get("vendor") or ""),
+            str(d.get("name") or ""),
+            str(d.get("model") or ""),
+        ]
+        zm = d.get("zigbeemodel")
+        if isinstance(zm, list):
+            parts.extend(str(x) for x in zm)
+        return " ".join(parts).lower()
+
+    scored: list[tuple[int, dict[str, Any]]] = []
+    for d in devices:
+        model = str(d.get("model") or "").lower()
+        zm = [str(x).lower() for x in (d.get("zigbeemodel") or []) if x]
+        hay = _haystack(d)
+        if q.lower() == model or q.lower() in zm:
+            score = 1000
+        else:
+            hits = sum(1 for w in words if w in hay)
+            if hits < len(words):
+                continue
+            score = hits
+        scored.append((score, d))
+
+    scored.sort(key=lambda t: t[0], reverse=True)
+    results = []
+    for _, d in scored[: max(1, limit)]:
+        compatible = d.get("compatible") or []
+        link = d.get("link") or ""
+        results.append({
+            "vendor": d.get("vendor"),
+            "name": d.get("name"),
+            "model": d.get("model"),
+            "category": d.get("category"),
+            "zigbee2mqtt_supported": "z2m" in compatible,
+            "zha_supported": "zha" in compatible,
+            "compatible_bridges": compatible,
+            "url": f"{_ZIGBEE_SITE}{link}" if link.startswith("/") else (link or None),
+        })
+    return {
+        "ok": True,
+        "query": q,
+        "count": len(results),
+        "results": results,
+        "source": "blakadder zigbee database",
+        "note": (
+            "zigbee2mqtt_supported=true means it works with the Zigbee2MQTT "
+            "bridge; pair it there, then use discover_resources/search_blueprints "
+            "to find automations for the matching HA entity."
+        ),
+    }
+
 
 async def list_repo_blueprints(
     hass: HomeAssistant,
