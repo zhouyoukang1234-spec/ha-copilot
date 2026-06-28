@@ -34,6 +34,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify as _slugify
 
+from . import resources
 from .const import CONF_ALLOW_RESTART, CONF_ALLOW_WRITE
 
 
@@ -3200,12 +3201,18 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "list_zones":
             return await _list_zones(hass)
         if name == "get_automation_trace":
-            return await _get_automation_trace(hass, args.get("identifier") or args.get("automation_id") or args.get("entity_id"))
+            ident = args.get("identifier") or args.get("automation_id") or args.get("entity_id")
+            if not ident:
+                return {"error": "missing required argument: identifier (automation_id or entity_id)"}
+            return await _get_automation_trace(hass, ident)
         # ---- deep-fusion round 6 ----
         if name == "get_system_log":
             return await _get_system_log(hass, args.get("level"), args.get("limit", 50))
         if name == "get_integration_manifest":
-            return await _get_integration_manifest(hass, args.get("domain") or args.get("identifier"))
+            ident = args.get("domain") or args.get("identifier")
+            if not ident:
+                return {"error": "missing required argument: domain"}
+            return await _get_integration_manifest(hass, ident)
         if name == "get_recorder_info":
             return await _get_recorder_info(hass)
         if name == "get_loaded_integrations":
@@ -3214,7 +3221,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _call_service_response(hass, args["domain"], args["service"], args.get("data"))
         # ---- deep-fusion round 7 ----
         if name == "get_automation_config":
-            return await _get_automation_config(hass, args.get("identifier") or args.get("id") or args.get("entity_id"))
+            ident = args.get("identifier") or args.get("id") or args.get("entity_id")
+            if not ident:
+                return {"error": "missing required argument: identifier (id or entity_id)"}
+            return await _get_automation_config(hass, ident)
         if name == "validate_automation_config":
             return await _validate_automation_config(hass, args["config"])
         if name == "list_config_flows":
@@ -3233,7 +3243,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 has_sum=bool(args.get("has_sum", False)))
         # ---- deep-fusion round 8 ----
         if name == "get_script_config":
-            return await _get_script_config(hass, args.get("identifier") or args.get("entity_id") or args.get("id"))
+            ident = args.get("identifier") or args.get("entity_id") or args.get("id")
+            if not ident:
+                return {"error": "missing required argument: identifier (entity_id or id)"}
+            return await _get_script_config(hass, ident)
         if name == "get_scene_config":
             return await _get_scene_config(hass, args.get("identifier") or args.get("name") or args.get("id"))
         if name == "get_device_automations":
@@ -3299,7 +3312,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "get_group":
             return await _get_group(hass, args["entity_id"])
         if name == "get_person":
-            return await _get_person(hass, args.get("identifier") or args.get("person") or args.get("name"))
+            ident = args.get("identifier") or args.get("person") or args.get("name")
+            if not ident:
+                return {"error": "missing required argument: identifier (person or name)"}
+            return await _get_person(hass, ident)
         if name == "set_input_helper":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -3311,6 +3327,41 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 hass, args["entity_id"], args["item"], rename=args.get("rename"),
                 status=args.get("status"), due_date=args.get("due_date"),
                 description=args.get("description"))
+        if name == "search_community_resources":
+            return await resources.search_community_resources(
+                hass,
+                args.get("query", ""),
+                args.get("category", "all"),
+                int(args.get("limit", 20)),
+            )
+        if name == "search_github":
+            return await resources.search_github(
+                hass,
+                args["query"],
+                args.get("sort", "stars"),
+                int(args.get("limit", 15)),
+            )
+        if name == "search_blueprints":
+            return await resources.search_blueprints(
+                hass, args.get("query", ""), int(args.get("limit", 15))
+            )
+        if name == "list_repo_blueprints":
+            repo = args.get("repo") or args.get("full_name") or args.get("url")
+            if not repo:
+                return {"error": "missing required argument: repo (owner/name or GitHub URL)"}
+            return await resources.list_repo_blueprints(
+                hass, repo, int(args.get("limit", 30))
+            )
+        if name == "recommend_resources":
+            return await resources.recommend_resources(
+                hass, int(args.get("limit", 15))
+            )
+        if name == "import_blueprint":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await resources.import_blueprint(
+                hass, store, args["url"], args.get("domain")
+            )
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -3332,6 +3383,10 @@ _READ_ONLY_TOOLS = frozenset({
     "render_template",
     "evaluate_condition",
     "get_template_functions",
+    "search_community_resources",
+    "search_github",
+    "search_blueprints",
+    "recommend_resources",
 })
 # Irreversible / disruptive operations (removal, data purge, full restart).
 _DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics"})
@@ -4826,6 +4881,73 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "due_date": {"type": "string", "description": "due date YYYY-MM-DD (optional)."},
                 "description": {"type": "string", "description": "item description (optional)."},
             }, "required": ["entity_id", "item"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_community_resources",
+            "description": "Search the HACS community catalog (custom integrations, Lovelace/frontend cards, themes) by keyword \u2014 e.g. a brand ('xiaomi', 'aqara'), a device type ('vacuum', 'thermostat'), or a card name ('mushroom'). Returns matching repositories with stars, description and GitHub url so the operator can pull in the right ecosystem resource. Read-only network search; pair with recommend_resources to auto-match the user's own devices.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "keywords: brand, device type, or card/integration name."},
+                "category": {"type": "string", "description": "'all' (default), 'integration', 'plugin'/'frontend'/'card', 'theme', 'appdaemon', or 'python_script'."},
+                "limit": {"type": "integer", "description": "max results (default 20)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_github",
+            "description": "Search GitHub repositories for Home Assistant-related projects, templates and examples matching a device/brand/topic. The query is automatically scoped to the HA ecosystem. Uses GitHub's public search API (unauthenticated rate limit \u2014 use sparingly). Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "search terms, e.g. 'tuya local' or 'esphome thermostat'."},
+                "sort": {"type": "string", "description": "'stars' (default), 'updated', or 'forks'."},
+                "limit": {"type": "integer", "description": "max results (default 15, max 30)."},
+            }, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_blueprints",
+            "description": "Find community blueprint repositories (ready-made automation/script templates) on GitHub, optionally filtered by keyword. Returns repos tagged as HA blueprints; take a raw blueprint .yaml url from one and feed it to import_blueprint. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "optional keywords, e.g. 'motion light' or 'notify low battery'."},
+                "limit": {"type": "integer", "description": "max results (default 15, max 30)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_repo_blueprints",
+            "description": "Resolve a GitHub repo (owner/name or URL) to the raw .yaml URLs of the blueprints it contains \u2014 closing the search\u2192import loop so you can feed a raw_url straight to import_blueprint without browsing the repo. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "repo": {"type": "string", "description": "owner/name (e.g. 'EPMatt/awesome-ha-blueprints') or a GitHub URL."},
+                "limit": {"type": "integer", "description": "max blueprint files (default 30)."},
+            }, "required": ["repo"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recommend_resources",
+            "description": "Inspect the running HA's real devices (manufacturers), configured integrations and entity domains, then recommend HACS integrations and frontend cards matched to that hardware \u2014 with a reason for each. The 'match my devices to the right resources' capability: an operator can call this with zero arguments to surface what a non-expert user would otherwise never find. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "limit": {"type": "integer", "description": "max recommendations per kind (default 15)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "import_blueprint",
+            "description": "Fetch a blueprint YAML by URL (GitHub blob/raw/gist) and import it into the running HA under blueprints/<domain>/ha_copilot/. Keeps a .copilot.bak backup and reloads the domain. Domain is read from the blueprint ('automation'/'script'/'template') unless overridden. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "url": {"type": "string", "description": "URL to the blueprint .yaml (a GitHub blob url is auto-converted to raw)."},
+                "domain": {"type": "string", "description": "optional override: 'automation', 'script', or 'template'."},
+            }, "required": ["url"]},
         },
     },
 ]
