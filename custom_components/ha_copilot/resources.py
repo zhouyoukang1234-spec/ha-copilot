@@ -1049,12 +1049,13 @@ async def recommend_resources(
                 out["blueprint_note"] = f"partial: {bp['partial_errors']}"
 
     # Device-driven hardware cross-check: which of the brands the user actually
-    # owns have community support — zigbee2mqtt-pairable hardware (Zigbee DB) or
-    # a ready-to-flash firmware config (Tasmota DB) — so a non-expert learns
-    # their gear is usable without knowing to look. Each degrades independently;
-    # never breaks the HACS recommendations.
+    # owns have community support — zigbee2mqtt-pairable hardware (Zigbee DB), a
+    # ready-to-flash firmware config (Tasmota DB), or a known ESPHome setup
+    # (ESPHome DB) — so a non-expert learns their gear is usable without knowing
+    # to look. Each degrades independently; never breaks the HACS recommendations.
     zigbee_support: list[dict[str, Any]] = []
     tasmota_support: list[dict[str, Any]] = []
+    esphome_support: list[dict[str, Any]] = []
     for brand in list(signals["manufacturers"])[:6]:
         try:
             zr = await search_zigbee_devices(hass, brand, limit=5)
@@ -1082,10 +1083,25 @@ async def recommend_resources(
                 )
         except Exception:  # noqa: BLE001 - best-effort cross-check
             pass
+        try:
+            er = await search_esphome_devices(hass, brand, limit=4)
+            esp = [
+                {"name": d["name"], "board": d["board"], "url": d["url"]}
+                for d in (er.get("results") or [])
+            ]
+            if esp:
+                esphome_support.append(
+                    {"brand": brand, "matched": er.get("total_matched") or len(esp),
+                     "examples": esp[:3]}
+                )
+        except Exception:  # noqa: BLE001 - best-effort cross-check
+            pass
     if zigbee_support:
         out["zigbee_support"] = zigbee_support
     if tasmota_support:
         out["tasmota_support"] = tasmota_support
+    if esphome_support:
+        out["esphome_support"] = esphome_support
 
     return out
 
