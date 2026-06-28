@@ -134,4 +134,25 @@ H "live event bus: wait_for_event captures a concurrently-fired event"
 ( sleep 2; hactl tool fire_event --args '{"event_type":"ha_copilot_practice_live","event_data":{"src":"practice"}}' >/dev/null ) &
 hactl tool wait_for_event --args '{"event_type":"ha_copilot_practice_live","timeout":8}' | python -c "import sys,json;d=json.load(sys.stdin);print('captured:',not d['timed_out'],'| data:',d.get('data'))"
 
+# ---- deep-fusion round 4: deep introspection (service/area/entity/config_entry) + wait_for_template ----
+H "service schema: exact call shape of light.turn_on (fields + target)"
+hactl tool describe_service --args '{"domain":"light","service":"turn_on"}' | python -c "import sys,json;d=json.load(sys.stdin);print('fields:',list(d['fields'].keys())[:6],'| has target:',bool(d.get('target')))"
+
+H "area relationship graph: resolve first area -> devices + effective entities"
+AID=$(hactl tool list_areas | python -c "import sys,json;a=json.load(sys.stdin)['areas'];print(a[0].get('area_id') or a[0].get('id'))")
+hactl tool describe_area --args "{\"identifier\":\"$AID\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('area:',d['name'],'| devices:',d['device_count'],'| entities:',d['entity_count'])"
+
+H "entity registry deep-dive: unique_id/platform/owner of first light"
+EID=$(hactl tool list_entities --args '{"domain":"light"}' | python -c "import sys,json;print(json.load(sys.stdin)['entities'][0]['entity_id'])")
+hactl tool get_entity_registry_entry --args "{\"entity_id\":\"$EID\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('unique_id:',d['unique_id'],'| platform:',d['platform'])"
+
+H "config entry detail: first integration's load state + options"
+DOM=$(hactl tool list_config_entries | python -c "import sys,json;print(json.load(sys.stdin)['entries'][0]['domain'])")
+hactl tool get_config_entry --args "{\"identifier\":\"$DOM\"}" | python -c "import sys,json;d=json.load(sys.stdin);print('entry:',d['domain'],'| state:',d['state'],'| version:',d['version'])"
+
+H "template wait: turn light off, then wait_for_template until it is on (toggle concurrently)"
+hactl tool call_service --args "{\"domain\":\"light\",\"service\":\"turn_off\",\"data\":{\"entity_id\":\"$EID\"}}" >/dev/null
+( sleep 2; hactl tool call_service --args "{\"domain\":\"light\",\"service\":\"turn_on\",\"data\":{\"entity_id\":\"$EID\"}}" >/dev/null ) &
+hactl tool wait_for_template --args "{\"template\":\"{{ is_state('$EID','on') }}\",\"timeout\":8}" | python -c "import sys,json;d=json.load(sys.stdin);print('matched:',d['matched'],'| waited:',d.get('waited'))"
+
 echo; echo "### practice run complete"

@@ -1551,6 +1551,154 @@ async def _get_blueprint(hass: HomeAssistant, path: str,
     }
 
 
+async def _describe_service(hass: HomeAssistant, domain: str,
+                            service: str) -> dict[str, Any]:
+    """Full schema of one service: fields, selectors, target — exact call shape.
+
+    list_services only gives names; this returns the per-field selectors and
+    target schema an agent needs to construct a correct call_service payload.
+    """
+    from homeassistant.helpers.service import async_get_all_descriptions
+    descs = await async_get_all_descriptions(hass)
+    d = (descs.get(domain) or {}).get(service)
+    if d is None:
+        return {"error": f"service '{domain}.{service}' not found"}
+    return {
+        "domain": domain,
+        "service": service,
+        "name": d.get("name"),
+        "description": d.get("description"),
+        "target": d.get("target"),
+        "fields": d.get("fields", {}),
+    }
+
+
+async def _describe_area(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Resolve an area (by id or name) into its full membership graph.
+
+    Returns the area's floor, labels, member devices and the *effective*
+    entities (entities assigned to the area directly, plus entities whose
+    device lives in the area) — the area relationship graph.
+    """
+    areg = ar.async_get(hass)
+    dreg = dr.async_get(hass)
+    ereg = er.async_get(hass)
+    area = areg.async_get_area(identifier)
+    if area is None:
+        area = next((a for a in areg.areas.values() if a.name == identifier), None)
+    if area is None:
+        return {"error": f"area '{identifier}' not found"}
+    dev_ids = {d.id for d in dreg.devices.values() if d.area_id == area.id}
+    devices = [{"id": d.id, "name": d.name_by_user or d.name}
+               for d in dreg.devices.values() if d.id in dev_ids]
+    entities = [{"entity_id": e.entity_id, "name": e.name or e.original_name,
+                 "via": "device" if e.area_id is None else "direct"}
+                for e in ereg.entities.values()
+                if e.area_id == area.id or (e.area_id is None and e.device_id in dev_ids)]
+    return {
+        "area_id": area.id,
+        "name": area.name,
+        "floor_id": area.floor_id,
+        "labels": sorted(area.labels),
+        "device_count": len(devices),
+        "devices": devices,
+        "entity_count": len(entities),
+        "entities": entities,
+    }
+
+
+async def _get_entity_registry_entry(hass: HomeAssistant,
+                                     entity_id: str) -> dict[str, Any]:
+    """Deep registry introspection of one entity (beyond its runtime state)."""
+    ereg = er.async_get(hass)
+    e = ereg.async_get(entity_id)
+    if e is None:
+        return {"error": f"entity '{entity_id}' not in the entity registry"}
+    return {
+        "entity_id": e.entity_id,
+        "unique_id": e.unique_id,
+        "platform": e.platform,
+        "config_entry_id": e.config_entry_id,
+        "device_id": e.device_id,
+        "area_id": e.area_id,
+        "entity_category": e.entity_category,
+        "device_class": e.device_class or e.original_device_class,
+        "disabled_by": e.disabled_by,
+        "hidden_by": e.hidden_by,
+        "name": e.name,
+        "original_name": e.original_name,
+        "icon": e.icon or e.original_icon,
+        "unit_of_measurement": e.unit_of_measurement,
+        "capabilities": e.capabilities,
+        "supported_features": e.supported_features,
+        "labels": sorted(e.labels),
+        "options": e.options,
+    }
+
+
+async def _wait_for_template(hass: HomeAssistant, template: str,
+                             timeout: float = 10.0) -> dict[str, Any]:
+    """Bounded wait until a Jinja template renders truthy (the template analogue
+    of wait_for_event). Returns immediately if already truthy.
+    """
+    import asyncio
+    from homeassistant.helpers.event import TrackTemplate, async_track_template_result
+    from homeassistant.helpers.template import result_as_boolean
+
+    tmpl = Template(template, hass)
+    try:
+        current = tmpl.async_render()
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"template render failed: {exc}"}
+    if result_as_boolean(current):
+        return {"matched": True, "waited": False, "result": str(current)}
+
+    fut: asyncio.Future = hass.loop.create_future()
+
+    @callback
+    def _cb(event: Any, updates: Any) -> None:
+        for upd in updates:
+            res = upd.result
+            if isinstance(res, Exception):
+                continue
+            if result_as_boolean(res) and not fut.done():
+                fut.set_result(str(res))
+
+    info = async_track_template_result(hass, [TrackTemplate(tmpl, None)], _cb)
+    try:
+        result = await asyncio.wait_for(fut, timeout=max(0.1, min(float(timeout), 60)))
+    except (asyncio.TimeoutError, TimeoutError):
+        return {"matched": False, "timed_out": True, "timeout": timeout}
+    finally:
+        info.async_remove()
+    return {"matched": True, "waited": True, "result": result}
+
+
+async def _get_config_entry(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Single config entry detail + options (secrets in .data are not exposed)."""
+    entry = hass.config_entries.async_get_entry(identifier)
+    if entry is None:
+        entries = hass.config_entries.async_entries(identifier)
+        entry = entries[0] if entries else None
+    if entry is None:
+        return {"error": f"config entry '{identifier}' not found (by entry_id or domain)"}
+    return {
+        "entry_id": entry.entry_id,
+        "domain": entry.domain,
+        "title": entry.title,
+        "state": _entry_state(entry),
+        "source": entry.source,
+        "version": entry.version,
+        "minor_version": getattr(entry, "minor_version", None),
+        "disabled_by": entry.disabled_by,
+        "supports_options": entry.supports_options,
+        "supports_reconfigure": getattr(entry, "supports_reconfigure", None),
+        "supports_unload": entry.supports_unload,
+        "pref_disable_polling": entry.pref_disable_polling,
+        "options": dict(entry.options),
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -1799,6 +1947,17 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _get_system_health(hass)
         if name == "get_blueprint":
             return await _get_blueprint(hass, args["path"], args.get("domain", "automation"))
+        # ---- deep-fusion round 4 ----
+        if name == "describe_service":
+            return await _describe_service(hass, args["domain"], args["service"])
+        if name == "describe_area":
+            return await _describe_area(hass, args.get("identifier") or args.get("area_id") or args.get("name"))
+        if name == "get_entity_registry_entry":
+            return await _get_entity_registry_entry(hass, args["entity_id"])
+        if name == "wait_for_template":
+            return await _wait_for_template(hass, args["template"], args.get("timeout", 10))
+        if name == "get_config_entry":
+            return await _get_config_entry(hass, args.get("identifier") or args.get("entry_id") or args.get("domain"))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -2708,6 +2867,58 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "path": {"type": "string", "description": "Blueprint path, e.g. 'homeassistant/motion_light.yaml'."},
                 "domain": {"type": "string", "description": "'automation' (default) or 'script'."},
             }, "required": ["path"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "describe_service",
+            "description": "Return the full schema of one service: human name, description, per-field selectors/defaults and the target schema. list_services only gives names — use this to build a correct call_service payload.",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "Service domain, e.g. 'light'."},
+                "service": {"type": "string", "description": "Service name, e.g. 'turn_on'."},
+            }, "required": ["domain", "service"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "describe_area",
+            "description": "Resolve an area (by id or name) into its full membership graph: floor, labels, member devices, and the effective entities (assigned directly or via their device). The area relationship graph.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "Area id or name."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_entity_registry_entry",
+            "description": "Deep entity-registry introspection (beyond runtime state): unique_id, platform, owning config_entry/device/area, entity_category, device_class, disabled_by/hidden_by, capabilities, supported_features, labels and options.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wait_for_template",
+            "description": "Bounded wait until a Jinja template renders truthy (the template analogue of wait_for_event). Returns immediately if already truthy; returns {timed_out:true} if it never becomes truthy within timeout.",
+            "parameters": {"type": "object", "properties": {
+                "template": {"type": "string", "description": "Jinja template, e.g. \"{{ is_state('light.x','on') }}\"."},
+                "timeout": {"type": "number", "description": "Max seconds to wait (0.1-60, default 10)."},
+            }, "required": ["template"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_config_entry",
+            "description": "Single config entry detail by entry_id or domain: domain, title, load state, source, version, disabled_by, support flags and options. Secrets in .data are deliberately not exposed.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "config entry_id, or a domain (returns the first entry)."},
+            }, "required": ["identifier"]},
         },
     },
 ]
