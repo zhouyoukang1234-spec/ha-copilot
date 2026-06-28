@@ -2854,11 +2854,61 @@ async def _handle_intent(
     return {"ok": True, "intent_type": intent_type, "response": response.as_dict()}
 
 
+async def _assist(
+    hass: HomeAssistant,
+    text: str,
+    language: str | None = None,
+    conversation_id: str | None = None,
+) -> dict[str, Any]:
+    """Run free-form text through HA's own conversation (Assist) pipeline.
+
+    Borrows HA's full natural-language stack — sentence/intent matching, area
+    and device resolution, the active conversation agent — so an agent can hand
+    off a plain command ("turn off the kitchen lights") instead of resolving
+    entity_ids itself. Returns the spoken reply plus the structured response.
+    """
+    from homeassistant.components import conversation as conv
+    from homeassistant.core import Context
+
+    try:
+        result = await conv.async_converse(
+            hass, text, conversation_id, Context(), language=language
+        )
+    except Exception as exc:  # noqa: BLE001 - surface agent/pipeline errors
+        return {"error": f"{type(exc).__name__}: {exc}"}
+    data = result.as_dict()
+    speech = ""
+    try:
+        speech = (
+            data.get("response", {})
+            .get("speech", {})
+            .get("plain", {})
+            .get("speech", "")
+        )
+    except AttributeError:
+        speech = ""
+    return {
+        "ok": True,
+        "speech": speech,
+        "conversation_id": result.conversation_id,
+        "response": data,
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
         if name == "run_tools":
             return await _run_tools(hass, store, args)
+        if name == "assist":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            text = args.get("text") or args.get("command") or args.get("query")
+            if not text:
+                return {"error": "missing required argument: text"}
+            return await _assist(
+                hass, text, args.get("language"), args.get("conversation_id")
+            )
         if name == "list_intents":
             return await _list_intents(hass)
         if name == "handle_intent":
@@ -3325,6 +3375,22 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["calls"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assist",
+            "description": "Run a free-form natural-language command through Home Assistant's own conversation (Assist) pipeline, e.g. 'turn off the kitchen lights' or 'what's the temperature in the bedroom'. HA does sentence/intent matching, area and device resolution via the active conversation agent. Returns the spoken reply plus the structured response. Use when you'd rather hand HA a sentence than resolve entity_ids yourself.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The natural-language command or question."},
+                    "language": {"type": "string", "description": "Optional language code, e.g. 'en' or 'zh-Hans'."},
+                    "conversation_id": {"type": "string", "description": "Optional id to continue a prior conversation."},
+                },
+                "required": ["text"],
             },
         },
     },
