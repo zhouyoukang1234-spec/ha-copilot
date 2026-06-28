@@ -38,6 +38,22 @@ from . import memory, resources
 from .const import CONF_ALLOW_RESTART, CONF_ALLOW_WRITE
 
 
+def _github_repo_from_url(url: str) -> str | None:
+    """Best-effort ``owner/name`` from a GitHub raw/blob/repo URL (else None)."""
+    s = (url or "").strip()
+    for pre in (
+        "https://raw.githubusercontent.com/",
+        "https://github.com/",
+        "github.com/",
+    ):
+        if s.startswith(pre):
+            parts = [p for p in s[len(pre):].split("/") if p]
+            if len(parts) >= 2:
+                return f"{parts[0]}/{parts[1]}"
+            return None
+    return None
+
+
 def _safe_path(hass: HomeAssistant, rel_path: str) -> str:
     """Resolve a config-relative path, refusing to escape the config dir."""
     base = os.path.realpath(hass.config.config_dir)
@@ -3360,15 +3376,41 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 hass, int(args.get("limit", 15))
             )
         if name == "recommend_blueprints":
+            pref = await memory.recall(hass, "preferred_blueprint_intents")
+            preferred = (
+                pref.get("value")
+                if pref.get("found") and isinstance(pref.get("value"), list)
+                else None
+            )
+            hist = await memory.list_memory(hass, "history")
+            imported = {
+                e["value"].get("source_repo")
+                for e in hist.get("entries", [])
+                if isinstance(e.get("value"), dict) and e["value"].get("source_repo")
+            }
             return await resources.recommend_blueprints(
-                hass, int(args.get("limit", 12))
+                hass, int(args.get("limit", 12)), preferred, imported
             )
         if name == "import_blueprint":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
-            return await resources.import_blueprint(
+            result = await resources.import_blueprint(
                 hass, store, args["url"], args.get("domain")
             )
+            if isinstance(result, dict) and result.get("ok"):
+                repo = _github_repo_from_url(args["url"])
+                await memory.remember(
+                    hass,
+                    f"import:{result.get('blueprint_path') or args['url']}",
+                    {
+                        "url": args["url"],
+                        "source_repo": repo,
+                        "blueprint_path": result.get("blueprint_path"),
+                        "domain": result.get("domain"),
+                    },
+                    category="history",
+                )
+            return result
         if name == "recall_memory":
             return await memory.recall(hass, args.get("key") or "")
         if name == "list_memory":
