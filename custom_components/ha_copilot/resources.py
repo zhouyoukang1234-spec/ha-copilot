@@ -344,6 +344,94 @@ async def search_blueprints(
     }
 
 
+async def discover_resources(
+    hass: HomeAssistant,
+    query: str,
+    limit: int = 8,
+) -> dict[str, Any]:
+    """One free-text query, every source: the unified 'take from the whole net'
+    discovery.
+
+    Fans out concurrently across the HACS catalog (integrations / cards /
+    themes), GitHub repositories, and community blueprints, returning each
+    source's results plus a fused, deduped ``top`` list (highest-starred across
+    sources). A non-expert types a brand or a need ("xiaomi vacuum", "low
+    battery notification") and gets installable integrations/cards, example
+    repos, and ready-to-import automations in a single call. Each source
+    degrades independently — one failing (rate-limit/network) never blanks the
+    others; failures surface in ``partial_errors``.
+    """
+    q = (query or "").strip()
+    if not q:
+        return {
+            "error": (
+                "provide a search query (e.g. 'xiaomi vacuum', "
+                "'low battery notification')"
+            )
+        }
+    hacs, github, blueprints = await asyncio.gather(
+        search_community_resources(hass, q, "all", limit),
+        search_github(hass, q, "stars", limit),
+        search_blueprints(hass, q, limit),
+        return_exceptions=True,
+    )
+    errors: list[str] = []
+
+    def _section(label: str, res: Any) -> list[dict[str, Any]]:
+        if isinstance(res, Exception):
+            errors.append(f"{label}: {type(res).__name__}: {res}")
+            return []
+        if isinstance(res, dict) and res.get("error"):
+            errors.append(f"{label}: {res['error']}")
+            return []
+        return res.get("results", []) if isinstance(res, dict) else []
+
+    hacs_r = _section("hacs", hacs)
+    github_r = _section("github", github)
+    blueprint_r = _section("blueprints", blueprints)
+
+    # Fused top list: dedupe by repo full_name, keep the highest-starred, tag
+    # each with which source(s) surfaced it.
+    fused: dict[str, dict[str, Any]] = {}
+    for source, items in (("hacs", hacs_r), ("github", github_r), ("blueprints", blueprint_r)):
+        for it in items:
+            fn = it.get("full_name")
+            if not fn:
+                continue
+            entry = fused.get(fn)
+            if entry is None:
+                fused[fn] = {
+                    "full_name": fn,
+                    "description": it.get("description") or "",
+                    "stars": it.get("stars") or 0,
+                    "url": it.get("url"),
+                    "sources": [source],
+                }
+            elif source not in entry["sources"]:
+                entry["sources"].append(source)
+    top = sorted(
+        fused.values(),
+        key=lambda e: (len(e["sources"]), e["stars"]),
+        reverse=True,
+    )[: max(1, limit)]
+
+    out: dict[str, Any] = {
+        "ok": True,
+        "query": q,
+        "top": top,
+        "hacs": hacs_r,
+        "github": github_r,
+        "blueprints": blueprint_r,
+        "note": (
+            "Install HACS items as a custom repository by url; for a blueprint "
+            "call list_repo_blueprints then import_blueprint."
+        ),
+    }
+    if errors:
+        out["partial_errors"] = errors
+    return out
+
+
 _GITHUB_API = "https://api.github.com"
 _RAW_BASE = "https://raw.githubusercontent.com"
 
