@@ -18,7 +18,7 @@ import yaml
 from homeassistant.components.recorder import get_instance as _recorder_get_instance
 from homeassistant.components.recorder import history as _recorder_history
 from homeassistant.components.recorder import statistics as _recorder_statistics
-from homeassistant.core import Context, HomeAssistant
+from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers import (
     area_registry as ar,
     device_registry as dr,
@@ -1430,6 +1430,127 @@ async def _add_todo_item(hass: HomeAssistant, entity_id: str | None,
     return {"ok": True, "entity_id": entity_id, "item": item}
 
 
+async def _wait_for_event(hass: HomeAssistant, event_type: str,
+                          timeout: float = 10.0,
+                          entity_id: str | None = None) -> dict[str, Any]:
+    """Subscribe to the event bus and wait (bounded) for the next match.
+
+    The request/response bridge to HA's live event bus: blocks up to `timeout`
+    seconds for the next event of `event_type` (optionally filtered by
+    entity_id, e.g. for state_changed), then unsubscribes. Lets an agent
+    *observe* the running system, not just poll it.
+    """
+    import asyncio
+    fut: asyncio.Future = hass.loop.create_future()
+
+    @callback
+    def _cb(event: Any) -> None:
+        if entity_id and event.data.get("entity_id") != entity_id:
+            return
+        if not fut.done():
+            fut.set_result(event)
+
+    unsub = hass.bus.async_listen(event_type, _cb)
+    try:
+        event = await asyncio.wait_for(fut, timeout=max(0.1, min(float(timeout), 60)))
+    except (asyncio.TimeoutError, TimeoutError):
+        return {"event_type": event_type, "timed_out": True, "timeout": timeout}
+    finally:
+        unsub()
+    return {
+        "event_type": event_type,
+        "timed_out": False,
+        "time_fired": event.time_fired.isoformat(),
+        "origin": str(event.origin),
+        "data": event.data,
+    }
+
+
+async def _list_tags(hass: HomeAssistant) -> dict[str, Any]:
+    """List registered tags (NFC/RFID/QR) from the tag collection."""
+    from homeassistant.components.tag import TAG_DATA
+    coll = hass.data.get(TAG_DATA)
+    if coll is None:
+        return {"count": 0, "tags": []}
+    items = [{"tag_id": t.get("id"), "name": t.get("name"),
+              "last_scanned": t.get("last_scanned"),
+              "device_id": t.get("device_id")}
+             for t in coll.async_items()]
+    return {"count": len(items), "tags": items}
+
+
+async def _create_tag(hass: HomeAssistant, name: str,
+                      tag_id: str | None = None) -> dict[str, Any]:
+    """Create a tag (idempotent by name)."""
+    from homeassistant.components.tag import TAG_DATA
+    coll = hass.data.get(TAG_DATA)
+    if coll is None:
+        return {"error": "tag integration not loaded"}
+    for t in coll.async_items():
+        if t.get("name") == name:
+            return {"ok": True, "tag_id": t.get("id"), "name": name, "existed": True}
+    # The collection's create schema reads data["tag_id"] directly and
+    # auto-generates a UUID when it is falsy, so the key must always be present.
+    item = await coll.async_create_item({"name": name, "tag_id": tag_id or ""})
+    return {"ok": True, "tag_id": item.get("id"), "name": item.get("name")}
+
+
+async def _delete_tag(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Delete a tag by id or name."""
+    from homeassistant.components.tag import TAG_DATA
+    coll = hass.data.get(TAG_DATA)
+    if coll is None:
+        return {"error": "tag integration not loaded"}
+    tag_id = identifier
+    for t in coll.async_items():
+        if t.get("name") == identifier:
+            tag_id = t.get("id")
+            break
+    await coll.async_delete_item(tag_id)
+    return {"ok": True, "deleted": tag_id}
+
+
+async def _get_system_health(hass: HomeAssistant) -> dict[str, Any]:
+    """Aggregate the system_health info of all integrations that report it."""
+    import homeassistant.components.system_health as sh
+
+    def _safe(v: Any) -> Any:
+        if isinstance(v, (str, int, float, bool)) or v is None:
+            return v
+        if isinstance(v, dict):
+            return {k: _safe(x) for k, x in v.items()}
+        if isinstance(v, (list, tuple)):
+            return [_safe(x) for x in v]
+        return str(v)
+
+    info = await sh.get_info(hass)
+    return {"count": len(info),
+            "health": {d: _safe(vals) for d, vals in info.items()}}
+
+
+async def _get_blueprint(hass: HomeAssistant, path: str,
+                         domain: str = "automation") -> dict[str, Any]:
+    """Return one blueprint's full metadata + input schema for a domain."""
+    if domain == "automation":
+        from homeassistant.components.automation.helpers import async_get_blueprints
+    elif domain == "script":
+        from homeassistant.components.script.helpers import async_get_blueprints
+    else:
+        return {"error": f"unsupported blueprint domain '{domain}' (automation|script)"}
+    domain_bps = async_get_blueprints(hass)
+    bp = await domain_bps.async_get_blueprint(path)
+    meta = bp.metadata or {}
+    return {
+        "domain": domain,
+        "path": path,
+        "name": meta.get("name"),
+        "description": meta.get("description"),
+        "blueprint_domain": meta.get("domain"),
+        "source_url": meta.get("source_url"),
+        "inputs": meta.get("input") or {},
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -1660,6 +1781,24 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _add_todo_item(hass, args.get("entity_id"), args["item"])
+        # ---- deep-fusion round 3 ----
+        if name == "wait_for_event":
+            return await _wait_for_event(hass, args["event_type"],
+                                         args.get("timeout", 10), args.get("entity_id"))
+        if name == "list_tags":
+            return await _list_tags(hass)
+        if name == "create_tag":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _create_tag(hass, args["name"], args.get("tag_id"))
+        if name == "delete_tag":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _delete_tag(hass, args.get("identifier") or args.get("tag_id") or args.get("name"))
+        if name == "get_system_health":
+            return await _get_system_health(hass)
+        if name == "get_blueprint":
+            return await _get_blueprint(hass, args["path"], args.get("domain", "automation"))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -2509,6 +2648,66 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "entity_id": {"type": "string", "description": "todo.* entity id (optional)."},
                 "item": {"type": "string", "description": "The item summary to add."},
             }, "required": ["item"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wait_for_event",
+            "description": "Subscribe to the HA event bus and block (bounded by timeout) until the next event of event_type fires, then return it. Optionally filter by entity_id (e.g. for 'state_changed'). The agent's window into the live running system — observe, don't just poll. Returns {timed_out:true} if nothing fires within timeout.",
+            "parameters": {"type": "object", "properties": {
+                "event_type": {"type": "string", "description": "Event to wait for, e.g. 'state_changed', 'call_service', 'automation_triggered', 'tag_scanned'."},
+                "timeout": {"type": "number", "description": "Max seconds to wait (0.1-60, default 10)."},
+                "entity_id": {"type": "string", "description": "Optional entity filter (matches event.data.entity_id, e.g. for state_changed)."},
+            }, "required": ["event_type"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_tags",
+            "description": "List registered tags (NFC/RFID/QR) with id, name, last_scanned and bound device_id.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_tag",
+            "description": "Create a tag (idempotent by name). Returns its tag_id. Tags fire 'tag_scanned' events usable as automation triggers.",
+            "parameters": {"type": "object", "properties": {
+                "name": {"type": "string"},
+                "tag_id": {"type": "string", "description": "Optional explicit id; auto-generated UUID if omitted."},
+            }, "required": ["name"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_tag",
+            "description": "Delete a tag by tag_id or name.",
+            "parameters": {"type": "object", "properties": {
+                "identifier": {"type": "string", "description": "Tag id or name."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_system_health",
+            "description": "Aggregate the system_health report of every integration that publishes one (HA version, recorder/database, cloud, restored entities, update server reachability, etc.) — the platform self-diagnostic surface.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_blueprint",
+            "description": "Return one blueprint's full metadata and input schema (name, description, target domain, source_url, declared inputs) for a domain. Use list_blueprints to discover paths.",
+            "parameters": {"type": "object", "properties": {
+                "path": {"type": "string", "description": "Blueprint path, e.g. 'homeassistant/motion_light.yaml'."},
+                "domain": {"type": "string", "description": "'automation' (default) or 'script'."},
+            }, "required": ["path"]},
         },
     },
 ]

@@ -118,4 +118,20 @@ hactl tool add_todo_item --args '{"item":"演练待办项"}'
 hactl tool list_todo_items | python -c "import sys,json;d=json.load(sys.stdin);print('todo items:',[i['summary'] for i in d['items']])"
 hactl tool execute_script --args '{"sequence":[{"service":"todo.remove_item","target":{"entity_id":"todo.shopping_list"},"data":{"item":"演练待办项"}}]}'
 
+# ---- deep-fusion round 3: live events / tags / system_health / blueprint ----
+H "self-diagnostic: aggregate system_health across integrations"
+hactl tool get_system_health | python -c "import sys,json;d=json.load(sys.stdin);print('health domains:',d['count'],'| core:',d['health'].get('homeassistant',{}).get('version'))"
+
+H "tag registry: create -> list -> delete (NFC/RFID/QR)"
+hactl tool create_tag --args '{"name":"演练标签"}'
+hactl tool list_tags | python -c "import sys,json;d=json.load(sys.stdin);print('tags:',[t['name'] for t in d['tags']])"
+hactl tool delete_tag --args '{"identifier":"演练标签"}'
+
+H "blueprint deep-dive: full inputs/schema of motion_light"
+hactl tool get_blueprint --args '{"path":"homeassistant/motion_light.yaml"}' | python -c "import sys,json;d=json.load(sys.stdin);print('blueprint:',d['name'],'| inputs:',list(d['inputs'].keys()))"
+
+H "live event bus: wait_for_event captures a concurrently-fired event"
+( sleep 2; hactl tool fire_event --args '{"event_type":"ha_copilot_practice_live","event_data":{"src":"practice"}}' >/dev/null ) &
+hactl tool wait_for_event --args '{"event_type":"ha_copilot_practice_live","timeout":8}' | python -c "import sys,json;d=json.load(sys.stdin);print('captured:',not d['timed_out'],'| data:',d.get('data'))"
+
 echo; echo "### practice run complete"
