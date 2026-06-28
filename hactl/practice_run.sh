@@ -174,4 +174,24 @@ hactl tool list_zones | python -c "import sys,json;d=json.load(sys.stdin);print(
 H "automation debug: most recent execution trace of a known automation"
 hactl tool get_automation_trace --args '{"identifier":"download_bing_wallpaper_daily"}' | python -c "import sys,json;d=json.load(sys.stdin);l=d.get('latest',{});print('trace count:',d['count'],'| script_execution:',l.get('script_execution'),'| state:',l.get('state'))"
 
+# ---- deep-fusion round 6: system log / manifest / recorder / loaded integrations / template vars / service response ----
+H "system logs: recent captured records (the Logs panel surface)"
+hactl tool get_system_log | python -c "import sys,json;d=json.load(sys.stdin);print('log records total:',d.get('total'),'| shown:',d['count'])"
+
+H "integration manifest: what the 'light' integration is made of"
+hactl tool get_integration_manifest --args '{"domain":"light"}' | python -c "import sys,json;d=json.load(sys.stdin);print('name:',d['name'],'| built_in:',d['is_built_in'],'| quality:',d.get('quality_scale'))"
+
+H "recorder health: recording + write backlog"
+hactl tool get_recorder_info | python -c "import sys,json;d=json.load(sys.stdin);print('recording:',d['recording'],'| backlog:',d['backlog'])"
+
+H "loaded integrations: how many components are live in this instance"
+hactl tool get_loaded_integrations | python -c "import sys,json;d=json.load(sys.stdin);print('loaded components:',d['count'])"
+
+H "template with variables: emulate an automation render context"
+hactl tool render_template --args '{"template":"{{ trigger.to_state }} / {{ myvar * 2 }}","variables":{"trigger":{"to_state":"on"},"myvar":21}}' | python -c "import sys,json;print('rendered:',json.load(sys.stdin)['result'])"
+
+H "service response: weather.get_forecasts returns a payload (not just ok)"
+WID=$(hactl tool list_states --args '{"domain":"weather"}' | python -c "import sys,json;e=json.load(sys.stdin)['entities'];print(e[0]['entity_id'] if e else '')")
+if [ -n "$WID" ]; then hactl tool call_service_response --args "{\"domain\":\"weather\",\"service\":\"get_forecasts\",\"data\":{\"entity_id\":\"$WID\",\"type\":\"daily\"}}" | python -c "import sys,json;d=json.load(sys.stdin);print('ok:',d.get('ok'),'| response entities:',list((d.get('response') or {}).keys()))"; fi
+
 echo; echo "### practice run complete"

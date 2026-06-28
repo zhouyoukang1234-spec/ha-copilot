@@ -316,10 +316,16 @@ async def _update_entity(
     }
 
 
-async def _render_template(hass: HomeAssistant, template: str) -> dict[str, Any]:
-    """Render a Jinja2 template against live HA state (Developer Tools > Template)."""
+async def _render_template(hass: HomeAssistant, template: str,
+                           variables: dict | None = None) -> dict[str, Any]:
+    """Render a Jinja2 template against live HA state (Developer Tools > Template).
+
+    Optional `variables` are injected into the render context, so the agent can
+    test a template the way an automation/script would evaluate it (with its
+    `trigger`, `this`, custom vars, etc.) rather than only against bare state.
+    """
     try:
-        result = Template(template, hass).async_render()
+        result = Template(template, hass).async_render(variables or None)
     except Exception as err:  # noqa: BLE001 - template errors are user-facing
         return {"error": f"template error: {type(err).__name__}: {err}"}
     return {"ok": True, "result": result}
@@ -1826,6 +1832,95 @@ async def _get_automation_trace(hass: HomeAssistant, identifier: str) -> dict[st
     }
 
 
+async def _get_system_log(hass: HomeAssistant, level: str | None = None,
+                          limit: int = 50) -> dict[str, Any]:
+    """Recent captured log records (the Settings > System > Logs surface):
+    level/message/source/exception/count/first+last occurrence. Optional level
+    filter (ERROR/WARNING/...). The agent's window into what HA itself is
+    complaining about, without shelling into the container.
+    """
+    from homeassistant.components.system_log import DATA_SYSTEM_LOG
+    handler = hass.data.get(DATA_SYSTEM_LOG)
+    if handler is None:
+        return {"count": 0, "records": [], "note": "system_log not loaded"}
+    records = handler.records.to_list()
+    if level:
+        lv = level.upper()
+        records = [r for r in records if r.get("level") == lv]
+    sliced = records[: max(1, min(int(limit), 200))]
+    items = [{
+        "level": r.get("level"),
+        "message": (r.get("message") or [None])[0] if isinstance(r.get("message"), list) else r.get("message"),
+        "source": r.get("source"),
+        "name": r.get("name"),
+        "count": r.get("count"),
+        "first_occurred": r.get("first_occurred"),
+        "timestamp": r.get("timestamp"),
+        "has_exception": bool(r.get("exception")),
+    } for r in sliced]
+    return {"count": len(items), "total": len(records), "records": items}
+
+
+async def _get_loaded_integrations(hass: HomeAssistant) -> dict[str, Any]:
+    """The set of components currently loaded into this running instance —
+    the live 'what is actually running' surface, the counterpart to
+    get_integration_manifest (which describes one integration's code)."""
+    comps = sorted(hass.config.components)
+    return {"count": len(comps), "components": comps}
+
+
+async def _call_service_response(hass: HomeAssistant, domain: str, service: str,
+                                 data: dict | None = None) -> dict[str, Any]:
+    """Call a service that returns a response payload (return_response=True),
+    e.g. weather.get_forecasts, calendar.get_events, todo.get_items. call_service
+    only confirms execution; this surfaces the data such read/query services
+    produce."""
+    if not hass.services.has_service(domain, service):
+        return {"error": f"service '{domain}.{service}' does not exist"}
+    try:
+        resp = await hass.services.async_call(
+            domain, service, dict(data or {}),
+            blocking=True, return_response=True)
+    except Exception as exc:  # noqa: BLE001 - surface service errors to agent
+        return {"error": f"{type(exc).__name__}: {exc}"}
+    return {"ok": True, "called": f"{domain}.{service}", "response": resp}
+
+
+async def _get_integration_manifest(hass: HomeAssistant, domain: str) -> dict[str, Any]:
+    """Integration manifest: name, version, requirements, dependencies,
+    iot_class, config_flow, quality_scale, documentation — what an integration
+    is made of, straight from the loaded code."""
+    from homeassistant.loader import async_get_integration
+    try:
+        integ = await async_get_integration(hass, domain)
+    except Exception as exc:  # noqa: BLE001 - integration may not exist
+        return {"error": f"integration '{domain}' not found: {exc}"}
+    return {
+        "domain": integ.domain,
+        "name": integ.name,
+        "version": str(integ.version) if integ.version else None,
+        "is_built_in": integ.is_built_in,
+        "iot_class": integ.iot_class,
+        "config_flow": integ.config_flow,
+        "quality_scale": integ.quality_scale,
+        "requirements": list(integ.requirements),
+        "dependencies": list(integ.dependencies),
+        "after_dependencies": list(integ.after_dependencies),
+        "documentation": integ.documentation,
+    }
+
+
+async def _get_recorder_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Recorder health: whether it is recording and its current write backlog —
+    a cheap liveness/health probe for the history/statistics subsystem."""
+    inst = _recorder_get_instance(hass)
+    return {
+        "recording": bool(inst.recording),
+        "backlog": getattr(inst, "backlog", None),
+        "thread_alive": inst.is_alive() if hasattr(inst, "is_alive") else None,
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -1886,7 +1981,7 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "set_entity_enabled":
             return await _update_entity(hass, args["entity_id"], enabled=bool(args["enabled"]))
         if name == "render_template":
-            return await _render_template(hass, args["template"])
+            return await _render_template(hass, args["template"], args.get("variables"))
         if name == "get_history":
             return await _get_history(hass, args["entity_id"], args.get("hours", 24))
         if name == "create_scene":
@@ -2096,6 +2191,17 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _list_zones(hass)
         if name == "get_automation_trace":
             return await _get_automation_trace(hass, args.get("identifier") or args.get("automation_id") or args.get("entity_id"))
+        # ---- deep-fusion round 6 ----
+        if name == "get_system_log":
+            return await _get_system_log(hass, args.get("level"), args.get("limit", 50))
+        if name == "get_integration_manifest":
+            return await _get_integration_manifest(hass, args.get("domain") or args.get("identifier"))
+        if name == "get_recorder_info":
+            return await _get_recorder_info(hass)
+        if name == "get_loaded_integrations":
+            return await _get_loaded_integrations(hass)
+        if name == "call_service_response":
+            return await _call_service_response(hass, args["domain"], args["service"], args.get("data"))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -2346,10 +2452,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "render_template",
-            "description": "Render a Jinja2 template against live HA state, e.g. \"{{ states('sensor.x') }}\" or \"{{ states.light | selectattr('state','eq','on') | list | count }}\". Use this to compute/inspect state.",
+            "description": "Render a Jinja2 template against live HA state, e.g. \"{{ states('sensor.x') }}\" or \"{{ states.light | selectattr('state','eq','on') | list | count }}\". Use this to compute/inspect state. Optional `variables` are injected into the render context to emulate how an automation/script would evaluate the template (its trigger/this/custom vars).",
             "parameters": {
                 "type": "object",
-                "properties": {"template": {"type": "string"}},
+                "properties": {
+                    "template": {"type": "string"},
+                    "variables": {"type": "object", "description": "Optional variables injected into the render context."},
+                },
                 "required": ["template"],
             },
         },
@@ -3106,6 +3215,55 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "identifier": {"type": "string", "description": "automation entity_id, numeric id, or alias."},
             }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_system_log",
+            "description": "Recent captured log records (the Settings > System > Logs surface): level/message/source/exception/count/timestamp. Optional level filter (ERROR/WARNING/...). The agent's window into what HA itself is complaining about, without shelling into the container.",
+            "parameters": {"type": "object", "properties": {
+                "level": {"type": "string", "description": "Optional level filter, e.g. ERROR or WARNING."},
+                "limit": {"type": "integer", "description": "Max records (default 50, cap 200)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_integration_manifest",
+            "description": "Integration manifest by domain: name, version, requirements, dependencies, after_dependencies, iot_class, config_flow, quality_scale, documentation — what an integration is made of, straight from the loaded code.",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "Integration domain, e.g. 'light', 'mqtt', 'hue'."},
+            }, "required": ["domain"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_recorder_info",
+            "description": "Recorder health: whether it is recording and its current write backlog — a cheap liveness/health probe for the history/statistics subsystem.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_loaded_integrations",
+            "description": "The set of components currently loaded into this running instance — the live 'what is actually running' surface, counterpart to get_integration_manifest (which describes one integration's code).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "call_service_response",
+            "description": "Call a service that RETURNS a response payload (return_response=True), e.g. weather.get_forecasts, calendar.get_events, todo.get_items. Unlike call_service (which only confirms execution), this surfaces the data such read/query services produce.",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string"},
+                "service": {"type": "string"},
+                "data": {"type": "object", "description": "Service call data/target."},
+            }, "required": ["domain", "service"]},
         },
     },
 ]
