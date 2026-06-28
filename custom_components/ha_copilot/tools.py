@@ -3469,6 +3469,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.search_tasmota_devices(
                 hass, args.get("query", ""), int(args.get("limit", 15))
             )
+        if name == "search_esphome_devices":
+            return await resources.search_esphome_devices(
+                hass, args.get("query", ""), int(args.get("limit", 10))
+            )
         if name == "list_repo_blueprints":
             repo = args.get("repo") or args.get("full_name") or args.get("url")
             if not repo:
@@ -3575,6 +3579,7 @@ _READ_ONLY_TOOLS = frozenset({
     "discover_resources",
     "search_zigbee_devices",
     "search_tasmota_devices",
+    "search_esphome_devices",
     "recommend_resources",
     "recommend_blueprints",
     "recall_memory",
@@ -5140,6 +5145,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "query": {"type": "string", "description": "a device brand, name, or model, e.g. 'sonoff basic' or 'athom plug'."},
                 "limit": {"type": "integer", "description": "max devices to return (default 15)."},
+            }, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_esphome_devices",
+            "description": "Look a device up in the community ESPHome device database (devices.esphome.io, ~770 devices). A non-expert types a brand/model ('athom plug', 'martin jerry', 'shelly 1') and gets matching ESPHome-ready devices with the ESP board, device type, whether it's officially 'made for ESPHome', and its config page \u2014 matching DIY/ESP hardware to a known ESPHome setup. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "a device brand, name, or model, e.g. 'athom plug' or 'shelly 1'."},
+                "limit": {"type": "integer", "description": "max devices to return (default 10)."},
             }, "required": ["query"]},
         },
     },

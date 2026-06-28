@@ -380,12 +380,13 @@ async def discover_resources(
                 "'low battery notification')"
             )
         }
-    hacs, github, blueprints, zigbee, tasmota = await asyncio.gather(
+    hacs, github, blueprints, zigbee, tasmota, esphome = await asyncio.gather(
         search_community_resources(hass, q, "all", limit),
         search_github(hass, q, "stars", limit),
         search_blueprints(hass, q, limit),
         search_zigbee_devices(hass, q, limit),
         search_tasmota_devices(hass, q, limit),
+        search_esphome_devices(hass, q, min(limit, 4)),
         return_exceptions=True,
     )
     errors: list[str] = []
@@ -404,6 +405,7 @@ async def discover_resources(
     blueprint_r = _section("blueprints", blueprints)
     zigbee_r = _section("zigbee", zigbee)
     tasmota_r = _section("tasmota", tasmota)
+    esphome_r = _section("esphome", esphome)
 
     # Fused top list: dedupe by repo full_name, keep the highest-starred, tag
     # each with which source(s) surfaced it.
@@ -439,11 +441,12 @@ async def discover_resources(
         "blueprints": blueprint_r,
         "zigbee": zigbee_r,
         "tasmota": tasmota_r,
+        "esphome": esphome_r,
         "note": (
             "Install HACS items as a custom repository by url; for a blueprint "
             "call list_repo_blueprints then import_blueprint. zigbee entries "
             "show whether the hardware is supported (zigbee2mqtt_supported/zha); "
-            "tasmota entries carry a ready-to-flash template."
+            "tasmota/esphome entries carry a ready firmware config/page."
         ),
     }
     if errors:
@@ -703,6 +706,103 @@ async def search_tasmota_devices(
         "note": (
             "tasmota_template is the GPIO config to paste into Tasmota "
             "(Configuration > Configure Template) after flashing the device."
+        ),
+    }
+
+
+# Community ESPHome device database (devices.esphome.io): one folder per
+# device (src/docs/devices/<slug>/index.md with YAML frontmatter). We build a
+# cheap searchable slug index from the repo git tree (no per-file fetch) and
+# only fetch frontmatter for the handful of matches we return. Free, no auth.
+_ESPHOME_REPO = "esphome/devices.esphome.io"
+_ESPHOME_PAGE = "https://devices.esphome.io/devices"
+_ESPHOME_TTL = 6 * 3600
+_esphome_cache: dict[str, Any] = {"slugs": None, "branch": "main", "ts": 0.0}
+
+
+async def _fetch_esphome_index(hass: HomeAssistant) -> tuple[list[str], str]:
+    """Return (device slugs, branch), fetching+caching the repo tree with TTL."""
+    now = time.time()
+    cached = _esphome_cache.get("slugs")
+    if cached is not None and (now - _esphome_cache.get("ts", 0.0)) < _ESPHOME_TTL:
+        return cached, _esphome_cache["branch"]
+    meta = await _fetch_json(hass, f"{_GITHUB_API}/repos/{_ESPHOME_REPO}")
+    branch = meta.get("default_branch") or "main"
+    tree = await _fetch_json(
+        hass, f"{_GITHUB_API}/repos/{_ESPHOME_REPO}/git/trees/{branch}?recursive=1"
+    )
+    slugs = sorted({
+        p.split("/")[3]
+        for p in (
+            n.get("path", "") for n in (tree or {}).get("tree", [])
+            if n.get("type") == "blob"
+        )
+        if p.startswith("src/docs/devices/") and len(p.split("/")) > 4
+    })
+    if slugs:
+        _esphome_cache.update({"slugs": slugs, "branch": branch, "ts": now})
+    return slugs, branch
+
+
+async def search_esphome_devices(
+    hass: HomeAssistant,
+    query: str,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Look a device up in the community ESPHome device database.
+
+    A non-expert types a brand/model ("athom plug", "martin jerry", "shelly")
+    and gets matching ESPHome-ready devices — with the board, device type and
+    whether it's officially "made for ESPHome" (read from each match's
+    frontmatter) plus its config page. Matches DIY/ESP hardware to a known
+    ESPHome setup without trawling the docs. Read-only.
+    """
+    q = (query or "").strip()
+    if not q:
+        return {"error": "provide a device brand or model (e.g. 'athom plug' or 'shelly 1')"}
+    try:
+        slugs, branch = await _fetch_esphome_index(hass)
+    except Exception as err:  # noqa: BLE001 - surface fetch errors cleanly
+        return {"error": f"{type(err).__name__}: {err}"}
+    if not slugs:
+        return {"error": "esphome device index unavailable or empty"}
+
+    words = [w for w in q.lower().split() if w]
+    matched = [s for s in slugs if all(w in s.lower().replace("-", " ") for w in words)]
+    matched.sort(key=lambda s: len(s))  # shorter slug = closer match
+
+    results = []
+    for slug in matched[: max(1, limit)]:
+        info: dict[str, Any] = {}
+        raw = (
+            f"{_RAW_BASE}/{_ESPHOME_REPO}/{branch}/"
+            f"src/docs/devices/{slug}/index.md"
+        )
+        try:
+            text = await _fetch_text(hass, raw)
+            if text.startswith("---"):
+                fm = text.split("---", 2)[1]
+                info = yaml.load(fm, Loader=_BlueprintLoader) or {}  # noqa: S506
+        except Exception:  # noqa: BLE001 - enrichment is best-effort
+            info = {}
+        results.append({
+            "name": info.get("title") or slug.replace("-", " "),
+            "slug": slug,
+            "type": info.get("type"),
+            "board": info.get("board"),
+            "made_for_esphome": info.get("made-for-esphome"),
+            "url": f"{_ESPHOME_PAGE}/{slug}",
+        })
+    return {
+        "ok": True,
+        "query": q,
+        "count": len(results),
+        "total_matched": len(matched),
+        "results": results,
+        "source": "esphome devices.esphome.io",
+        "note": (
+            "board is the ESP chip family; made_for_esphome=true devices ship "
+            "ESPHome-ready. Open url for the importable ESPHome config."
         ),
     }
 
