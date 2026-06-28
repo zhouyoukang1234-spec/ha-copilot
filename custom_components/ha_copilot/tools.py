@@ -34,6 +34,7 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify as _slugify
 
+from . import resources
 from .const import CONF_ALLOW_RESTART, CONF_ALLOW_WRITE
 
 
@@ -3311,6 +3312,34 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 hass, args["entity_id"], args["item"], rename=args.get("rename"),
                 status=args.get("status"), due_date=args.get("due_date"),
                 description=args.get("description"))
+        if name == "search_community_resources":
+            return await resources.search_community_resources(
+                hass,
+                args.get("query", ""),
+                args.get("category", "all"),
+                int(args.get("limit", 20)),
+            )
+        if name == "search_github":
+            return await resources.search_github(
+                hass,
+                args["query"],
+                args.get("sort", "stars"),
+                int(args.get("limit", 15)),
+            )
+        if name == "search_blueprints":
+            return await resources.search_blueprints(
+                hass, args.get("query", ""), int(args.get("limit", 15))
+            )
+        if name == "recommend_resources":
+            return await resources.recommend_resources(
+                hass, int(args.get("limit", 15))
+            )
+        if name == "import_blueprint":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await resources.import_blueprint(
+                hass, store, args["url"], args.get("domain")
+            )
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -3332,6 +3361,10 @@ _READ_ONLY_TOOLS = frozenset({
     "render_template",
     "evaluate_condition",
     "get_template_functions",
+    "search_community_resources",
+    "search_github",
+    "search_blueprints",
+    "recommend_resources",
 })
 # Irreversible / disruptive operations (removal, data purge, full restart).
 _DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics"})
@@ -4826,6 +4859,62 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "due_date": {"type": "string", "description": "due date YYYY-MM-DD (optional)."},
                 "description": {"type": "string", "description": "item description (optional)."},
             }, "required": ["entity_id", "item"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_community_resources",
+            "description": "Search the HACS community catalog (custom integrations, Lovelace/frontend cards, themes) by keyword \u2014 e.g. a brand ('xiaomi', 'aqara'), a device type ('vacuum', 'thermostat'), or a card name ('mushroom'). Returns matching repositories with stars, description and GitHub url so the operator can pull in the right ecosystem resource. Read-only network search; pair with recommend_resources to auto-match the user's own devices.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "keywords: brand, device type, or card/integration name."},
+                "category": {"type": "string", "description": "'all' (default), 'integration', 'plugin'/'frontend'/'card', 'theme', 'appdaemon', or 'python_script'."},
+                "limit": {"type": "integer", "description": "max results (default 20)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_github",
+            "description": "Search GitHub repositories for Home Assistant-related projects, templates and examples matching a device/brand/topic. The query is automatically scoped to the HA ecosystem. Uses GitHub's public search API (unauthenticated rate limit \u2014 use sparingly). Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "search terms, e.g. 'tuya local' or 'esphome thermostat'."},
+                "sort": {"type": "string", "description": "'stars' (default), 'updated', or 'forks'."},
+                "limit": {"type": "integer", "description": "max results (default 15, max 30)."},
+            }, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_blueprints",
+            "description": "Find community blueprint repositories (ready-made automation/script templates) on GitHub, optionally filtered by keyword. Returns repos tagged as HA blueprints; take a raw blueprint .yaml url from one and feed it to import_blueprint. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "optional keywords, e.g. 'motion light' or 'notify low battery'."},
+                "limit": {"type": "integer", "description": "max results (default 15, max 30)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recommend_resources",
+            "description": "Inspect the running HA's real devices (manufacturers), configured integrations and entity domains, then recommend HACS integrations and frontend cards matched to that hardware \u2014 with a reason for each. The 'match my devices to the right resources' capability: an operator can call this with zero arguments to surface what a non-expert user would otherwise never find. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "limit": {"type": "integer", "description": "max recommendations per kind (default 15)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "import_blueprint",
+            "description": "Fetch a blueprint YAML by URL (GitHub blob/raw/gist) and import it into the running HA under blueprints/<domain>/ha_copilot/. Keeps a .copilot.bak backup and reloads the domain. Domain is read from the blueprint ('automation'/'script'/'template') unless overridden. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "url": {"type": "string", "description": "URL to the blueprint .yaml (a GitHub blob url is auto-converted to raw)."},
+                "domain": {"type": "string", "description": "optional override: 'automation', 'script', or 'template'."},
+            }, "required": ["url"]},
         },
     },
 ]

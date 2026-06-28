@@ -39,6 +39,23 @@
 | `reload` / `restart` | 重载某域配置 / 重启 HA（重启默认禁用） |
 | `list_areas` / `registry_overview` | 区域、实体/设备/区域注册表概览 |
 | `read_logs` | 读取 HA 日志尾部用于排错 |
+| `search_community_resources` | 检索 **HACS** 全量目录（自定义集成 / 前端卡片 / 主题）按品牌·设备·关键词 |
+| `search_github` / `search_blueprints` | 在 GitHub 搜 HA 相关仓库/模板/示例、社区蓝图 |
+| `recommend_resources` | **读取运行中 HA 的真实设备（厂商/集成/实体域），自动匹配最相关的 HACS 资源**（小白零参数即可被推荐） |
+| `import_blueprint` | 按 URL 把蓝图 YAML 导入运行中的 HA（自动备份并重载，受 `allow_write` 约束） |
+
+### Resource Hub · 把全网资源收敛为可调用的底层
+
+`resources.py` 把"散落在全网的 Home Assistant / 智能家居资源"收敛成确定性工具：操作者（外部 agent）随时可检索 **HACS** 目录、**GitHub** 仓库与社区**蓝图**，并以 `recommend_resources` **读取用户 HA 里真实的设备厂商与集成，反向匹配最该装的集成与前端卡片**——用户什么都不懂，也能被精准推荐、再用 `import_blueprint` 一步把蓝图导入。全程只读取公开数据、无模型、无外部推理端点；唯一的写操作 `import_blueprint` 受 `allow_write` 约束且限制在 config 目录内。
+
+```bash
+# 例：按品牌检索 HACS 集成
+curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"tool":"recommend_resources","args":{}}' \
+  http://<HA>/api/ha_copilot/run_tool
+```
+
+离线/CI 友好的验证脚本：`python hactl/verify_resources.py --live`（实测拉取 HACS 全量目录并验证排序）。
 
 ## 安装
 
