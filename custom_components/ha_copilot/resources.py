@@ -114,6 +114,14 @@ async def _fetch_json(hass: HomeAssistant, url: str, timeout: float = 20.0) -> A
                     "GitHub API rate limit exceeded. Export a GITHUB_TOKEN "
                     "(or GH_TOKEN) for the HA process to raise the limit."
                 )
+        if resp.status == 404 and "api.github.com/repos/" in url:
+            repo_id = "/".join(
+                url.split("/repos/", 1)[1].split("?")[0].split("/")[:2]
+            )
+            raise RuntimeError(
+                f"GitHub repository '{repo_id}' not found "
+                "(check the owner/name spelling, or it may be private)."
+            )
         resp.raise_for_status()
         return await resp.json(content_type=None)
 
