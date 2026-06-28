@@ -3034,8 +3034,11 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "list_template_sensors":
             return await _list_template_sensors(hass)
         if name == "create_blueprint_automation":
+            bp_path = args.get("blueprint_path") or args.get("path")
+            if not bp_path:
+                return {"error": "missing required argument: blueprint_path (or path)"}
             return await _create_blueprint_automation(
-                hass, args["alias"], args["blueprint_path"], args.get("inputs") or {})
+                hass, args["alias"], bp_path, args.get("inputs") or {})
         if name == "list_blueprints":
             return await _list_blueprints(hass, args.get("domain", "automation"))
         if name == "list_backups":
@@ -3198,7 +3201,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "get_system_health":
             return await _get_system_health(hass)
         if name == "get_blueprint":
-            return await _get_blueprint(hass, args["path"], args.get("domain", "automation"))
+            bp_path = args.get("path") or args.get("blueprint_path")
+            if not bp_path:
+                return {"error": "missing required argument: path (or blueprint_path)"}
+            return await _get_blueprint(hass, bp_path, args.get("domain", "automation"))
         # ---- deep-fusion round 4 ----
         if name == "describe_service":
             return await _describe_service(hass, args["domain"], args["service"])
@@ -3283,14 +3289,20 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "get_floor":
             return await _get_floor(hass, args.get("identifier") or args.get("floor_id") or args.get("name"))
         if name == "validate_blueprint_inputs":
-            return await _validate_blueprint_inputs(hass, args["path"], args.get("inputs") or {}, args.get("domain", "automation"))
+            bp_path = args.get("path") or args.get("blueprint_path")
+            if not bp_path:
+                return {"error": "missing required argument: path (or blueprint_path)"}
+            return await _validate_blueprint_inputs(hass, bp_path, args.get("inputs") or {}, args.get("domain", "automation"))
         if name == "get_template_functions":
             return await _get_template_functions(hass)
         if name == "create_automation_from_blueprint":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
+            bp_path = args.get("path") or args.get("blueprint_path")
+            if not bp_path:
+                return {"error": "missing required argument: path (or blueprint_path)"}
             return await _create_automation_from_blueprint(
-                hass, args["path"], args.get("inputs") or {}, args["alias"], args.get("domain", "automation"))
+                hass, bp_path, args.get("inputs") or {}, args["alias"], args.get("domain", "automation"))
         # ---- deep-fusion round 10 ----
         if name == "get_assist_pipelines":
             return await _get_assist_pipelines(hass)
@@ -4768,7 +4780,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "validate_blueprint_inputs",
             "description": "Check that a set of inputs satisfies a blueprint's schema BEFORE instantiating it — reports missing required inputs (those without a default) and unknown keys. Precursor to create_automation_from_blueprint.",
             "parameters": {"type": "object", "properties": {
-                "path": {"type": "string", "description": "blueprint path, e.g. 'homeassistant/motion_light.yaml'."},
+                "path": {"type": "string", "description": "blueprint path, e.g. 'homeassistant/motion_light.yaml' (also accepts blueprint_path, as returned by import_blueprint/list_repo_blueprints)."},
                 "inputs": {"type": "object", "description": "input name -> value."},
                 "domain": {"type": "string", "description": "automation | script (default automation)."},
             }, "required": ["path"]},
@@ -4780,7 +4792,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "create_automation_from_blueprint",
             "description": "Instantiate a blueprint into a real automation (writes a use_blueprint entry to automations.yaml and reloads). Inputs are validated against the blueprint schema first; rejected on any missing input.",
             "parameters": {"type": "object", "properties": {
-                "path": {"type": "string", "description": "blueprint path, e.g. 'homeassistant/motion_light.yaml'."},
+                "path": {"type": "string", "description": "blueprint path, e.g. 'homeassistant/motion_light.yaml' (also accepts blueprint_path, as returned by import_blueprint/list_repo_blueprints)."},
                 "inputs": {"type": "object", "description": "input name -> value (see get_blueprint / validate_blueprint_inputs)."},
                 "alias": {"type": "string", "description": "name for the new automation."},
                 "domain": {"type": "string", "description": "automation | script (default automation)."},
