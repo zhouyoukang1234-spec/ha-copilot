@@ -1270,6 +1270,166 @@ async def _list_persons(hass: HomeAssistant) -> dict[str, Any]:
     return {"count": len(items), "persons": items}
 
 
+async def _get_logbook(hass: HomeAssistant, hours: int = 24,
+                       entity_id: str | None = None) -> dict[str, Any]:
+    """Humanised event timeline (logbook) over the recent window.
+
+    Wraps the logbook EventProcessor (state changes + logbook entries +
+    automation/script triggers + service calls) executed on the recorder.
+    """
+    from homeassistant.components.logbook.const import (
+        EVENT_AUTOMATION_TRIGGERED,
+        EVENT_LOGBOOK_ENTRY,
+        EVENT_SCRIPT_STARTED,
+    )
+    from homeassistant.components.logbook.processor import EventProcessor
+
+    end = dt_util.utcnow()
+    start = end - timedelta(hours=max(1, min(int(hours), 168)))
+    event_types = (EVENT_LOGBOOK_ENTRY, EVENT_AUTOMATION_TRIGGERED, EVENT_SCRIPT_STARTED)
+    entity_ids = [entity_id] if entity_id else None
+    processor = EventProcessor(hass, event_types, entity_ids=entity_ids,
+                               device_ids=None, context_id=None,
+                               timestamp=False, include_entity_name=True)
+    events = await _recorder_get_instance(hass).async_add_executor_job(
+        processor.get_events, start, end)
+    return {"hours": hours, "count": len(events), "entries": events[-400:]}
+
+
+async def _list_users(hass: HomeAssistant) -> dict[str, Any]:
+    """List HA auth users (admin surface): id, name, flags, groups."""
+    users = await hass.auth.async_get_users()
+    items = [{
+        "id": u.id,
+        "name": u.name,
+        "is_active": u.is_active,
+        "is_owner": u.is_owner,
+        "system_generated": u.system_generated,
+        "local_only": u.local_only,
+        "groups": [g.id for g in u.groups],
+        "is_admin": any(g.id == "system-admin" for g in u.groups),
+    } for u in users]
+    items.sort(key=lambda x: (not x["is_owner"], x["name"] or ""))
+    return {"count": len(items), "users": items}
+
+
+async def _list_categories(hass: HomeAssistant, scope: str) -> dict[str, Any]:
+    """List categories for a scope (e.g. 'automation', 'script')."""
+    from homeassistant.helpers import category_registry as cr
+    reg = cr.async_get(hass)
+    items = [{"category_id": c.category_id, "name": c.name, "icon": c.icon}
+             for c in reg.async_list_categories(scope=scope)]
+    items.sort(key=lambda x: x["name"])
+    return {"scope": scope, "count": len(items), "categories": items}
+
+
+async def _create_category(hass: HomeAssistant, scope: str, name: str,
+                           icon: str | None = None) -> dict[str, Any]:
+    """Create a category in a scope (idempotent by name)."""
+    from homeassistant.helpers import category_registry as cr
+    reg = cr.async_get(hass)
+    for c in reg.async_list_categories(scope=scope):
+        if c.name == name:
+            return {"ok": True, "category_id": c.category_id, "name": c.name,
+                    "scope": scope, "existed": True}
+    entry = reg.async_create(name=name, scope=scope, icon=icon)
+    return {"ok": True, "category_id": entry.category_id, "name": entry.name,
+            "scope": scope}
+
+
+async def _delete_category(hass: HomeAssistant, scope: str,
+                           identifier: str) -> dict[str, Any]:
+    """Delete a category by id or name within a scope."""
+    from homeassistant.helpers import category_registry as cr
+    reg = cr.async_get(hass)
+    cat_id = identifier
+    for c in reg.async_list_categories(scope=scope):
+        if c.name == identifier:
+            cat_id = c.category_id
+            break
+    reg.async_delete(scope=scope, category_id=cat_id)
+    return {"ok": True, "deleted": cat_id, "scope": scope}
+
+
+async def _list_dashboards(hass: HomeAssistant) -> dict[str, Any]:
+    """List Lovelace dashboards (default + storage + YAML), with mode."""
+    from homeassistant.components.lovelace.const import LOVELACE_DATA
+    data = hass.data.get(LOVELACE_DATA)
+    items = []
+    if data is not None:
+        for url_path, cfg in data.dashboards.items():
+            items.append({
+                "url_path": url_path or "lovelace",
+                "is_default": url_path is None,
+                "mode": getattr(cfg, "mode", None),
+            })
+        for url_path, ycfg in (data.yaml_dashboards or {}).items():
+            items.append({
+                "url_path": url_path,
+                "title": ycfg.get("title"),
+                "icon": ycfg.get("icon"),
+                "mode": "yaml",
+                "show_in_sidebar": ycfg.get("show_in_sidebar", True),
+            })
+    return {"count": len(items), "dashboards": items}
+
+
+async def _get_energy_prefs(hass: HomeAssistant) -> dict[str, Any]:
+    """Return the Energy dashboard preferences, or configured=false."""
+    from homeassistant.components.energy import data as edata
+    try:
+        manager = await edata.async_get_manager(hass)
+    except Exception as exc:  # noqa: BLE001
+        return {"configured": False, "error": str(exc)}
+    prefs = manager.data
+    if not prefs:
+        return {"configured": False}
+    return {"configured": True, "prefs": prefs}
+
+
+async def _conversation_process(hass: HomeAssistant, text: str,
+                                language: str | None = None,
+                                agent_id: str | None = None) -> dict[str, Any]:
+    """Send text to the Assist conversation agent and return its response."""
+    payload: dict[str, Any] = {"text": text}
+    if language:
+        payload["language"] = language
+    if agent_id:
+        payload["agent_id"] = agent_id
+    resp = await hass.services.async_call(
+        "conversation", "process", payload, blocking=True, return_response=True)
+    return resp or {"ok": True}
+
+
+async def _list_todo_items(hass: HomeAssistant,
+                           entity_id: str | None = None) -> dict[str, Any]:
+    """List items in a todo list (defaults to the first todo entity)."""
+    if not entity_id:
+        todos = hass.states.async_entity_ids("todo")
+        if not todos:
+            return {"count": 0, "lists": [], "items": []}
+        entity_id = sorted(todos)[0]
+    resp = await hass.services.async_call(
+        "todo", "get_items", {}, target={"entity_id": entity_id},
+        blocking=True, return_response=True)
+    items = (resp or {}).get(entity_id, {}).get("items", [])
+    return {"entity_id": entity_id, "count": len(items), "items": items}
+
+
+async def _add_todo_item(hass: HomeAssistant, entity_id: str | None,
+                         item: str) -> dict[str, Any]:
+    """Add an item to a todo list (defaults to the first todo entity)."""
+    if not entity_id:
+        todos = hass.states.async_entity_ids("todo")
+        if not todos:
+            return {"error": "no todo entities found"}
+        entity_id = sorted(todos)[0]
+    await hass.services.async_call(
+        "todo", "add_item", {"item": item}, target={"entity_id": entity_id},
+        blocking=True)
+    return {"ok": True, "entity_id": entity_id, "item": item}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -1470,6 +1630,36 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _fire_event(hass, args["event_type"], args.get("event_data"))
         if name == "list_persons":
             return await _list_persons(hass)
+        # ---- deep-fusion round 2 ----
+        if name == "get_logbook":
+            return await _get_logbook(hass, args.get("hours", 24), args.get("entity_id"))
+        if name == "list_users":
+            return await _list_users(hass)
+        if name == "list_categories":
+            return await _list_categories(hass, args.get("scope", "automation"))
+        if name == "create_category":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _create_category(hass, args.get("scope", "automation"),
+                                          args["name"], args.get("icon"))
+        if name == "delete_category":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _delete_category(hass, args.get("scope", "automation"),
+                                          args.get("identifier") or args.get("category_id") or args.get("name"))
+        if name == "list_dashboards":
+            return await _list_dashboards(hass)
+        if name == "get_energy_prefs":
+            return await _get_energy_prefs(hass)
+        if name == "conversation_process":
+            return await _conversation_process(hass, args.get("text") or args.get("input", ""),
+                                               args.get("language"), args.get("agent_id"))
+        if name == "list_todo_items":
+            return await _list_todo_items(hass, args.get("entity_id"))
+        if name == "add_todo_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _add_todo_item(hass, args.get("entity_id"), args["item"])
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -2218,6 +2408,107 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "list_persons",
             "description": "List person entities with their tracked presence state, linked user_id and GPS location (when available).",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_logbook",
+            "description": "Humanised event timeline (HA logbook): state changes, logbook entries, automation/script triggers over the recent window. Optionally filter to one entity_id.",
+            "parameters": {"type": "object", "properties": {
+                "hours": {"type": "integer", "description": "Look-back window in hours (1-168, default 24)."},
+                "entity_id": {"type": "string", "description": "Optional entity to filter the logbook to."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_users",
+            "description": "List Home Assistant auth users (admin surface): id, name, is_active/is_owner/system_generated/local_only flags, group ids and an is_admin convenience flag.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_categories",
+            "description": "List categories registered for a scope (e.g. 'automation', 'script', 'entity'). Categories group items in the HA UI.",
+            "parameters": {"type": "object", "properties": {
+                "scope": {"type": "string", "description": "Category scope, e.g. 'automation' or 'script' (default 'automation')."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_category",
+            "description": "Create a category in a scope (idempotent by name). Returns category_id.",
+            "parameters": {"type": "object", "properties": {
+                "scope": {"type": "string", "description": "Category scope (default 'automation')."},
+                "name": {"type": "string"},
+                "icon": {"type": "string", "description": "Optional mdi icon, e.g. 'mdi:tag'."},
+            }, "required": ["name"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_category",
+            "description": "Delete a category from a scope by category_id or name.",
+            "parameters": {"type": "object", "properties": {
+                "scope": {"type": "string", "description": "Category scope (default 'automation')."},
+                "identifier": {"type": "string", "description": "Category id or name."},
+            }, "required": ["identifier"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_dashboards",
+            "description": "List Lovelace dashboards (default + storage + YAML) with their url_path and mode — the UI surface map.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_energy_prefs",
+            "description": "Return the Energy dashboard preferences (energy sources, device consumption, cost config), or {configured:false} when the energy dashboard is not set up.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "conversation_process",
+            "description": "Send a natural-language command to the Assist conversation agent (HA's built-in NLU) and return its spoken response and matched/affected targets. The agent's-eye view of voice/text control.",
+            "parameters": {"type": "object", "properties": {
+                "text": {"type": "string", "description": "The utterance, e.g. 'turn on the living room light'."},
+                "language": {"type": "string", "description": "Optional language code, e.g. 'en' or 'zh-cn'."},
+                "agent_id": {"type": "string", "description": "Optional conversation agent entity_id."},
+            }, "required": ["text"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_todo_items",
+            "description": "List items in a todo list (e.g. the Shopping List). Defaults to the first todo entity if entity_id is omitted.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "todo.* entity id (optional)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_todo_item",
+            "description": "Add an item to a todo list. Defaults to the first todo entity if entity_id is omitted.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "todo.* entity id (optional)."},
+                "item": {"type": "string", "description": "The item summary to add."},
+            }, "required": ["item"]},
         },
     },
 ]

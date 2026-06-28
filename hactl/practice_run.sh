@@ -94,4 +94,28 @@ hactl get "$L0"
 H "event bus: fire a custom event"
 hactl tool fire_event --args '{"event_type":"ha_copilot_practice_event","event_data":{"src":"practice_run"}}'
 
+# ---- deep-fusion round 2: logbook / users / categories / assist / todo / dashboards ----
+H "logbook plane: humanised recent event timeline"
+hactl tool get_logbook --args '{"hours":6}' | python -c "import sys,json;print('logbook entries:',json.load(sys.stdin)['count'])"
+
+H "auth plane: list users"
+hactl tool list_users | python -c "import sys,json;d=json.load(sys.stdin);print('users:',[u['name'] for u in d['users']])"
+
+H "category registry: create -> list -> delete (scope=automation)"
+hactl tool create_category --args '{"scope":"automation","name":"演练分类","icon":"mdi:tag"}'
+hactl tool list_categories --args '{"scope":"automation"}' | python -c "import sys,json;print('categories:',json.load(sys.stdin)['count'])"
+hactl tool delete_category --args '{"scope":"automation","identifier":"演练分类"}'
+
+H "UI surface: list Lovelace dashboards"
+hactl tool list_dashboards | python -c "import sys,json;d=json.load(sys.stdin);print('dashboards:',sorted({x['url_path'] for x in d['dashboards']}))"
+
+H "assist NLU: process a natural-language command (controls a real light)"
+LNAME=$(hactl tool list_entities --args '{"domain":"light"}' | python -c "import sys,json;print(json.load(sys.stdin)['entities'][0]['name'])")
+hactl tool conversation_process --args "{\"text\":\"打开${LNAME}\",\"language\":\"zh-cn\"}" | python -c "import sys,json;r=json.load(sys.stdin)['response'];print('assist:',r['response_type'],'|',r['speech']['plain']['speech'])"
+
+H "todo plane: add an item -> read back -> remove"
+hactl tool add_todo_item --args '{"item":"演练待办项"}'
+hactl tool list_todo_items | python -c "import sys,json;d=json.load(sys.stdin);print('todo items:',[i['summary'] for i in d['items']])"
+hactl tool execute_script --args '{"sequence":[{"service":"todo.remove_item","target":{"entity_id":"todo.shopping_list"},"data":{"item":"演练待办项"}}]}'
+
 echo; echo "### practice run complete"

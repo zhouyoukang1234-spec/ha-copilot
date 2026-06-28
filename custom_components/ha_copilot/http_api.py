@@ -13,13 +13,13 @@ The agent is always external; this component never calls an inference endpoint.
 """
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from aiohttp import web
 
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.json import json_dumps
 
 from . import tools
 from .const import (
@@ -173,7 +173,10 @@ class CopilotMcpView(HomeAssistantView):
                 rid,
                 {
                     "content": [
-                        {"type": "text", "text": json.dumps(result, ensure_ascii=False)}
+                        # Use HA's JSON encoder (not stdlib) so any result the
+                        # HTTP run_tool path can serialise — Context, datetime,
+                        # registry objects — also works over MCP.
+                        {"type": "text", "text": json_dumps(result)}
                     ],
                     "isError": is_error,
                 },
