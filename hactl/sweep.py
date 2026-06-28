@@ -141,6 +141,7 @@ PLAN = {
     "get_recorder_runs": {},
     "get_entity_sources": {},
     "list_input_helpers": {},
+    "list_intents": {},
     "get_group": {"entity_id": group} if group else {},
     "get_person": {"identifier": person} if person else {},
 }

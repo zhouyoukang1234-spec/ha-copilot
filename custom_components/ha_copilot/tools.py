@@ -2791,11 +2791,83 @@ async def _run_tools(
     }
 
 
+def _intent_slot_names(handler: Any) -> list[str]:
+    """Best-effort slot names from an intent handler's voluptuous schema."""
+    try:
+        schema = handler.slot_schema
+    except Exception:  # noqa: BLE001 - some handlers compute schema lazily
+        return []
+    if not schema:
+        return []
+    names: list[str] = []
+    for key in schema:
+        name = getattr(key, "schema", None)
+        names.append(str(name if name is not None else key))
+    return sorted(names)
+
+
+async def _list_intents(hass: HomeAssistant) -> dict[str, Any]:
+    """List intent handlers registered in HA (built-in + every integration).
+
+    Borrows HA's own intent registry (``intent.async_get``) so an agent can see
+    and trigger the same high-level intents Assist uses — HassTurnOn,
+    HassClimateSetTemperature, plus any custom intents integrations register.
+    """
+    from homeassistant.helpers import intent
+
+    handlers = sorted(intent.async_get(hass), key=lambda h: h.intent_type)
+    out = [
+        {
+            "intent_type": h.intent_type,
+            "description": getattr(h, "description", None),
+            "slots": _intent_slot_names(h),
+        }
+        for h in handlers
+    ]
+    return {"count": len(out), "intents": out}
+
+
+async def _handle_intent(
+    hass: HomeAssistant, intent_type: str, slots: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Fire a registered HA intent by type, wrapping bare slot values.
+
+    Slots may be passed flat (``{"name": "Kitchen"}``); each value is wrapped to
+    HA's ``{"value": ...}`` slot form unless already wrapped. Returns the intent
+    response (speech + structured results) so the agent sees what HA did.
+    """
+    from homeassistant.helpers import intent
+
+    wrapped: dict[str, Any] = {}
+    for key, val in (slots or {}).items():
+        wrapped[key] = val if isinstance(val, dict) and "value" in val else {"value": val}
+    try:
+        response = await intent.async_handle(
+            hass, "ha_copilot", intent_type, wrapped or None
+        )
+    except intent.UnknownIntent:
+        return {"error": f"unknown intent '{intent_type}' (try list_intents)"}
+    except intent.IntentHandleError as exc:
+        return {"error": f"intent handle error: {exc}"}
+    except Exception as exc:  # noqa: BLE001 - surface validation/slot errors
+        return {"error": f"{type(exc).__name__}: {exc}"}
+    return {"ok": True, "intent_type": intent_type, "response": response.as_dict()}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
         if name == "run_tools":
             return await _run_tools(hass, store, args)
+        if name == "list_intents":
+            return await _list_intents(hass)
+        if name == "handle_intent":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            itype = args.get("intent_type") or args.get("intent") or args.get("type")
+            if not itype:
+                return {"error": "missing required argument: intent_type"}
+            return await _handle_intent(hass, itype, args.get("slots") or args.get("data"))
         if name == "list_states":
             return await _list_states(hass, args.get("domain"))
         if name == "get_state":
@@ -3253,6 +3325,29 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["calls"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_intents",
+            "description": "List intent handlers registered in Home Assistant (built-in like HassTurnOn/HassClimateSetTemperature plus any an integration adds) with their slot names. These are the high-level intents HA's Assist uses; pair with handle_intent to invoke them.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "handle_intent",
+            "description": "Fire a registered HA intent by type (see list_intents), e.g. HassTurnOn with slots {\"name\": \"kitchen light\"}. Slot values may be passed flat; they are wrapped to HA's slot form automatically. Returns HA's intent response (speech + matched targets).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "intent_type": {"type": "string", "description": "Intent name, e.g. 'HassTurnOn'."},
+                    "slots": {"type": "object", "description": "Slot values, e.g. {\"name\": \"kitchen light\", \"area\": \"kitchen\"}."},
+                },
+                "required": ["intent_type"],
             },
         },
     },
