@@ -401,7 +401,7 @@ views:
           - type: template
             icon: mdi:power-plug
             content: "{{ states('sensor.sonoff_total_power_usage') }}W"
-            icon_color: "{% if states('sensor.sonoff_total_power_usage')|float > 1000 %}red{% else %}green{% endif %}"
+            icon_color: "{% if states('sensor.sonoff_total_power_usage')|float(0) > 1000 %}red{% else %}green{% endif %}"
           - type: template
             icon: mdi:cellphone
             content: "{{ states('sensor.unknown_battery_level') }}%"

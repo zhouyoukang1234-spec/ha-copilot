@@ -25,7 +25,6 @@ import asyncio
 import json
 import os
 import pathlib
-import subprocess
 import sys
 
 import requests
@@ -33,16 +32,7 @@ import websockets
 
 BASE = os.environ.get("HA_BASE", "http://localhost:8123")
 WS = BASE.replace("http", "ws", 1) + "/api/websocket"
-# HA config lives inside WSL; reach it through `wsl` so this works from Windows.
-WSL_DISTRO = os.environ.get("HA_WSL_DISTRO", "Ubuntu")
-CONFIG_DIR = os.environ.get("HA_CONFIG_DIR", "/root/ha-config")
 _TOKEN_FILE = pathlib.Path(__file__).resolve().parent.parent / ".ha_token"
-
-
-def _wsl_path(rel: str) -> str:
-    if ".." in pathlib.PurePosixPath(rel).parts:
-        raise SystemExit("path traversal not allowed")
-    return f"{CONFIG_DIR.rstrip('/')}/{rel.lstrip('/')}"
 
 
 def _token() -> str:
@@ -295,27 +285,30 @@ def cmd_script_create(a):
 
 
 # --- raw config files -----------------------------------------------------
+# Routed through the ha_copilot tool API (read_config_file / write_config_file)
+# so file access works against any deployment — Docker, bare metal, or WSL —
+# instead of assuming a local WSL distro on the operator's machine.
+def _run_tool(tool: str, args: dict):
+    res = rest("POST", "/api/ha_copilot/run_tool", {"tool": tool, "args": args})
+    result = res.get("result", res) if isinstance(res, dict) else res
+    if isinstance(result, dict) and result.get("error"):
+        raise SystemExit(result["error"])
+    return result
+
+
 def cmd_conf_get(a):
-    p = _wsl_path(a.path)
-    res = subprocess.run(
-        ["wsl", "-d", WSL_DISTRO, "--", "cat", p],
-        capture_output=True, text=True, encoding="utf-8",
-    )
-    if res.returncode != 0:
-        raise SystemExit(res.stderr.strip() or f"cat failed: {p}")
-    out({"path": p, "content": res.stdout})
+    if ".." in pathlib.PurePosixPath(a.path).parts:
+        raise SystemExit("path traversal not allowed")
+    res = _run_tool("read_config_file", {"path": a.path})
+    out({"path": a.path, "content": res.get("content", "")})
 
 
 def cmd_conf_set(a):
-    p = _wsl_path(a.path)
+    if ".." in pathlib.PurePosixPath(a.path).parts:
+        raise SystemExit("path traversal not allowed")
     content = sys.stdin.read() if a.content == "-" else a.content
-    res = subprocess.run(
-        ["wsl", "-d", WSL_DISTRO, "--", "tee", p],
-        input=content, capture_output=True, text=True, encoding="utf-8",
-    )
-    if res.returncode != 0:
-        raise SystemExit(res.stderr.strip() or f"write failed: {p}")
-    out({"path": p, "written": len(content)})
+    _run_tool("write_config_file", {"path": a.path, "content": content})
+    out({"path": a.path, "written": len(content)})
 
 
 def build_parser() -> argparse.ArgumentParser:

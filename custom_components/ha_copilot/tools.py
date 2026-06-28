@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 from datetime import timedelta
 from typing import Any
 
@@ -27,6 +26,7 @@ from homeassistant.helpers import (
 from homeassistant.helpers.check_config import async_check_ha_config_file
 from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
+from homeassistant.util import slugify as _slugify
 
 from .const import CONF_ALLOW_RESTART, CONF_ALLOW_WRITE
 
@@ -351,7 +351,7 @@ async def _create_scene(hass: HomeAssistant, name: str, entities: dict) -> dict[
         # is predictable and never reuses a deleted scene's id (which would make
         # HA's registry hand back a stale entity_id for the new scene).
         used = {s.get("id") for s in existing if isinstance(s, dict)}
-        base = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_") or "copilot_scene"
+        base = _slugify(name) or "copilot_scene"
         scene_id = base
         suffix = 2
         while scene_id in used:
@@ -374,7 +374,7 @@ async def _create_script(hass: HomeAssistant, alias: str, sequence: Any) -> dict
     path = _safe_path(hass, "scripts.yaml")
     if isinstance(sequence, dict):
         sequence = [sequence]
-    slug = re.sub(r"[^a-z0-9_]+", "_", alias.lower()).strip("_") or "copilot_script"
+    slug = _slugify(alias) or "copilot_script"
 
     def _append() -> str:
         existing: dict = {}
@@ -750,26 +750,36 @@ async def _update_script(hass: HomeAssistant, identifier: str, new_alias: str) -
     key = identifier.split(".", 1)[1] if identifier.startswith("script.") else identifier
     path = _safe_path(hass, "scripts.yaml")
 
-    def _rename() -> bool:
+    def _rename() -> str | None:
         if not os.path.isfile(path):
-            return False
+            return None
         with open(path, encoding="utf-8") as f:
             existing = yaml.safe_load(f) or {}
-        if not isinstance(existing, dict) or key not in existing:
-            return False
-        body = existing[key]
+        if not isinstance(existing, dict):
+            return None
+        # Resolve by dict key (== entity object_id) first, then fall back to the
+        # current alias so the documented "by id or current alias" contract holds
+        # (mirrors update_automation).
+        target_key = key if key in existing else next(
+            (k for k, v in existing.items()
+             if isinstance(v, dict) and v.get("alias") == identifier),
+            None,
+        )
+        if target_key is None:
+            return None
+        body = existing[target_key]
         if not isinstance(body, dict):
-            return False
+            return None
         body["alias"] = new_alias
         _backup_then_write(path, existing)
-        return True
+        return target_key
 
-    ok = await hass.async_add_executor_job(_rename)
-    if not ok:
+    resolved_key = await hass.async_add_executor_job(_rename)
+    if resolved_key is None:
         return {"error": f"no script matched '{identifier}'"}
     if hass.services.has_service("script", "reload"):
         await hass.services.async_call("script", "reload", {}, blocking=True)
-    return {"ok": True, "script_entity_id": f"script.{key}", "alias": new_alias}
+    return {"ok": True, "script_entity_id": f"script.{resolved_key}", "alias": new_alias}
 
 
 async def _delete_scene(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
@@ -896,7 +906,7 @@ async def _list_template_sensors(hass: HomeAssistant) -> dict[str, Any]:
     sensors = []
     for e in entries:
         name = e["name"]
-        slug = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_") or "sensor"
+        slug = _slugify(name) or "sensor"
         eid = f"sensor.{slug}"
         st = hass.states.get(eid)
         sensors.append({
