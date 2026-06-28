@@ -26,7 +26,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.json import json_dumps
 
-from . import tools
+from . import llm_api, tools
 from .const import (
     API_MCP,
     API_MCP_MESSAGES,
@@ -63,6 +63,38 @@ def _mcp_tools() -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+# Name of the single MCP prompt that injects live HA context. Mirrors the
+# AssistAPI-style context the native LLM API already adds (PR #15), so an
+# off-the-shelf MCP client gets the same area-grouped exposed-entity picture
+# instead of having to discover everything via read tools first.
+MCP_CONTEXT_PROMPT = "ha_context"
+
+
+def _mcp_prompts() -> list[dict[str, Any]]:
+    """The MCP prompt catalog (``prompts/list``)."""
+    return [
+        {
+            "name": MCP_CONTEXT_PROMPT,
+            "description": (
+                "Live Home Assistant context: entities exposed to Assist, "
+                "grouped by area, with current state. Inject before operating "
+                "devices so you target exact entity_ids without discovery calls."
+            ),
+            "arguments": [],
+        }
+    ]
+
+
+def _context_prompt_messages(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Build the messages for the ``ha_context`` prompt (``prompts/get``)."""
+    block = llm_api.entity_context_block(hass)
+    text = block or (
+        "No Home Assistant entities are currently exposed to Assist. Use the "
+        "list_states / list_areas tools to discover entities before acting."
+    )
+    return [{"role": "user", "content": {"type": "text", "text": text}}]
 
 
 class CopilotConfigView(HomeAssistantView):
@@ -264,7 +296,12 @@ async def _dispatch_rpc(hass: HomeAssistant, req: Any) -> dict[str, Any] | None:
             rid,
             {
                 "protocolVersion": MCP_PROTOCOL_VERSION,
-                "capabilities": {"tools": {"listChanged": False}},
+                "capabilities": {
+                    "tools": {"listChanged": False},
+                    # Expose a context prompt (live exposed entities by area) so
+                    # MCP clients get the same picture as the native LLM API.
+                    "prompts": {"listChanged": False},
+                },
                 "serverInfo": {"name": "ha-copilot", "version": "0.2.0"},
             },
         )
@@ -272,6 +309,19 @@ async def _dispatch_rpc(hass: HomeAssistant, req: Any) -> dict[str, Any] | None:
         return _rpc_ok(rid, {})
     if method == "tools/list":
         return _rpc_ok(rid, {"tools": _mcp_tools()})
+    if method == "prompts/list":
+        return _rpc_ok(rid, {"prompts": _mcp_prompts()})
+    if method == "prompts/get":
+        name = params.get("name")
+        if name != MCP_CONTEXT_PROMPT:
+            return _rpc_error(rid, -32602, f"unknown prompt: {name}")
+        return _rpc_ok(
+            rid,
+            {
+                "description": "Live Home Assistant context (exposed entities by area).",
+                "messages": _context_prompt_messages(hass),
+            },
+        )
     if method == "tools/call":
         name = params.get("name")
         args = params.get("arguments") or {}
