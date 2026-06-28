@@ -3359,6 +3359,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.recommend_resources(
                 hass, int(args.get("limit", 15))
             )
+        if name == "recommend_blueprints":
+            return await resources.recommend_blueprints(
+                hass, int(args.get("limit", 12))
+            )
         if name == "import_blueprint":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -3409,6 +3413,7 @@ _READ_ONLY_TOOLS = frozenset({
     "search_github",
     "search_blueprints",
     "recommend_resources",
+    "recommend_blueprints",
     "recall_memory",
 })
 # Irreversible / disruptive operations (removal, data purge, full restart).
@@ -4960,6 +4965,16 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "description": "Inspect the running HA's real devices (manufacturers), configured integrations and entity domains, then recommend HACS integrations and frontend cards matched to that hardware \u2014 with a reason for each. The 'match my devices to the right resources' capability: an operator can call this with zero arguments to surface what a non-expert user would otherwise never find. Read-only.",
             "parameters": {"type": "object", "properties": {
                 "limit": {"type": "integer", "description": "max recommendations per kind (default 15)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recommend_blueprints",
+            "description": "Zero-arg 'what can I automate with what I own': maps the home's real entity domains (light/binary_sensor/sensor/lock/climate\u2026) to common automation intents and returns matched community blueprints, each tagged with the intent that surfaced it. Feed a result's full_name to list_repo_blueprints, then import_blueprint. Read-only (bounded GitHub searches).",
+            "parameters": {"type": "object", "properties": {
+                "limit": {"type": "integer", "description": "max blueprint recommendations (default 12)."},
             }},
         },
     },

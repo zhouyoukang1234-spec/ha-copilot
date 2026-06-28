@@ -352,10 +352,15 @@ async def list_repo_blueprints(
     Closes the search -> import loop: ``search_blueprints`` finds repos, this
     resolves a repo (``owner/name`` or a GitHub URL) to the raw URLs of the
     blueprint files it contains, each ready to hand straight to
-    ``import_blueprint``. Detection is path-based (a ``.yaml``/``.yml`` under a
-    ``blueprints/`` directory), which covers the standard HA layout without
-    fetching every file; ``import_blueprint`` still validates the actual content
-    on import.
+    ``import_blueprint``.
+
+    Two-tier detection: first the canonical HA layout (a ``.yaml``/``.yml``
+    under a ``blueprints/`` directory) with no extra fetches. If that finds
+    nothing, fall back to **content-sniffing** the repo's shallow ``.yaml``
+    files (a great many community blueprints are a single file at repo root)
+    for a top-level ``blueprint:`` mapping — the definitive blueprint signature
+    — which recovers those without misfiring on configs/CI/issue-templates.
+    ``import_blueprint`` still validates on import.
     """
     slug = repo.strip()
     for pre in (f"{_RAW_BASE}/", "https://github.com/", "github.com/"):
@@ -374,31 +379,45 @@ async def list_repo_blueprints(
         )
     except Exception as err:  # noqa: BLE001 - surface fetch/ratelimit errors
         return {"error": f"{type(err).__name__}: {err}"}
-    results: list[dict[str, Any]] = []
-    for node in (tree or {}).get("tree", []):
-        if node.get("type") != "blob":
-            continue
-        path = node.get("path", "")
-        low = path.lower()
-        if not (low.endswith(".yaml") or low.endswith(".yml")):
-            continue
-        # Canonical HA layout: blueprints live under a ``blueprints/`` directory.
-        # Requiring that segment avoids false positives like GitHub issue
-        # templates (``.github/ISSUE_TEMPLATE/blueprint-*.yml``).
-        if "blueprints" not in low.split("/")[:-1]:
-            continue
-        results.append(
-            {
-                "path": path,
-                "raw_url": f"{_RAW_BASE}/{owner}/{name}/{branch}/{path}",
-            }
-        )
-        if len(results) >= max(1, limit):
-            break
+    cap = max(1, limit)
+    yaml_paths = [
+        node.get("path", "")
+        for node in (tree or {}).get("tree", [])
+        if node.get("type") == "blob"
+        and node.get("path", "").lower().endswith((".yaml", ".yml"))
+    ]
+
+    def _raw(path: str) -> str:
+        return f"{_RAW_BASE}/{owner}/{name}/{branch}/{path}"
+
+    # Tier 1: canonical blueprints/ directory (path-only, no fetch).
+    results = [
+        {"path": p, "raw_url": _raw(p)}
+        for p in yaml_paths
+        if "blueprints" in p.lower().split("/")[:-1]
+    ][:cap]
+    detection = "blueprints-dir"
+
+    # Tier 2: content-sniff shallow yaml for a top-level ``blueprint:`` key.
+    if not results:
+        detection = "content-sniff"
+        # Shallow files only (depth <= 1) to bound fetches and skip vendored/CI.
+        shallow = [p for p in yaml_paths if p.count("/") <= 1][:8]
+        for p in shallow:
+            try:
+                text = await _fetch_text(hass, _raw(p))
+                doc = yaml.load(text, Loader=_BlueprintLoader)  # noqa: S506
+            except Exception:  # noqa: BLE001 - skip unfetchable/unparseable
+                continue
+            if isinstance(doc, dict) and "blueprint" in doc:
+                results.append({"path": p, "raw_url": _raw(p)})
+                if len(results) >= cap:
+                    break
     return {
         "ok": True,
         "repo": f"{owner}/{name}",
         "branch": branch,
+        "detection": detection,
         "count": len(results),
         "blueprints": results,
         "truncated": bool((tree or {}).get("truncated")),
@@ -523,6 +542,88 @@ async def recommend_resources(
             "the given GitHub url, or import a blueprint with import_blueprint."
         ),
     }
+
+
+# Real entity domains -> the automation intents a user typically wants for them.
+# Drives device-matched blueprint discovery (the "what can I automate with what
+# I own" question) without the user knowing any search terms.
+_DOMAIN_INTENTS = {
+    "binary_sensor": ["motion activated light", "presence detection"],
+    "light": ["motion activated light"],
+    "sensor": ["low battery notification"],
+    "lock": ["lock notification"],
+    "climate": ["thermostat schedule"],
+    "cover": ["cover open reminder"],
+    "person": ["presence detection"],
+    "device_tracker": ["presence detection"],
+    "vacuum": ["vacuum notification"],
+}
+
+
+async def recommend_blueprints(
+    hass: HomeAssistant,
+    limit: int = 12,
+) -> dict[str, Any]:
+    """Recommend community blueprints matched to the home's real entity domains.
+
+    Cross-source fusion of the device profile (which entity domains actually
+    exist) with the community blueprint search: maps each present domain to the
+    automation intents a user usually wants, searches for ready-made blueprints,
+    and returns them deduped with the intent that surfaced each — so a non-expert
+    gets "here are automations for what you own", then feeds a result to
+    list_repo_blueprints -> import_blueprint. Bounded to a few searches.
+    """
+    signals = _device_signals(hass)
+    present = signals["entity_domains"]
+    intents: list[str] = []
+    seen_intent: set[str] = set()
+    for dom in sorted(present, key=lambda d: present[d], reverse=True):
+        for intent in _DOMAIN_INTENTS.get(dom, []):
+            if intent not in seen_intent:
+                seen_intent.add(intent)
+                intents.append(intent)
+    intents = intents[:4]  # cap external searches
+    if not intents:
+        return {
+            "ok": True,
+            "matched_domains": [],
+            "recommendations": [],
+            "note": "No entity domains map to known automation intents yet.",
+        }
+
+    recs: list[dict[str, Any]] = []
+    seen_repo: set[str] = set()
+    errors: list[str] = []
+    for intent in intents:
+        res = await search_blueprints(hass, intent, limit=4)
+        if res.get("error"):
+            errors.append(f"{intent}: {res['error']}")
+            continue
+        for item in res.get("results", []):
+            fn = item.get("full_name")
+            if not fn or fn in seen_repo:
+                continue
+            seen_repo.add(fn)
+            recs.append({**item, "matched_intent": intent})
+            if len(recs) >= limit:
+                break
+        if len(recs) >= limit:
+            break
+    recs.sort(key=lambda r: r.get("stars", 0), reverse=True)
+    out: dict[str, Any] = {
+        "ok": True,
+        "matched_domains": [d for d in present if d in _DOMAIN_INTENTS],
+        "intents": intents,
+        "count": len(recs),
+        "recommendations": recs,
+        "note": (
+            "Call list_repo_blueprints on a full_name to get importable raw "
+            "URLs, then import_blueprint."
+        ),
+    }
+    if errors:
+        out["partial_errors"] = errors
+    return out
 
 
 def _raw_url(url: str) -> str:
