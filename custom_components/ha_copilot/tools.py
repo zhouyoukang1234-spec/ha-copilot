@@ -84,6 +84,11 @@ async def _call_service(
     if not hass.services.has_service(domain, service):
         return {"error": f"service '{domain}.{service}' does not exist"}
     data = dict(data or {})
+    # AssistAPI-style targeting: act on a whole area/floor/label without first
+    # enumerating entity_ids. Resolves names -> ids; HA expands the target.
+    target = _resolve_service_target(hass, data)
+    if "__error__" in target:
+        return {"error": target["__error__"]}
     # Validate any referenced entity_ids so the agent gets corrective feedback
     # instead of silently calling a service against a non-existent entity.
     raw = data.get("entity_id")
@@ -98,11 +103,15 @@ async def _call_service(
             "error": f"unknown entity_id(s): {missing}. "
             "Call list_states to get exact entity_ids and retry.",
         }
-    await hass.services.async_call(domain, service, data, blocking=True)
+    await hass.services.async_call(
+        domain, service, data, blocking=True, target=target or None
+    )
     # Let derived entities (e.g. template lights) re-render from their source
     # before we read back the resulting state, so feedback isn't stale.
     await asyncio.sleep(0.2)
     result: dict[str, Any] = {"ok": True, "called": f"{domain}.{service}", "data": data}
+    if target:
+        result["target"] = target
     if ids:
         result["states"] = {
             e: (s.state if (s := hass.states.get(e)) else None) for e in ids
@@ -276,6 +285,56 @@ def _resolve_area_id(hass: HomeAssistant, area: str) -> str | None:
         return area
     match = next((a for a in reg.async_list_areas() if a.name == area), None)
     return match.id if match else None
+
+
+def _resolve_floor_id(hass: HomeAssistant, floor: str) -> str | None:
+    reg = fr.async_get(hass)
+    if reg.async_get_floor(floor) is not None:
+        return floor
+    match = next((f for f in reg.async_list_floors() if f.name == floor), None)
+    return match.floor_id if match else None
+
+
+def _resolve_label_id(hass: HomeAssistant, label: str) -> str | None:
+    reg = lr.async_get(hass)
+    if reg.async_get_label(label) is not None:
+        return label
+    match = next((x for x in reg.async_list_labels() if x.name == label), None)
+    return match.label_id if match else None
+
+
+def _resolve_service_target(
+    hass: HomeAssistant, data: dict[str, Any]
+) -> dict[str, list[str]] | dict[str, str]:
+    """Pop AssistAPI-style area/floor/label targets from ``data`` and resolve
+    their names to registry ids, returning an HA service ``target`` dict.
+
+    Lets a model act on a whole area/floor/label without first enumerating
+    entity_ids; HA expands floor -> areas -> entities natively. Returns
+    ``{"__error__": "..."}`` if any named target can't be resolved.
+    """
+    resolvers = {
+        ("area", "areas", "area_id"): ("area_id", _resolve_area_id),
+        ("floor", "floors", "floor_id"): ("floor_id", _resolve_floor_id),
+        ("label", "labels", "label_id"): ("label_id", _resolve_label_id),
+    }
+    target: dict[str, list[str]] = {}
+    for keys, (target_key, resolve) in resolvers.items():
+        values: list[str] = []
+        for key in keys:
+            raw = data.pop(key, None)
+            if raw is None:
+                continue
+            values.extend([raw] if isinstance(raw, str) else [str(v) for v in raw])
+        ids: list[str] = []
+        for value in values:
+            resolved = resolve(hass, value)
+            if resolved is None:
+                return {"__error__": f"{target_key[:-3]} '{value}' not found"}
+            ids.append(resolved)
+        if ids:
+            target[target_key] = ids
+    return target
 
 
 async def _update_entity(
@@ -3158,7 +3217,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "call_service",
-            "description": "Call any Home Assistant service, e.g. domain='light', service='turn_on', entity_id='light.living_room'. Pass the target as 'entity_id' (full id including the domain prefix). Extra parameters like brightness can go in 'data'.",
+            "description": "Call any Home Assistant service, e.g. domain='light', service='turn_on', entity_id='light.living_room'. Target by 'entity_id' (full id) OR by 'area'/'floor'/'label' (name or id, string or list) to act on a whole group without enumerating entities — HA expands floor->areas->entities. Extra params like brightness go in 'data'.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -3167,6 +3226,21 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "entity_id": {
                         "type": "string",
                         "description": "Target entity_id, e.g. 'light.living_room'. Use the exact full id from list_states.",
+                    },
+                    "area": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Target area(s) by name or area_id, e.g. 'Living Room'. From list_areas.",
+                    },
+                    "floor": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Target floor(s) by name or floor_id, e.g. 'Upstairs'. From list_floors.",
+                    },
+                    "label": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Target label(s) by name or label_id. From list_labels.",
                     },
                     "data": {"type": "object", "description": "Optional extra service params, e.g. {brightness: 255}"},
                 },
