@@ -27,5 +27,11 @@ STATIC_URL_BASE = "/ha_copilot_static"
 API_TOOLS = "/api/ha_copilot/tools"
 API_RUN_TOOL = "/api/ha_copilot/run_tool"
 API_MCP = "/api/ha_copilot/mcp"
+# Standard MCP HTTP+SSE transport (protocol 2024-11-05): clients open the SSE
+# stream to receive an ``endpoint`` event, then POST JSON-RPC to that endpoint.
+API_MCP_SSE = "/api/ha_copilot/mcp/sse"
+API_MCP_MESSAGES = "/api/ha_copilot/mcp/messages"
 
 DATA_STORE = "store"
+# Registry of live MCP SSE sessions: session_id -> asyncio.Queue[str | None].
+DATA_MCP_SESSIONS = "mcp_sse_sessions"
