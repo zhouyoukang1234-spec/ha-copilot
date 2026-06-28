@@ -1,0 +1,14 @@
+template:
+- sensor:
+  - name: Devin 在线灯数
+    state: '{{ states.light|selectattr(''state'',''eq'',''on'')|list|count }}'
+    unit_of_measurement: 盏
+    icon: mdi:lightbulb-on
+  - name: Devin 开关在线数
+    state: '{{ states.switch|selectattr(''state'',''eq'',''on'')|list|count }}'
+    unit_of_measurement: 个
+    icon: mdi:toggle-switch
+  - name: Devin 设备总数
+    state: '{{ states|list|count }}'
+    unit_of_measurement: 个
+    icon: mdi:counter

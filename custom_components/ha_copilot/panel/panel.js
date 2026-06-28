@@ -744,9 +744,45 @@ class HaCopilotPanel extends HTMLElement {
   _onToolPick() {
     const sel = this.querySelector("#cp-tool");
     const desc = this.querySelector("#cp-tool-desc");
+    const argsBox = this.querySelector("#cp-args");
     if (!sel || !desc) return;
     const t = this._tools.find((x) => x.name === sel.value);
-    desc.textContent = t ? t.description || "" : "";
+    if (!t) {
+      desc.textContent = "";
+      return;
+    }
+    const schema = t.inputSchema || {};
+    const props = schema.properties || {};
+    const required = schema.required || [];
+    // Description + which params are required vs optional (human-readable hint).
+    const names = Object.keys(props);
+    let hint = t.description || "";
+    if (names.length) {
+      const parts = names.map((n) => (required.includes(n) ? `${n}*` : n));
+      hint += `  ·  参数: ${parts.join(", ")}（*必填）`;
+    }
+    desc.textContent = hint;
+    // Auto-prefill an arg skeleton (only when switching tools, so we never clobber
+    // an edit in progress). Fill all params so the operator just edits values.
+    if (argsBox && this._lastPickedTool !== t.name) {
+      this._lastPickedTool = t.name;
+      argsBox.value = names.length
+        ? JSON.stringify(this._schemaSkeleton(props), null, 2)
+        : "";
+    }
+  }
+
+  _schemaSkeleton(props) {
+    const out = {};
+    for (const [key, spec] of Object.entries(props)) {
+      const type = (spec && spec.type) || "string";
+      if (type === "boolean") out[key] = false;
+      else if (type === "integer" || type === "number") out[key] = 0;
+      else if (type === "array") out[key] = [];
+      else if (type === "object") out[key] = {};
+      else out[key] = "";
+    }
+    return out;
   }
 
   _renderOplog() {

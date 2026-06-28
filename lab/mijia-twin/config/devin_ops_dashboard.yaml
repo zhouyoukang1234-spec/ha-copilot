@@ -1,0 +1,38 @@
+title: Devin 运维工作台
+views:
+- title: 运维工作台
+  path: ops
+  icon: mdi:console
+  cards:
+  - type: entities
+    title: ① 集成部署 (deploy_integration.py)
+    show_header_toggle: false
+    entities:
+    - entity: var.devin_deploy_count
+      name: 已部署社区集成数
+    - entity: sensor.devin_shi_wen_ping_jun_averageji_cheng
+      name: average 集成·室温均值
+  - type: entities
+    title: ② 配置审计 (watchman)
+    show_header_toggle: false
+    entities:
+    - entity: sensor.watchman_missing_entities
+      name: 缺失实体
+    - entity: sensor.watchman_missing_actions
+      name: 缺失服务
+    - entity: sensor.watchman_processed_files
+      name: 已解析文件
+    - entity: sensor.watchman_last_update
+      name: 上次审计
+  - type: entities
+    title: ③ 实体联动 (author.py 授作)
+    show_header_toggle: false
+    entities:
+    - entity: automation.devin_lian_dong_zhan_yong_ji_kai_deng_bian_cheng_shou_zuo
+      name: 占用即开灯·联动
+    - entity: automation.devin_mei_ri_neng_yuan_bo_bao_ding_shi_ren_wu
+      name: 每日能源播报
+    - entity: sensor.devin_jia_ting_zong_gong_lu
+      name: 家庭总功率
+    - entity: sensor.devin_deng_ju_zai_xian_shu
+      name: 灯具在线数

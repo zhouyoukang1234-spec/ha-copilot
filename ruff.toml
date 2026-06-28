@@ -1,0 +1,8 @@
+# Lint our own code only. The user's real Home Assistant config is mirrored
+# verbatim under lab/mijia-twin/config for the digital twin; its vendored
+# third-party custom components are not ours to modify, so they are excluded
+# from linting. Our own twin layer (lab_sim) is still linted.
+extend-exclude = [
+    "lab/mijia-twin/config/custom_components/ha_tools_manager",
+    "lab/mijia-twin/config/blueprints",
+]

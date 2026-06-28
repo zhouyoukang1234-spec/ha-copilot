@@ -1,0 +1,69 @@
+# Devin · 推演新增包 —— 直接在「数字孪生」上构建并实测
+# 演示「对话式」为用户设计: 派生传感器 / 定时任务 / 情景自动化 / 辅助实体。
+# 与真机零接触: 全部跑在 Devin 虚拟机的孪生沙盒里。
+
+input_boolean:
+  devin_night_guard:
+    name: Devin 夜间守护
+    icon: mdi:shield-moon
+
+input_text:
+  devin_last_report:
+    name: Devin 最近播报
+    max: 255
+
+template:
+  - sensor:
+      - name: "Devin 家庭总功率"
+        unique_id: devin_home_total_power
+        unit_of_measurement: "W"
+        # No device_class on purpose: keeps this aggregate OUT of the
+        # power-sensor filter below, so it never sums itself (no template loop).
+        state: >
+          {{ states.sensor
+             | selectattr('attributes.device_class', 'eq', 'power')
+             | map(attribute='state') | map('float', 0) | sum | round(1) }}
+      - name: "Devin 灯具在线数"
+        unique_id: devin_lights_on
+        unit_of_measurement: "盏"
+        state: >
+          {{ states.light | selectattr('state', 'eq', 'on') | list | count }}
+
+automation:
+  - id: devin_daily_energy_report
+    alias: "Devin · 每日能源播报 (定时任务)"
+    description: 每天 23:00 汇总孪生家庭总功率与亮灯数, 写入播报实体。
+    trigger:
+      - platform: time
+        at: "23:00:00"
+    action:
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.devin_last_report
+        data:
+          value: >
+            {{ now().strftime('%m-%d %H:%M') }} · 总功率
+            {{ states('sensor.devin_jia_ting_zong_gong_lu') }}W · 亮灯
+            {{ states('sensor.devin_deng_ju_zai_xian_shu') }} 盏
+    mode: single
+
+  - id: devin_night_guard_off
+    alias: "Devin · 夜间守护:无人 5 分钟自动关灯"
+    description: 守护开启且占用传感器持续无人时, 关闭主灯 (孪生演示)。
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.xiaomi_cn_blt_3_1kd2sgr5oco00_03_occupancy_status_p_2_1078
+        to: "off"
+        for: "00:05:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.devin_night_guard
+        state: "on"
+    action:
+      - service: light.turn_off
+        target:
+          entity_id:
+            - light.yi_hao_deng
+            - light.er_hao_deng
+            - light.san_hao_deng
+    mode: single
