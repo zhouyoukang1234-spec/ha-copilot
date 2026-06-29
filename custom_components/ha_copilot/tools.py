@@ -22666,6 +22666,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _smart_kennel_status(hass)
         if name == "compost_bin_status":
             return await _compost_bin_status(hass)
+        # --- Wave 114 dispatch ---
+        if name == "dj_system_status":
+            return await _dj_system_status(hass)
+        if name == "recording_studio_status":
+            return await _recording_studio_status(hass)
+        if name == "smart_gaming_room":
+            return await _smart_gaming_room(hass)
+        if name == "vr_room_status":
+            return await _vr_room_status(hass)
+        if name == "home_gym_status":
+            return await _home_gym_status(hass)
+        if name == "meditation_room_status":
+            return await _meditation_room_status(hass)
+        if name == "wine_cellar_status":
+            return await _wine_cellar_status(hass)
+        if name == "cigar_humidor_status":
+            return await _cigar_humidor_status(hass)
+        if name == "smart_bar_status":
+            return await _smart_bar_status(hass)
+        if name == "home_spa_status":
+            return await _home_spa_status(hass)
+        if name == "steam_room_status":
+            return await _steam_room_status(hass)
+        if name == "cold_plunge_status":
+            return await _cold_plunge_status(hass)
+        if name == "infrared_sauna_status":
+            return await _infrared_sauna_status(hass)
+        if name == "roof_deck_status":
+            return await _roof_deck_status(hass)
+        if name == "patio_string_lights":
+            return await _patio_string_lights(hass)
+        if name == "landscape_lighting_status":
+            return await _landscape_lighting_status(hass)
+        if name == "pathway_lighting_status":
+            return await _pathway_lighting_status(hass)
+        if name == "fountain_status":
+            return await _fountain_status(hass)
+        if name == "waterfall_feature_status":
+            return await _waterfall_feature_status(hass)
+        if name == "koi_pond_status":
+            return await _koi_pond_status(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -41463,6 +41504,237 @@ async def _compost_bin_status(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "entities": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 114 — luxury rooms & outdoor: DJ, recording studio, gaming, VR, gym,
+# meditation, wine cellar, cigar humidor, bar, spa, steam room, cold plunge,
+# infrared sauna, roof deck, patio lights, landscape/pathway lighting,
+# fountain, waterfall, koi pond
+# ---------------------------------------------------------------------------
+
+
+async def _dj_system_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check DJ system status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "dj" in name and ("system" in name or "booth" in name or "mixer" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _recording_studio_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check recording studio status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "studio" in name or "recording" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_gaming_room(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart gaming room."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "gaming" in name or "game_room" in name or "game room" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _vr_room_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check VR room status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "vr" in name and ("room" in name or "space" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _home_gym_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check home gym status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "gym" in name or "workout" in name or "fitness" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _meditation_room_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check meditation room status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "meditation" in name or "zen" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _wine_cellar_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check wine cellar status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "wine" in name and ("cellar" in name or "cooler" in name or "fridge" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _cigar_humidor_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check cigar humidor status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "cigar" in name or "humidor" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_bar_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart bar status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "bar" in name and ("smart" in name or "light" in name or "fridge" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _home_spa_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check home spa status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "spa" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _steam_room_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check steam room status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "steam" in name and "room" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _cold_plunge_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check cold plunge status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "cold_plunge" in name or "cold plunge" in name or "ice_bath" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _infrared_sauna_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check infrared sauna status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "sauna" in name and ("infrared" in name or "ir" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _roof_deck_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check roof deck status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "roof" in name and ("deck" in name or "terrace" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _patio_string_lights(hass: HomeAssistant) -> dict[str, Any]:
+    """Check patio string lights."""
+    results = []
+    for s in hass.states.async_all("light"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "patio" in name or "string" in name or "festoon" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "brightness": s.attributes.get("brightness"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "lights": results}
+
+
+async def _landscape_lighting_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check landscape lighting status."""
+    results = []
+    for s in hass.states.async_all("light"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "landscape" in name or "garden_light" in name or "yard_light" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "brightness": s.attributes.get("brightness"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "lights": results}
+
+
+async def _pathway_lighting_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check pathway lighting status."""
+    results = []
+    for s in hass.states.async_all("light"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "pathway" in name or "walkway" in name or "path_light" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "brightness": s.attributes.get("brightness"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "lights": results}
+
+
+async def _fountain_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check fountain status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "fountain" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _waterfall_feature_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check waterfall feature status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "waterfall" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _koi_pond_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check koi pond status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "koi" in name or ("pond" in name and "fish" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -54054,4 +54326,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "pet_door_status", "description": "Pet door status.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "smart_kennel_status", "description": "Smart kennel status.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "compost_bin_status", "description": "Compost bin status.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 114 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "dj_system_status", "description": "DJ system status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "recording_studio_status", "description": "Recording studio status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_gaming_room", "description": "Gaming room status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "vr_room_status", "description": "VR room status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_gym_status", "description": "Home gym status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "meditation_room_status", "description": "Meditation room status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "wine_cellar_status", "description": "Wine cellar status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "cigar_humidor_status", "description": "Cigar humidor status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_bar_status", "description": "Smart bar status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_spa_status", "description": "Home spa status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "steam_room_status", "description": "Steam room status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "cold_plunge_status", "description": "Cold plunge status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "infrared_sauna_status", "description": "Infrared sauna status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "roof_deck_status", "description": "Roof deck status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "patio_string_lights", "description": "Patio string lights.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "landscape_lighting_status", "description": "Landscape lighting.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pathway_lighting_status", "description": "Pathway lighting.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "fountain_status", "description": "Fountain status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "waterfall_feature_status", "description": "Waterfall feature.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "koi_pond_status", "description": "Koi pond status.", "parameters": {"type": "object", "properties": {}}}},
 ]
