@@ -23035,6 +23035,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _body_temperature_check(hass)
         if name == "oxygen_saturation_check":
             return await _oxygen_saturation_check(hass)
+        # --- Wave 123 dispatch ---
+        if name == "electricity_price_check":
+            return await _electricity_price_check(hass)
+        if name == "gas_price_check":
+            return await _gas_price_check(hass)
+        if name == "water_price_check":
+            return await _water_price_check(hass)
+        if name == "energy_usage_hourly":
+            return await _energy_usage_hourly(hass)
+        if name == "energy_usage_daily":
+            return await _energy_usage_daily(hass)
+        if name == "energy_usage_weekly":
+            return await _energy_usage_weekly(hass)
+        if name == "energy_usage_monthly":
+            return await _energy_usage_monthly(hass)
+        if name == "solar_production_deep":
+            return await _solar_production_deep(hass)
+        if name == "battery_cycle_check":
+            return await _battery_cycle_check(hass)
+        if name == "voltage_monitor_deep":
+            return await _voltage_monitor_deep(hass)
+        if name == "current_monitor_deep":
+            return await _current_monitor_deep(hass)
+        if name == "frequency_monitor":
+            return await _frequency_monitor(hass)
+        if name == "power_surge_check":
+            return await _power_surge_check(hass)
+        if name == "energy_peak_demand":
+            return await _energy_peak_demand(hass)
+        if name == "tariff_optimization":
+            return await _tariff_optimization(hass)
+        if name == "standby_cost_check":
+            return await _standby_cost_check(hass)
+        if name == "reactive_power_check":
+            return await _reactive_power_check(hass)
+        if name == "harmonic_distortion_check":
+            return await _harmonic_distortion_check(hass)
+        if name == "phase_balance_check":
+            return await _phase_balance_check(hass)
+        if name == "power_outage_check":
+            return await _power_outage_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -44012,6 +44053,262 @@ async def _oxygen_saturation_check(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "sensors": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 123 — energy/power deep: electricity/gas/water pricing, usage tracking,
+# solar, battery cycles, voltage/current/frequency, surge, peak demand, tariff,
+# standby cost, reactive power, harmonics, phase balance, outage
+# ---------------------------------------------------------------------------
+
+
+async def _electricity_price_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check electricity price."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("electricity" in name or "elec" in name) and "price" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _gas_price_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check gas price."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "gas" in name and "price" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _water_price_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check water price."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "water" in name and "price" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _energy_usage_hourly(hass: HomeAssistant) -> dict[str, Any]:
+    """Check hourly energy usage."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc == "energy":
+            try:
+                results.append({"entity_id": s.entity_id, "value": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    total = round(sum(r["value"] for r in results), 2)
+    return {"ok": True, "count": len(results), "total": total, "sensors": results}
+
+
+async def _energy_usage_daily(hass: HomeAssistant) -> dict[str, Any]:
+    """Check daily energy usage."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if dc == "energy" and ("daily" in name or "today" in name or "day" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _energy_usage_weekly(hass: HomeAssistant) -> dict[str, Any]:
+    """Check weekly energy usage."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if dc == "energy" and ("weekly" in name or "week" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _energy_usage_monthly(hass: HomeAssistant) -> dict[str, Any]:
+    """Check monthly energy usage."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if dc == "energy" and ("monthly" in name or "month" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _solar_production_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """Check solar production deep."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "solar" in name and ("production" in name or "yield" in name or "generat" in name or "power" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _battery_cycle_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check battery cycles."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "battery" in name and ("cycle" in name or "charge_count" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _voltage_monitor_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor voltage deep."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "voltage":
+            try:
+                results.append({"entity_id": s.entity_id, "voltage": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _current_monitor_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor current deep."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "current":
+            try:
+                results.append({"entity_id": s.entity_id, "current": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _frequency_monitor(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor frequency."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "frequency":
+            try:
+                results.append({"entity_id": s.entity_id, "frequency": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _power_surge_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check power surges."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "surge" in name or "spike" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _energy_peak_demand(hass: HomeAssistant) -> dict[str, Any]:
+    """Check energy peak demand."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "peak" in name and ("demand" in name or "power" in name or "load" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _tariff_optimization(hass: HomeAssistant) -> dict[str, Any]:
+    """Check tariff optimization."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "tariff" in name or "rate" in name and ("electric" in name or "energy" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _standby_cost_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check standby power cost."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "standby" in name and ("cost" in name or "power" in name or "watt" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _reactive_power_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check reactive power."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "reactive" in name and "power" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _harmonic_distortion_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check harmonic distortion."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "harmonic" in name or "thd" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _phase_balance_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check phase balance."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "phase" in name and ("balance" in name or "l1" in name or "l2" in name or "l3" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _power_outage_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check power outage."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "outage" in name or "power_loss" in name or "power loss" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -56792,4 +57089,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "fitness_goal_check", "description": "Fitness goals.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "body_temperature_check", "description": "Body temperature.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "oxygen_saturation_check", "description": "Oxygen saturation.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 123 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "electricity_price_check", "description": "Electricity price.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "gas_price_check", "description": "Gas price.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "water_price_check", "description": "Water price.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_usage_hourly", "description": "Energy usage hourly.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_usage_daily", "description": "Energy usage daily.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_usage_weekly", "description": "Energy usage weekly.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_usage_monthly", "description": "Energy usage monthly.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "solar_production_deep", "description": "Solar production deep.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "battery_cycle_check", "description": "Battery cycles.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "voltage_monitor_deep", "description": "Voltage monitor deep.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "current_monitor_deep", "description": "Current monitor deep.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "frequency_monitor", "description": "Frequency monitor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "power_surge_check", "description": "Power surge.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_peak_demand", "description": "Energy peak demand.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "tariff_optimization", "description": "Tariff optimization.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "standby_cost_check", "description": "Standby cost.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "reactive_power_check", "description": "Reactive power.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "harmonic_distortion_check", "description": "Harmonic distortion.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "phase_balance_check", "description": "Phase balance.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "power_outage_check", "description": "Power outage.", "parameters": {"type": "object", "properties": {}}}},
 ]
