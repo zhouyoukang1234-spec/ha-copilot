@@ -21967,6 +21967,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _media_player_group_status(hass)
         if name == "light_group_sync_check":
             return await _light_group_sync_check(hass)
+        # --- Wave 97 dispatch ---
+        if name == "camera_recording_status":
+            return await _camera_recording_status(hass)
+        if name == "camera_motion_zone_check":
+            return await _camera_motion_zone_check(hass)
+        if name == "smart_tv_app_usage":
+            return await _smart_tv_app_usage(hass)
+        if name == "smart_tv_standby_check":
+            return await _smart_tv_standby_check(hass)
+        if name == "thermostat_learning_status":
+            return await _thermostat_learning_status(hass)
+        if name == "thermostat_schedule_deviation":
+            return await _thermostat_schedule_deviation(hass)
+        if name == "water_flow_anomaly":
+            return await _water_flow_anomaly(hass)
+        if name == "water_main_shutoff_status":
+            return await _water_main_shutoff_status(hass)
+        if name == "mqtt_topic_summary":
+            return await _mqtt_topic_summary(hass)
+        if name == "mqtt_message_rate":
+            return await _mqtt_message_rate(hass)
+        if name == "esphome_device_uptime":
+            return await _esphome_device_uptime(hass)
+        if name == "esphome_ota_update_check":
+            return await _esphome_ota_update_check(hass)
+        if name == "siren_test_status":
+            return await _siren_test_status(hass)
+        if name == "window_open_duration":
+            return await _window_open_duration(hass)
+        if name == "window_open_count":
+            return await _window_open_count(hass)
+        if name == "room_presence_heatmap":
+            return await _room_presence_heatmap(hass)
+        if name == "solar_production_today":
+            return await _solar_production_today(hass)
+        if name == "solar_battery_level":
+            return await _solar_battery_level(hass)
+        if name == "air_quality_index_check":
+            return await _air_quality_index_check(hass)
+        if name == "washing_machine_notification_check":
+            return await _washing_machine_notification_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -36036,6 +36077,294 @@ async def _light_group_sync_check(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "group_count": len(groups), "groups": groups}
 
 
+# ---------------------------------------------------------------------------
+# Wave 97 — camera, smart TV, thermostat, water flow, MQTT, ESPHome, siren,
+# window, presence, solar, air quality, washing machine
+# ---------------------------------------------------------------------------
+
+
+async def _camera_recording_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check camera recording status."""
+    results = []
+    for s in hass.states.async_all("camera"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "is_recording": s.attributes.get("is_recording"),
+                        "brand": s.attributes.get("brand"),
+                        "model": s.attributes.get("model_name"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    recording = sum(1 for r in results if r.get("is_recording"))
+    return {"ok": True, "total": len(results), "recording": recording, "cameras": results}
+
+
+async def _camera_motion_zone_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check camera motion zones."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("camera" in name or "cam" in name) and s.attributes.get("device_class") == "motion":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "motion_detected": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "zones": results}
+
+
+async def _smart_tv_app_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart TV app usage."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("tv", "television", "samsung", "lg", "sony", "android_tv")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "app_id": s.attributes.get("app_id"),
+                            "app_name": s.attributes.get("app_name"),
+                            "source": s.attributes.get("source"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "tvs": results}
+
+
+async def _smart_tv_standby_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart TVs in standby."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("tv", "television")):
+            if s.state in ("off", "standby"):
+                hours = (now - s.last_changed).total_seconds() / 3600
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "hours_standby": round(hours, 1),
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "tvs": results}
+
+
+async def _thermostat_learning_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check thermostat learning/smart features."""
+    results = []
+    for s in hass.states.async_all("climate"):
+        presets = s.attributes.get("preset_modes", [])
+        results.append({"entity_id": s.entity_id, "mode": s.state,
+                        "preset_mode": s.attributes.get("preset_mode"),
+                        "preset_modes": presets,
+                        "has_learning": any("learn" in str(p).lower() or "auto" in str(p).lower()
+                                            for p in presets) if presets else False,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "thermostats": results}
+
+
+async def _thermostat_schedule_deviation(hass: HomeAssistant) -> dict[str, Any]:
+    """Check thermostat schedule deviation."""
+    results = []
+    for s in hass.states.async_all("climate"):
+        target = s.attributes.get("temperature")
+        current = s.attributes.get("current_temperature")
+        if target is not None and current is not None:
+            try:
+                dev = round(float(current) - float(target), 1)
+                results.append({"entity_id": s.entity_id,
+                                "target": float(target), "current": float(current),
+                                "deviation": dev,
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "deviations": results}
+
+
+async def _water_flow_anomaly(hass: HomeAssistant) -> dict[str, Any]:
+    """Check for water flow anomalies."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("water_flow", "flow_rate", "water_usage")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _water_main_shutoff_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check water main shutoff valve status."""
+    results = []
+    for s in hass.states.async_all("valve"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("main", "shutoff", "water_main")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("switch"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "water" in name and ("shutoff" in name or "main" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "valves": results}
+
+
+async def _mqtt_topic_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize MQTT topics."""
+    mqtt_data = hass.data.get("mqtt", {})
+    entries = hass.config_entries.async_entries("mqtt")
+    return {"ok": True, "mqtt_configured": len(entries) > 0,
+            "mqtt_data_available": bool(mqtt_data),
+            "integration_count": len(entries)}
+
+
+async def _mqtt_message_rate(hass: HomeAssistant) -> dict[str, Any]:
+    """Check MQTT message rate sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "mqtt" in name and any(kw in name for kw in ("message", "rate", "count", "received")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _esphome_device_uptime(hass: HomeAssistant) -> dict[str, Any]:
+    """Check ESPHome device uptime."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "esphome" in name and "uptime" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    entries = hass.config_entries.async_entries("esphome")
+    return {"ok": True, "uptime_sensors": len(results),
+            "esphome_entries": len(entries), "sensors": results}
+
+
+async def _esphome_ota_update_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check ESPHome OTA update availability."""
+    results = []
+    for s in hass.states.async_all("update"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "esphome" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "installed_version": s.attributes.get("installed_version"),
+                            "latest_version": s.attributes.get("latest_version"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "updates": results}
+
+
+async def _siren_test_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check siren test status."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("siren"):
+        hours = (now - s.last_changed).total_seconds() / 3600
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "hours_since_activation": round(hours, 1),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sirens": results}
+
+
+async def _window_open_duration(hass: HomeAssistant) -> dict[str, Any]:
+    """Check how long windows have been open."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "window" and s.state == "on":
+            hours = (now - s.last_changed).total_seconds() / 3600
+            results.append({"entity_id": s.entity_id,
+                            "hours_open": round(hours, 1),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    results.sort(key=lambda x: x["hours_open"], reverse=True)
+    return {"ok": True, "open_count": len(results), "windows": results}
+
+
+async def _window_open_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Count currently open windows."""
+    total = _open = closed = 0
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "window":
+            total += 1
+            if s.state == "on":
+                _open += 1
+            else:
+                closed += 1
+    return {"ok": True, "total": total, "open": _open, "closed": closed}
+
+
+async def _room_presence_heatmap(hass: HomeAssistant) -> dict[str, Any]:
+    """Build room presence heatmap from motion sensors."""
+    ent_reg = er.async_get(hass)
+    area_reg = ar.async_get(hass)
+    area_motion: dict[str, int] = {}
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") != "motion":
+            continue
+        if s.state != "on":
+            continue
+        entry = ent_reg.async_get(s.entity_id)
+        area_id = entry.area_id if entry else None
+        area = area_reg.async_get_area(area_id) if area_id else None
+        name = area.name if area else "Unassigned"
+        area_motion[name] = area_motion.get(name, 0) + 1
+    ranking = sorted(area_motion.items(), key=lambda x: x[1], reverse=True)
+    return {"ok": True, "active_areas": len(ranking),
+            "heatmap": [{"area": a, "active_sensors": c} for a, c in ranking]}
+
+
+async def _solar_production_today(hass: HomeAssistant) -> dict[str, Any]:
+    """Check solar production today."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "solar" in name and s.attributes.get("device_class") in ("energy", "power"):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "device_class": s.attributes.get("device_class"),
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _solar_battery_level(hass: HomeAssistant) -> dict[str, Any]:
+    """Check solar battery level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("solar" in name or "powerwall" in name or "battery_storage" in name) and \
+           s.attributes.get("device_class") == "battery":
+            try:
+                results.append({"entity_id": s.entity_id, "level": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "batteries": results}
+
+
+async def _air_quality_index_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check air quality index."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc in ("aqi", "pm25", "pm10", "volatile_organic_compounds") or \
+           any(kw in name for kw in ("aqi", "air_quality", "pm2.5", "pm25")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "device_class": dc,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _washing_machine_notification_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check washing machine cycle notification status."""
+    automations = []
+    for s in hass.states.async_all("automation"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("washer", "washing", "laundry")):
+            automations.append({"entity_id": s.entity_id, "state": s.state,
+                                "friendly_name": s.attributes.get("friendly_name")})
+    machines = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "washing" in name or "washer" in name:
+            machines.append({"entity_id": s.entity_id, "state": s.state})
+    return {"ok": True, "automations": len(automations),
+            "machines": len(machines), "automation_list": automations}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -48269,4 +48598,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "automation_last_triggered_ranking", "description": "Rank automations by trigger.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "media_player_group_status", "description": "Check media groups.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "light_group_sync_check", "description": "Check light group sync.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 97 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "camera_recording_status", "description": "Check camera recording.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "camera_motion_zone_check", "description": "Check camera motion zones.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_tv_app_usage", "description": "Check TV app usage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_tv_standby_check", "description": "Check TV standby.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thermostat_learning_status", "description": "Check thermostat learning.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thermostat_schedule_deviation", "description": "Check temp deviation.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "water_flow_anomaly", "description": "Check water flow anomaly.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "water_main_shutoff_status", "description": "Check water shutoff.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mqtt_topic_summary", "description": "Summarize MQTT topics.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mqtt_message_rate", "description": "Check MQTT message rate.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "esphome_device_uptime", "description": "Check ESPHome uptime.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "esphome_ota_update_check", "description": "Check ESPHome OTA.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "siren_test_status", "description": "Check siren test status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "window_open_duration", "description": "Check window open time.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "window_open_count", "description": "Count open windows.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "room_presence_heatmap", "description": "Room presence heatmap.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "solar_production_today", "description": "Check solar production.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "solar_battery_level", "description": "Check solar battery.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "air_quality_index_check", "description": "Check air quality index.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "washing_machine_notification_check", "description": "Check washing notifications.", "parameters": {"type": "object", "properties": {}}}},
 ]
