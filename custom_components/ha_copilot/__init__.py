@@ -148,6 +148,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+PLATFORMS: list[str] = ["sensor"]
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HA-Copilot from a config entry (UI flow)."""
     store = {
@@ -159,6 +162,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ),
     }
     await _async_setup_core(hass, store)
+
+    # Forward sensor platform setup for diagnostic entities.
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Live-update the store when the user changes options from the UI.
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
@@ -186,7 +192,7 @@ async def _async_options_updated(
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    return True
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def _register_static(hass: HomeAssistant, url_base: str, path: str) -> None:
