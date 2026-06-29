@@ -21926,6 +21926,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _geolocation_entity_summary(hass)
         if name == "notification_service_list":
             return await _notification_service_list(hass)
+        # --- Wave 96 dispatch ---
+        if name == "co_detector_status":
+            return await _co_detector_status(hass)
+        if name == "blind_tilt_summary":
+            return await _blind_tilt_summary(hass)
+        if name == "blind_auto_schedule_check":
+            return await _blind_auto_schedule_check(hass)
+        if name == "person_location_summary":
+            return await _person_location_summary(hass)
+        if name == "person_time_at_home":
+            return await _person_time_at_home(hass)
+        if name == "energy_peak_usage_analysis":
+            return await _energy_peak_usage_analysis(hass)
+        if name == "energy_off_peak_summary":
+            return await _energy_off_peak_summary(hass)
+        if name == "hvac_filter_reminder":
+            return await _hvac_filter_reminder(hass)
+        if name == "doorbell_ring_frequency":
+            return await _doorbell_ring_frequency(hass)
+        if name == "weather_forecast_tomorrow":
+            return await _weather_forecast_tomorrow(hass)
+        if name == "script_execution_history":
+            return await _script_execution_history(hass)
+        if name == "script_error_check":
+            return await _script_error_check(hass)
+        if name == "bluetooth_device_nearby":
+            return await _bluetooth_device_nearby(hass)
+        if name == "bluetooth_tracker_summary":
+            return await _bluetooth_tracker_summary(hass)
+        if name == "shed_environment_check":
+            return await _shed_environment_check(hass)
+        if name == "device_tracker_home_away":
+            return await _device_tracker_home_away(hass)
+        if name == "zigbee_device_lqi_ranking":
+            return await _zigbee_device_lqi_ranking(hass)
+        if name == "automation_last_triggered_ranking":
+            return await _automation_last_triggered_ranking(hass)
+        if name == "media_player_group_status":
+            return await _media_player_group_status(hass)
+        if name == "light_group_sync_check":
+            return await _light_group_sync_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -35709,6 +35750,292 @@ async def _notification_service_list(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "services": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 96 — CO detector, blinds, person tracking, energy tariff, HVAC filter,
+# doorbell, weather, script, bluetooth, shed, device tracker, zigbee, auto,
+# media group, light group
+# ---------------------------------------------------------------------------
+
+
+async def _co_detector_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check CO detector status."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "co":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "alert": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "detectors": results}
+
+
+async def _blind_tilt_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize blind tilt positions."""
+    results = []
+    for s in hass.states.async_all("cover"):
+        dc = s.attributes.get("device_class", "")
+        if dc == "blind" or "blind" in (s.attributes.get("friendly_name") or s.entity_id).lower():
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "position": s.attributes.get("current_position"),
+                            "tilt": s.attributes.get("current_tilt_position"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "blinds": results}
+
+
+async def _blind_auto_schedule_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check blind automation schedules."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("blind", "shade", "shutter", "curtain")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "automations": results}
+
+
+async def _person_location_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize person locations."""
+    results = []
+    for s in hass.states.async_all("person"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "latitude": s.attributes.get("latitude"),
+                        "longitude": s.attributes.get("longitude"),
+                        "gps_accuracy": s.attributes.get("gps_accuracy"),
+                        "source": s.attributes.get("source"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    home = sum(1 for r in results if r["state"] == "home")
+    return {"ok": True, "total": len(results), "home": home,
+            "away": len(results) - home, "persons": results}
+
+
+async def _person_time_at_home(hass: HomeAssistant) -> dict[str, Any]:
+    """Estimate time persons have been home."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("person"):
+        if s.state == "home":
+            hours = (now - s.last_changed).total_seconds() / 3600
+            results.append({"entity_id": s.entity_id,
+                            "hours_home": round(hours, 1),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    results.sort(key=lambda x: x["hours_home"], reverse=True)
+    return {"ok": True, "home_count": len(results), "persons": results}
+
+
+async def _energy_peak_usage_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze peak energy usage sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "power":
+            try:
+                val = float(s.state)
+                results.append({"entity_id": s.entity_id, "power_w": val,
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    results.sort(key=lambda x: x["power_w"], reverse=True)
+    total = sum(r["power_w"] for r in results)
+    return {"ok": True, "count": len(results), "total_power_w": round(total, 1),
+            "top_consumers": results[:10]}
+
+
+async def _energy_off_peak_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize off-peak energy opportunities."""
+    now = datetime.now(timezone.utc)
+    hour = now.hour
+    is_off_peak = hour < 7 or hour >= 22
+    high_power = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "power":
+            try:
+                val = float(s.state)
+                if val > 100:
+                    high_power.append({"entity_id": s.entity_id, "power_w": val,
+                                       "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "is_off_peak": is_off_peak, "current_hour": hour,
+            "high_power_devices": len(high_power), "devices": high_power[:10]}
+
+
+async def _hvac_filter_reminder(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HVAC filter reminders."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "filter" in name and any(kw in name for kw in ("hvac", "furnace", "ac", "air_handler")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "filters": results}
+
+
+async def _doorbell_ring_frequency(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze doorbell ring frequency."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "doorbell" in name or "door_bell" in name:
+            hours = (now - s.last_changed).total_seconds() / 3600
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "hours_since_ring": round(hours, 1),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "doorbells": results}
+
+
+async def _weather_forecast_tomorrow(hass: HomeAssistant) -> dict[str, Any]:
+    """Get weather forecast for tomorrow."""
+    results = []
+    for s in hass.states.async_all("weather"):
+        forecast = s.attributes.get("forecast", [])
+        tomorrow = forecast[1] if isinstance(forecast, list) and len(forecast) > 1 else None
+        results.append({"entity_id": s.entity_id, "current": s.state,
+                        "current_temp": s.attributes.get("temperature"),
+                        "tomorrow": tomorrow,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "forecasts": results}
+
+
+async def _script_execution_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Check script execution history."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("script"):
+        hours = (now - s.last_changed).total_seconds() / 3600
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "hours_since_run": round(hours, 1),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    results.sort(key=lambda x: x["hours_since_run"])
+    return {"ok": True, "count": len(results), "scripts": results}
+
+
+async def _script_error_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check for script errors."""
+    results = []
+    for s in hass.states.async_all("script"):
+        if s.state == "unavailable" or "error" in str(s.attributes.get("last_triggered", "")).lower():
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "error_count": len(results), "errors": results}
+
+
+async def _bluetooth_device_nearby(hass: HomeAssistant) -> dict[str, Any]:
+    """Check nearby bluetooth devices."""
+    bt_data = hass.data.get("bluetooth", {})
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "bluetooth" in name or "ble" in name or "rssi" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "sensor_count": len(results),
+            "bt_data_available": bool(bt_data), "sensors": results[:20]}
+
+
+async def _bluetooth_tracker_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize bluetooth trackers."""
+    results = []
+    for s in hass.states.async_all("device_tracker"):
+        if s.attributes.get("source_type") == "bluetooth":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "trackers": results}
+
+
+async def _shed_environment_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check shed/outbuilding environment."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("shed", "outbuilding", "barn", "workshop", "garage")):
+            dc = s.attributes.get("device_class", "")
+            if dc in ("temperature", "humidity", "moisture"):
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "device_class": dc,
+                                "unit": s.attributes.get("unit_of_measurement")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _device_tracker_home_away(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize device tracker home/away status."""
+    home = away = 0
+    results = []
+    for s in hass.states.async_all("device_tracker"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "source_type": s.attributes.get("source_type"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+        if s.state == "home":
+            home += 1
+        else:
+            away += 1
+    return {"ok": True, "total": len(results), "home": home, "away": away,
+            "trackers": results[:20]}
+
+
+async def _zigbee_device_lqi_ranking(hass: HomeAssistant) -> dict[str, Any]:
+    """Rank Zigbee devices by LQI."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "lqi" in name or "link_quality" in name:
+            try:
+                results.append({"entity_id": s.entity_id, "lqi": float(s.state),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    results.sort(key=lambda x: x["lqi"])
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _automation_last_triggered_ranking(hass: HomeAssistant) -> dict[str, Any]:
+    """Rank automations by last triggered time."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("automation"):
+        lt = s.attributes.get("last_triggered")
+        if lt:
+            hours = (now - s.last_changed).total_seconds() / 3600
+        else:
+            hours = -1
+        results.append({"entity_id": s.entity_id,
+                        "last_triggered": str(lt) if lt else "never",
+                        "hours_ago": round(hours, 1) if hours >= 0 else None,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    results.sort(key=lambda x: x["hours_ago"] if x["hours_ago"] is not None else 999999)
+    return {"ok": True, "count": len(results), "automations": results[:20]}
+
+
+async def _media_player_group_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check media player group status."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        members = s.attributes.get("group_members", [])
+        if isinstance(members, list) and len(members) > 1:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "group_members": members,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "groups": len(results), "media_groups": results}
+
+
+async def _light_group_sync_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check light group synchronization."""
+    groups = []
+    for s in hass.states.async_all("light"):
+        members = s.attributes.get("entity_id", [])
+        if isinstance(members, list) and len(members) > 1:
+            member_states = []
+            for mid in members:
+                ms = hass.states.get(mid)
+                if ms:
+                    member_states.append({"entity_id": mid, "state": ms.state})
+            synced = len(set(m["state"] for m in member_states)) <= 1 if member_states else True
+            groups.append({"entity_id": s.entity_id, "state": s.state,
+                           "members": member_states, "synced": synced,
+                           "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "group_count": len(groups), "groups": groups}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -47921,4 +48248,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "calendar_upcoming_events", "description": "Check upcoming events.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "geolocation_entity_summary", "description": "Summarize geo entities.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "notification_service_list", "description": "List notification services.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 96 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "co_detector_status", "description": "Check CO detector status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "blind_tilt_summary", "description": "Summarize blind tilt.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "blind_auto_schedule_check", "description": "Check blind schedules.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "person_location_summary", "description": "Summarize person locations.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "person_time_at_home", "description": "Check time at home.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_peak_usage_analysis", "description": "Analyze peak energy.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_off_peak_summary", "description": "Check off-peak energy.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "hvac_filter_reminder", "description": "Check HVAC filter.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "doorbell_ring_frequency", "description": "Check doorbell frequency.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "weather_forecast_tomorrow", "description": "Get tomorrow forecast.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "script_execution_history", "description": "Check script history.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "script_error_check", "description": "Check script errors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "bluetooth_device_nearby", "description": "Check BT devices.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "bluetooth_tracker_summary", "description": "Summarize BT trackers.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "shed_environment_check", "description": "Check shed environment.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_tracker_home_away", "description": "Track home/away status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zigbee_device_lqi_ranking", "description": "Rank Zigbee LQI.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_last_triggered_ranking", "description": "Rank automations by trigger.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "media_player_group_status", "description": "Check media groups.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "light_group_sync_check", "description": "Check light group sync.", "parameters": {"type": "object", "properties": {}}}},
 ]
