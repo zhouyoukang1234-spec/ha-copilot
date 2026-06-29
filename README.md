@@ -4,11 +4,11 @@
 
 本仓库的本源是：**让操作者本身（强 AI / 外部 agent）全链路操作 Home Assistant 的底层**。这里的"智能体"是操作者自己，**不是**一个被塞进聊天框、寄生在外接模型上的弱模型。基础设施只是适配于操作者的"工具层"，操作者直接驱动它，在不断实践中操作到底、验证到底。
 
-因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（142 个工具），并经**五条本源底层**暴露给外部操作者：
+因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（147 个工具），并经**五条本源底层**暴露给外部操作者：
 
 - **底层一 · 原生 HA 服务**：`ha_copilot.run_tool` 通用服务 + 12 个原生资源服务（`ha_copilot.discover_resources` / `ha_copilot.search_zwave_devices` 等），自动化/脚本/开发者工具可直调。每次调用自动发射 `ha_copilot_tool_called` 事件。
 - **底层二 · MCP**：鉴权的 MCP 服务器端点 `/api/ha_copilot/mcp`（JSON-RPC 2.0），任意 MCP 客户端即可发现并操作整台 HA。
-- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 142 个确定性工具。
+- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 147 个确定性工具。
 - **底层四 · HTTP**：鉴权 HTTP 端点 `/api/ha_copilot/tools`（列目录）、`/api/ha_copilot/run_tool`（执行工具）。
 - **底层五 · WebSocket**：HA 原生 WebSocket 命令 `ha_copilot/tools`（列目录）、`ha_copilot/run_tool`（执行工具）、`ha_copilot/info`（集成状态）——前端面板和 WS 客户端的实时通道。
 
@@ -20,7 +20,7 @@
         ├── MCP 客户端 ──▶ /api/ha_copilot/mcp ────────┐
         ├── 原生 LLM API ──▶ HA 对话代理框架 ────────────┤
         ├── HA 服务 ──▶ 13 个原生服务（自动化可直调）──────┤
-        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（142 确定性工具）──▶ 运行中的 HA
+        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（147 确定性工具）──▶ 运行中的 HA
         └── HTTP ──▶ /api/ha_copilot/run_tool ────────────┘
 ```
 
@@ -68,6 +68,11 @@ response_variable: zwave_results
 | `search_community_resources` | 检索 **HACS** 全量目录（自定义集成 / 前端卡片 / 主题）按品牌·设备·关键词 |
 | `search_ha_integrations` | 检索 **Home Assistant 内置集成目录**（约 1470 个）：小白输入品牌或需求（"aqara"、"tuya"、"vacuum"）即知哪些是 HA **原生支持**（无需装 HACS），含 IoT 类别（本地/云）、类型、质量等级与文档页；与 HACS 检索互补（"设备是否被支持 + 怎么加进来"） |
 | `search_ha_addons` | 检索 **HA 加载项商店**（官方 + 知名社区库：Mosquitto/Zigbee2MQTT/ESPHome/Matter Server/deCONZ 等）。匹配硬件后常需配套加载项，输入需求（"mqtt"、"zigbee2mqtt"、"matter"、"backup"）即得可安装加载项及其商店/slug/页面 |
+| `manage_addon` | **管理 Supervisor 加载项**（info/install/start/stop/restart/uninstall），用 search_ha_addons 找到 slug 后直接操作——闭合 搜索→安装→启动 全链路 |
+| `setup_integration` | **启动原生集成配置流**：传入域名即开始配置，无需用户输入的集成一步完成，需要输入的返回所需字段描述，再传 user_input 完成设置——闭合 搜索→配置 全链路 |
+| `manage_hacs` | **管理 HACS 仓库**（list/install/remove）：搜索到 HACS 集成/前端卡片后直接安装——闭合 搜索→安装 全链路 |
+| `get_dashboard_config` | **读取 Lovelace 仪表盘配置**：视图、卡片类型、关联实体——修改仪表盘前先读取当前状态 |
+| `update_dashboard` | **保存 Lovelace 仪表盘配置**（存储模式）：从 get_dashboard_config 获取→修改视图/卡片→保存回去——闭合仪表盘完整读写链路 |
 | `search_github` / `search_blueprints` | 在 GitHub 搜 HA 相关仓库/模板/示例、社区蓝图（蓝图检索带**逐级放宽召回阶梯**：自然多词短语也不会返回 0 结果） |
 | `discover_resources` | **一句自由文本，一次并发搜全部来源**（HACS 目录 + GitHub 仓库 + 社区蓝图 + Zigbee 设备库），返回各来源结果与一份**跨源去重融合的 `top` 榜**（按跨源命中数→stars 排序）。小白输入品牌或需求即可同时拿到“硬件是否被 zigbee2mqtt/zha 支持”+ 可装集成/卡片 + 示例仓库 + 可导入蓝图 |
 | `search_zigbee_devices` | 在社区 **Zigbee 设备库**（blakadder，约 2700 款）里按品牌/型号查设备，返回它被哪些桥接支持——尤其是否 **zigbee2mqtt** / zha——及设备参考页。接入蓝图流水线前先确认硬件受支持及所属技术栈 |
