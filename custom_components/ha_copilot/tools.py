@@ -21674,6 +21674,49 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _integration_api_call_estimate(hass)
         if name == "integration_entity_ratio":
             return await _integration_entity_ratio(hass)
+        # --- Wave 90 dispatch ---
+        if name == "smart_plug_standby_detection":
+            return await _smart_plug_standby_detection(hass)
+        if name == "smart_plug_consumption_ranking":
+            return await _smart_plug_consumption_ranking(hass)
+        if name == "weather_severe_alert_check":
+            return await _weather_severe_alert_check(hass)
+        if name == "weather_wind_analysis":
+            return await _weather_wind_analysis(hass)
+        if name == "weather_rain_probability":
+            return await _weather_rain_probability(hass)
+        if name == "insurance_safety_checklist":
+            return await _insurance_safety_checklist(hass)
+        if name == "vacation_mode_readiness":
+            return await _vacation_mode_readiness(hass)
+        if name == "vacation_simulation_status":
+            return await _vacation_simulation_status(hass)
+        if name == "voice_assistant_status":
+            return await _voice_assistant_status(hass)
+        if name == "voice_command_history":
+            return await _voice_command_history(hass)
+        if name == "presence_geofence_status":
+            return await _presence_geofence_status(hass)
+        if name == "presence_arrival_estimate":
+            return await _presence_arrival_estimate(hass)
+        if name == "tariff_current_rate":
+            return await _tariff_current_rate(hass)
+        if name == "tariff_best_time_to_run":
+            return await _tariff_best_time_to_run(hass)
+        if name == "home_air_quality_index":
+            return await _home_air_quality_index(hass)
+        if name == "home_radon_check":
+            return await _home_radon_check(hass)
+        if name == "blind_position_overview":
+            return await _blind_position_overview(hass)
+        if name == "blind_sun_tracking":
+            return await _blind_sun_tracking(hass)
+        if name == "cleaning_robot_status":
+            return await _cleaning_robot_status(hass)
+        if name == "cleaning_room_history":
+            return await _cleaning_room_history(hass)
+        if name == "power_outage_detection":
+            return await _power_outage_detection(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -33560,6 +33603,382 @@ async def _integration_entity_ratio(hass: HomeAssistant) -> dict[str, Any]:
         })
     return {"ok": True, "total_entities": total, "domain_count": len(results),
             "distribution": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 90 — smart plugs, weather intelligence, insurance, vacation,
+# voice, presence, tariff, air quality, blinds, cleaning, power outage
+# ---------------------------------------------------------------------------
+
+
+async def _smart_plug_standby_detection(hass: HomeAssistant) -> dict[str, Any]:
+    """Detect smart plugs in standby (low power draw)."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") != "power":
+            continue
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if not any(kw in name for kw in ("plug", "socket", "outlet")):
+            continue
+        try:
+            watts = float(s.state)
+            if 0 < watts < 5:
+                results.append({
+                    "entity_id": s.entity_id, "watts": watts,
+                    "friendly_name": s.attributes.get("friendly_name"),
+                    "status": "standby",
+                })
+        except (ValueError, TypeError):
+            pass
+    return {"ok": True, "standby_count": len(results), "plugs": results}
+
+
+async def _smart_plug_consumption_ranking(hass: HomeAssistant) -> dict[str, Any]:
+    """Rank smart plugs by power consumption."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") != "power":
+            continue
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("plug", "socket", "outlet")):
+            try:
+                results.append({
+                    "entity_id": s.entity_id,
+                    "watts": float(s.state),
+                    "friendly_name": s.attributes.get("friendly_name"),
+                })
+            except (ValueError, TypeError):
+                pass
+    results.sort(key=lambda x: x["watts"], reverse=True)
+    return {"ok": True, "count": len(results), "ranking": results}
+
+
+async def _weather_severe_alert_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check for severe weather alerts."""
+    alerts = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("weather_alert", "severe", "storm_warning", "nws")):
+            alerts.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    weather_entities = hass.states.async_all("weather")
+    for w in weather_entities:
+        condition = w.state
+        if condition in ("lightning", "hail", "tornado", "hurricane"):
+            alerts.append({
+                "entity_id": w.entity_id, "condition": condition,
+                "severity": "high",
+            })
+    return {"ok": True, "alert_count": len(alerts), "alerts": alerts}
+
+
+async def _weather_wind_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze wind conditions."""
+    results = []
+    for w in hass.states.async_all("weather"):
+        results.append({
+            "entity_id": w.entity_id,
+            "wind_speed": w.attributes.get("wind_speed"),
+            "wind_bearing": w.attributes.get("wind_bearing"),
+            "condition": w.state,
+        })
+    for s in hass.states.async_all("sensor"):
+        if "wind" in (s.attributes.get("friendly_name") or s.entity_id).lower():
+            results.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "unit": s.attributes.get("unit_of_measurement"),
+            })
+    return {"ok": True, "count": len(results), "wind_data": results}
+
+
+async def _weather_rain_probability(hass: HomeAssistant) -> dict[str, Any]:
+    """Check rain probability from weather entities."""
+    results = []
+    for w in hass.states.async_all("weather"):
+        forecast = w.attributes.get("forecast", [])
+        rain_entries = []
+        if isinstance(forecast, list):
+            for f in forecast[:12]:
+                if isinstance(f, dict):
+                    rain_entries.append({
+                        "datetime": f.get("datetime"),
+                        "precipitation_probability": f.get("precipitation_probability"),
+                        "precipitation": f.get("precipitation"),
+                        "condition": f.get("condition"),
+                    })
+        results.append({
+            "entity_id": w.entity_id, "current": w.state,
+            "humidity": w.attributes.get("humidity"),
+            "forecast_entries": rain_entries[:6],
+        })
+    return {"ok": True, "count": len(results), "weather": results}
+
+
+async def _insurance_safety_checklist(hass: HomeAssistant) -> dict[str, Any]:
+    """Check home safety for insurance purposes."""
+    checks = []
+    smoke = hass.states.async_all("binary_sensor")
+    has_smoke = any(s.attributes.get("device_class") == "smoke" for s in smoke)
+    checks.append({"item": "Smoke detectors", "present": has_smoke})
+    has_co = any(s.attributes.get("device_class") == "carbon_monoxide" for s in smoke)
+    checks.append({"item": "CO detectors", "present": has_co})
+    has_leak = any(s.attributes.get("device_class") == "moisture" for s in smoke)
+    checks.append({"item": "Water leak sensors", "present": has_leak})
+    has_lock = len(hass.states.async_all("lock")) > 0
+    checks.append({"item": "Smart locks", "present": has_lock})
+    has_alarm = len(hass.states.async_all("alarm_control_panel")) > 0
+    checks.append({"item": "Alarm system", "present": has_alarm})
+    has_camera = len(hass.states.async_all("camera")) > 0
+    checks.append({"item": "Security cameras", "present": has_camera})
+    score = sum(1 for c in checks if c["present"])
+    return {"ok": True, "score": f"{score}/{len(checks)}", "checks": checks}
+
+
+async def _vacation_mode_readiness(hass: HomeAssistant) -> dict[str, Any]:
+    """Check home readiness for vacation mode."""
+    issues = []
+    open_doors = [s for s in hass.states.async_all("binary_sensor")
+                  if s.attributes.get("device_class") in ("door", "window") and s.state == "on"]
+    if open_doors:
+        issues.append(f"{len(open_doors)} doors/windows open")
+    unlocked = [s for s in hass.states.async_all("lock") if s.state != "locked"]
+    if unlocked:
+        issues.append(f"{len(unlocked)} locks unlocked")
+    lights_on = [s for s in hass.states.async_all("light") if s.state == "on"]
+    if len(lights_on) > 2:
+        issues.append(f"{len(lights_on)} lights on")
+    climate = [s for s in hass.states.async_all("climate") if s.state not in ("off", "auto")]
+    if climate:
+        issues.append(f"{len(climate)} HVAC units not in off/auto")
+    ready = len(issues) == 0
+    return {"ok": True, "ready": ready, "issue_count": len(issues), "issues": issues}
+
+
+async def _vacation_simulation_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check if vacation simulation automations exist."""
+    sim_automations = []
+    for a in hass.states.async_all("automation"):
+        name = (a.attributes.get("friendly_name") or a.entity_id).lower()
+        if any(kw in name for kw in ("vacation", "away", "simulate", "presence_sim")):
+            sim_automations.append({
+                "entity_id": a.entity_id,
+                "state": a.state,
+                "friendly_name": a.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(sim_automations), "automations": sim_automations}
+
+
+async def _voice_assistant_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check voice assistant integration status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("alexa", "google_home", "siri", "assist", "voice")):
+            results.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    assist_data = hass.data.get("assist_pipeline", {})
+    has_assist = bool(assist_data)
+    return {"ok": True, "voice_entities": len(results), "assist_pipeline": has_assist,
+            "entities": results[:20]}
+
+
+async def _voice_command_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Check for voice command related entities."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "voice" in name or "command" in name or "intent" in name:
+            results.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _presence_geofence_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check geofence/zone status for persons."""
+    zones = hass.states.async_all("zone")
+    persons = hass.states.async_all("person")
+    results = {
+        "zones": [{"entity_id": z.entity_id, "name": z.attributes.get("friendly_name"),
+                    "latitude": z.attributes.get("latitude"),
+                    "longitude": z.attributes.get("longitude"),
+                    "radius": z.attributes.get("radius")} for z in zones],
+        "persons": [{"entity_id": p.entity_id, "state": p.state,
+                     "friendly_name": p.attributes.get("friendly_name")} for p in persons],
+    }
+    return {"ok": True, "zone_count": len(zones), "person_count": len(persons), **results}
+
+
+async def _presence_arrival_estimate(hass: HomeAssistant) -> dict[str, Any]:
+    """Estimate arrival based on person/device tracker proximity."""
+    results = []
+    for s in hass.states.async_all("proximity"):
+        results.append({
+            "entity_id": s.entity_id, "distance": s.state,
+            "unit": s.attributes.get("unit_of_measurement"),
+            "direction": s.attributes.get("dir_of_travel"),
+            "nearest": s.attributes.get("nearest"),
+        })
+    for p in hass.states.async_all("person"):
+        results.append({
+            "entity_id": p.entity_id, "state": p.state,
+            "friendly_name": p.attributes.get("friendly_name"),
+        })
+    return {"ok": True, "count": len(results), "tracking": results}
+
+
+async def _tariff_current_rate(hass: HomeAssistant) -> dict[str, Any]:
+    """Get current energy tariff rate."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("tariff", "rate", "price", "cost")) and \
+           any(kw in name for kw in ("energy", "electric", "kwh", "power")):
+            results.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "unit": s.attributes.get("unit_of_measurement"),
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "rates": results}
+
+
+async def _tariff_best_time_to_run(hass: HomeAssistant) -> dict[str, Any]:
+    """Suggest best time to run appliances based on tariff."""
+    now = datetime.now(timezone.utc)
+    hour = now.hour
+    if 0 <= hour < 7 or hour >= 22:
+        period = "off_peak"
+        recommendation = "Good time to run high-consumption appliances"
+    elif 7 <= hour < 9 or 17 <= hour < 22:
+        period = "peak"
+        recommendation = "Avoid running high-consumption appliances"
+    else:
+        period = "shoulder"
+        recommendation = "Moderate time for appliance usage"
+    return {"ok": True, "current_hour": hour, "period": period,
+            "recommendation": recommendation,
+            "note": "Generic tariff profile — customize with actual tariff sensors"}
+
+
+async def _home_air_quality_index(hass: HomeAssistant) -> dict[str, Any]:
+    """Get home air quality index from sensors."""
+    aqi_sensors = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if dc in ("aqi", "pm25", "pm10") or any(kw in name for kw in ("aqi", "air_quality", "pm25", "pm10", "particulate")):
+            aqi_sensors.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "device_class": dc,
+                "unit": s.attributes.get("unit_of_measurement"),
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(aqi_sensors), "sensors": aqi_sensors}
+
+
+async def _home_radon_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check radon level sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "radon" in name:
+            results.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "unit": s.attributes.get("unit_of_measurement"),
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _blind_position_overview(hass: HomeAssistant) -> dict[str, Any]:
+    """Get position overview for all blinds/shades."""
+    results = []
+    for s in hass.states.async_all("cover"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("blind", "shade", "shutter", "curtain", "awning"):
+            pos = s.attributes.get("current_position")
+            results.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "position": pos, "device_class": dc,
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "blinds": results}
+
+
+async def _blind_sun_tracking(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze blind positioning relative to sun."""
+    sun = hass.states.get("sun.sun")
+    sun_info = {}
+    if sun:
+        sun_info = {
+            "elevation": sun.attributes.get("elevation"),
+            "azimuth": sun.attributes.get("azimuth"),
+            "rising": sun.attributes.get("rising"),
+        }
+    blinds = []
+    for s in hass.states.async_all("cover"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("blind", "shade", "shutter", "curtain", "awning"):
+            blinds.append({
+                "entity_id": s.entity_id,
+                "position": s.attributes.get("current_position"),
+                "state": s.state,
+            })
+    return {"ok": True, "sun": sun_info, "blind_count": len(blinds), "blinds": blinds}
+
+
+async def _cleaning_robot_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Get cleaning robot status."""
+    results = []
+    for s in hass.states.async_all("vacuum"):
+        results.append({
+            "entity_id": s.entity_id, "state": s.state,
+            "battery": s.attributes.get("battery_level"),
+            "fan_speed": s.attributes.get("fan_speed"),
+            "status": s.attributes.get("status"),
+            "friendly_name": s.attributes.get("friendly_name"),
+        })
+    return {"ok": True, "count": len(results), "robots": results}
+
+
+async def _cleaning_room_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Get cleaning room history from vacuum attributes."""
+    results = []
+    for s in hass.states.async_all("vacuum"):
+        rooms = s.attributes.get("rooms", [])
+        last_cleaned = s.attributes.get("last_cleaned_area")
+        results.append({
+            "entity_id": s.entity_id,
+            "rooms": rooms if isinstance(rooms, list) else [],
+            "last_cleaned_area": last_cleaned,
+            "state": s.state,
+        })
+    return {"ok": True, "count": len(results), "robots": results}
+
+
+async def _power_outage_detection(hass: HomeAssistant) -> dict[str, Any]:
+    """Detect potential power outage indicators."""
+    indicators = []
+    unavailable = [s for s in hass.states.async_all() if s.state == "unavailable"]
+    total = len(hass.states.async_all())
+    unavailable_pct = round(len(unavailable) / max(total, 1) * 100, 1)
+    if unavailable_pct > 30:
+        indicators.append({
+            "type": "mass_unavailable",
+            "message": f"{unavailable_pct}% entities unavailable — possible power outage",
+        })
+    ups_sensors = [s for s in hass.states.async_all("sensor")
+                   if "ups" in (s.attributes.get("friendly_name") or s.entity_id).lower()]
+    for u in ups_sensors:
+        if "battery" in u.entity_id.lower():
+            indicators.append({"type": "ups_active", "entity_id": u.entity_id, "state": u.state})
+    return {"ok": True, "total_entities": total, "unavailable": len(unavailable),
+            "unavailable_pct": unavailable_pct, "indicators": indicators}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -45645,4 +46064,26 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "schedule_active_now", "description": "Check active schedules.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "integration_api_call_estimate", "description": "Estimate API calls per integration.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "integration_entity_ratio", "description": "Analyze entity distribution.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 90 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "smart_plug_standby_detection", "description": "Detect smart plugs in standby.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_plug_consumption_ranking", "description": "Rank smart plugs by power.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "weather_severe_alert_check", "description": "Check for severe weather alerts.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "weather_wind_analysis", "description": "Analyze wind conditions.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "weather_rain_probability", "description": "Check rain probability.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "insurance_safety_checklist", "description": "Check home safety for insurance.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "vacation_mode_readiness", "description": "Check vacation mode readiness.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "vacation_simulation_status", "description": "Check vacation simulation automations.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "voice_assistant_status", "description": "Check voice assistant status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "voice_command_history", "description": "Check voice command entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "presence_geofence_status", "description": "Check geofence/zone status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "presence_arrival_estimate", "description": "Estimate arrival via proximity.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "tariff_current_rate", "description": "Get current energy tariff rate.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "tariff_best_time_to_run", "description": "Suggest best appliance run time.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_air_quality_index", "description": "Get home air quality index.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_radon_check", "description": "Check radon levels.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "blind_position_overview", "description": "Get blind/shade positions.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "blind_sun_tracking", "description": "Analyze blinds vs sun position.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "cleaning_robot_status", "description": "Get cleaning robot status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "cleaning_room_history", "description": "Get cleaning room history.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "power_outage_detection", "description": "Detect power outage indicators.", "parameters": {"type": "object", "properties": {}}}},
 ]
