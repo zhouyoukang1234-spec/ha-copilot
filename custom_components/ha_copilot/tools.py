@@ -6341,6 +6341,271 @@ async def _send_remote_command(
 
 
 # ---------------------------------------------------------------------------
+# Wave 8: energy, siren, lock, alarm, fan, cover, water heater, humidifier,
+#          automation traces, conversation, input_boolean, update skip
+# ---------------------------------------------------------------------------
+
+
+async def _get_energy_preferences(hass: HomeAssistant) -> dict[str, Any]:
+    """Get energy dashboard preferences (sources, grids, solar, battery)."""
+    try:
+        from homeassistant.components.energy import async_get_manager
+        manager = await async_get_manager(hass)
+        prefs = manager.data
+        if prefs:
+            return {"ok": True, "preferences": {
+                "energy_sources": len(prefs.get("energy_sources", [])),
+                "device_consumption": len(prefs.get("device_consumption", [])),
+                "raw": prefs,
+            }}
+        return {"ok": True, "note": "No energy preferences configured", "preferences": {}}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "note": f"Energy module unavailable ({exc})", "preferences": {}}
+
+
+async def _skip_update(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Skip an available update."""
+    try:
+        await hass.services.async_call(
+            "update", "skip", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Skip update failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "skipped"}
+
+
+async def _siren_control(
+    hass: HomeAssistant, entity_id: str, command: str,
+    tone: str | None = None, volume_level: float | None = None,
+    duration: int | None = None,
+) -> dict[str, Any]:
+    """Control a siren (turn_on/turn_off)."""
+    if command not in ("turn_on", "turn_off"):
+        return {"error": f"Invalid command '{command}'. Valid: turn_on, turn_off"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if command == "turn_on":
+        if tone:
+            data["tone"] = tone
+        if volume_level is not None:
+            data["volume_level"] = float(volume_level)
+        if duration is not None:
+            data["duration"] = int(duration)
+    try:
+        await hass.services.async_call("siren", command, data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Siren {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _lock_control(
+    hass: HomeAssistant, entity_id: str, command: str,
+    code: str | None = None,
+) -> dict[str, Any]:
+    """Control a lock (lock/unlock/open)."""
+    valid = {"lock": "lock", "unlock": "unlock", "open": "open"}
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if code:
+        data["code"] = code
+    try:
+        await hass.services.async_call("lock", svc, data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Lock {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _alarm_control(
+    hass: HomeAssistant, entity_id: str, command: str,
+    code: str | None = None,
+) -> dict[str, Any]:
+    """Control an alarm panel (arm_home/arm_away/arm_night/arm_vacation/disarm/trigger)."""
+    valid = {
+        "arm_home": "alarm_arm_home", "arm_away": "alarm_arm_away",
+        "arm_night": "alarm_arm_night", "arm_vacation": "alarm_arm_vacation",
+        "disarm": "alarm_disarm", "trigger": "alarm_trigger",
+    }
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if code:
+        data["code"] = code
+    try:
+        await hass.services.async_call(
+            "alarm_control_panel", svc, data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Alarm {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _fan_control(
+    hass: HomeAssistant, entity_id: str, command: str,
+    percentage: int | None = None, preset_mode: str | None = None,
+    direction: str | None = None, oscillating: bool | None = None,
+) -> dict[str, Any]:
+    """Control a fan (turn_on/turn_off/toggle/set_percentage/set_preset_mode/oscillate/set_direction)."""
+    valid = {
+        "turn_on": "turn_on", "turn_off": "turn_off", "toggle": "toggle",
+        "set_percentage": "set_percentage", "set_preset_mode": "set_preset_mode",
+        "oscillate": "oscillate", "set_direction": "set_direction",
+    }
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if command == "set_percentage" and percentage is not None:
+        data["percentage"] = percentage
+    if command == "set_preset_mode" and preset_mode:
+        data["preset_mode"] = preset_mode
+    if command == "oscillate" and oscillating is not None:
+        data["oscillating"] = oscillating
+    if command == "set_direction" and direction:
+        data["direction"] = direction
+    if command == "turn_on":
+        if percentage is not None:
+            data["percentage"] = percentage
+        if preset_mode:
+            data["preset_mode"] = preset_mode
+    try:
+        await hass.services.async_call("fan", svc, data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Fan {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _cover_control(
+    hass: HomeAssistant, entity_id: str, command: str,
+    position: int | None = None, tilt_position: int | None = None,
+) -> dict[str, Any]:
+    """Control a cover (open/close/stop/set_position/open_tilt/close_tilt/set_tilt_position/toggle/toggle_tilt)."""
+    valid = {
+        "open": "open_cover", "close": "close_cover", "stop": "stop_cover",
+        "set_position": "set_cover_position", "toggle": "toggle",
+        "open_tilt": "open_cover_tilt", "close_tilt": "close_cover_tilt",
+        "set_tilt_position": "set_cover_tilt_position", "toggle_tilt": "toggle_cover_tilt",
+    }
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if command == "set_position" and position is not None:
+        data["position"] = position
+    if command == "set_tilt_position" and tilt_position is not None:
+        data["tilt_position"] = tilt_position
+    try:
+        await hass.services.async_call("cover", svc, data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cover {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _water_heater_control(
+    hass: HomeAssistant, entity_id: str, command: str,
+    temperature: float | None = None, operation_mode: str | None = None,
+) -> dict[str, Any]:
+    """Control a water heater (set_temperature/set_operation_mode/turn_on/turn_off)."""
+    valid = {
+        "set_temperature": "set_temperature",
+        "set_operation_mode": "set_operation_mode",
+        "turn_on": "turn_on", "turn_off": "turn_off",
+    }
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if command == "set_temperature" and temperature is not None:
+        data["temperature"] = float(temperature)
+    if command == "set_operation_mode" and operation_mode:
+        data["operation_mode"] = operation_mode
+    try:
+        await hass.services.async_call("water_heater", svc, data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Water heater {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _humidifier_control(
+    hass: HomeAssistant, entity_id: str, command: str,
+    humidity: int | None = None, mode: str | None = None,
+) -> dict[str, Any]:
+    """Control a humidifier (turn_on/turn_off/set_humidity/set_mode)."""
+    valid = {
+        "turn_on": "turn_on", "turn_off": "turn_off",
+        "set_humidity": "set_humidity", "set_mode": "set_mode",
+    }
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if command == "set_humidity" and humidity is not None:
+        data["humidity"] = int(humidity)
+    if command == "set_mode" and mode:
+        data["mode"] = mode
+    try:
+        await hass.services.async_call("humidifier", svc, data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Humidifier {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _list_automation_traces(
+    hass: HomeAssistant, automation_id: str | None = None,
+) -> dict[str, Any]:
+    """List automation execution traces (debug runs)."""
+    try:
+        from homeassistant.components.automation import async_get_trace
+        if automation_id:
+            traces = await async_get_trace(hass, automation_id)
+            items = [{"run_id": t.get("run_id"), "state": t.get("state"),
+                      "timestamp": t.get("timestamp")} for t in (traces or [])]
+        else:
+            items = []
+        return {"ok": True, "count": len(items), "traces": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "note": f"Automation traces unavailable ({exc})", "traces": []}
+
+
+async def _process_conversation(
+    hass: HomeAssistant, text: str, language: str | None = None,
+    agent_id: str | None = None, conversation_id: str | None = None,
+) -> dict[str, Any]:
+    """Process text through HA conversation agent (built-in or custom)."""
+    try:
+        from homeassistant.components.conversation import async_converse
+        result = await async_converse(
+            hass, text, conversation_id=conversation_id,
+            context=None, language=language, agent_id=agent_id,
+        )
+        resp = result.response
+        return {
+            "ok": True, "text": text,
+            "response_type": resp.response_type.value if hasattr(resp.response_type, "value") else str(resp.response_type),
+            "speech": resp.speech.get("plain", {}).get("speech", "") if resp.speech else "",
+            "conversation_id": getattr(result, "conversation_id", None),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Conversation processing failed: {exc}"}
+
+
+async def _toggle_input_boolean(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Toggle an input_boolean helper."""
+    try:
+        await hass.services.async_call(
+            "input_boolean", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Toggle input_boolean failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -8069,6 +8334,77 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 hass, args.get("entity_id", ""), args.get("command", ""),
                 args.get("device"), int(args.get("num_repeats", 1)),
             )
+        # --- Wave 8 dispatch ---
+        if name == "get_energy_preferences":
+            return await _get_energy_preferences(hass)
+        if name == "skip_update":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _skip_update(hass, args.get("entity_id", ""))
+        if name == "siren_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _siren_control(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("tone"), args.get("volume_level"), args.get("duration"),
+            )
+        if name == "lock_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _lock_control(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("code"),
+            )
+        if name == "alarm_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _alarm_control(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("code"),
+            )
+        if name == "fan_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _fan_control(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("percentage"), args.get("preset_mode"),
+                args.get("direction"), args.get("oscillating"),
+            )
+        if name == "cover_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            pos = args.get("position")
+            tilt = args.get("tilt_position")
+            return await _cover_control(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                int(pos) if pos is not None else None,
+                int(tilt) if tilt is not None else None,
+            )
+        if name == "water_heater_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _water_heater_control(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("temperature"), args.get("operation_mode"),
+            )
+        if name == "humidifier_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _humidifier_control(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("humidity"), args.get("mode"),
+            )
+        if name == "list_automation_traces":
+            return await _list_automation_traces(hass, args.get("automation_id"))
+        if name == "process_conversation":
+            return await _process_conversation(
+                hass, args.get("text", ""), args.get("language"),
+                args.get("agent_id"), args.get("conversation_id"),
+            )
+        if name == "toggle_input_boolean":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _toggle_input_boolean(hass, args.get("entity_id", ""))
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -10736,6 +11072,189 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "num_repeats": {"type": "integer", "description": "Number of repeats (default 1)"},
                 },
                 "required": ["entity_id", "command"],
+            },
+        },
+    },
+    # --- Wave 8 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "get_energy_preferences",
+            "description": "Get energy dashboard preferences (sources, grids, solar, battery config).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skip_update",
+            "description": "Skip an available update for an entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "siren_control",
+            "description": "Control a siren: turn_on (with optional tone/volume/duration) or turn_off.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "turn_on|turn_off"},
+                    "tone": {"type": "string", "description": "Siren tone name"},
+                    "volume_level": {"type": "number", "description": "Volume 0.0-1.0"},
+                    "duration": {"type": "integer", "description": "Duration in seconds"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lock_control",
+            "description": "Control a lock: lock/unlock/open (with optional code).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "lock|unlock|open"},
+                    "code": {"type": "string", "description": "Lock code (if required)"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "alarm_control",
+            "description": "Control an alarm panel: arm_home/arm_away/arm_night/arm_vacation/disarm/trigger.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "arm_home|arm_away|arm_night|arm_vacation|disarm|trigger"},
+                    "code": {"type": "string", "description": "Alarm code (if required)"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fan_control",
+            "description": "Control a fan: turn_on/turn_off/toggle/set_percentage/set_preset_mode/oscillate/set_direction.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "turn_on|turn_off|toggle|set_percentage|set_preset_mode|oscillate|set_direction"},
+                    "percentage": {"type": "integer", "description": "Speed 0-100 (for set_percentage/turn_on)"},
+                    "preset_mode": {"type": "string", "description": "Preset mode name"},
+                    "direction": {"type": "string", "description": "forward|reverse"},
+                    "oscillating": {"type": "boolean", "description": "Oscillation on/off"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cover_control",
+            "description": "Control a cover: open/close/stop/set_position/toggle/open_tilt/close_tilt/set_tilt_position/toggle_tilt.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "open|close|stop|set_position|toggle|open_tilt|close_tilt|set_tilt_position|toggle_tilt"},
+                    "position": {"type": "integer", "description": "Position 0-100 (for set_position)"},
+                    "tilt_position": {"type": "integer", "description": "Tilt 0-100 (for set_tilt_position)"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "water_heater_control",
+            "description": "Control a water heater: set_temperature/set_operation_mode/turn_on/turn_off.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "set_temperature|set_operation_mode|turn_on|turn_off"},
+                    "temperature": {"type": "number", "description": "Target temperature"},
+                    "operation_mode": {"type": "string", "description": "Operation mode name"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "humidifier_control",
+            "description": "Control a humidifier: turn_on/turn_off/set_humidity/set_mode.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "turn_on|turn_off|set_humidity|set_mode"},
+                    "humidity": {"type": "integer", "description": "Target humidity %"},
+                    "mode": {"type": "string", "description": "Mode name"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_automation_traces",
+            "description": "List automation execution traces (debug runs) for a specific or all automations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "automation_id": {"type": "string", "description": "Specific automation entity_id (optional)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "process_conversation",
+            "description": "Process text through HA conversation agent (built-in intent handler or custom agent).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Text to process"},
+                    "language": {"type": "string"},
+                    "agent_id": {"type": "string", "description": "Specific agent ID"},
+                    "conversation_id": {"type": "string", "description": "Continue existing conversation"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "toggle_input_boolean",
+            "description": "Toggle an input_boolean helper.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
             },
         },
     },
