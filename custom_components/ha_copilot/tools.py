@@ -20291,6 +20291,114 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 args.get("event_type", ""),
                 args.get("event_data"),
             )
+        # --- Wave 63 dispatch ---
+        if name == "person_locate":
+            return await _person_locate(hass, args.get("entity_id", ""))
+        if name == "thread_get_dataset":
+            return await _thread_get_dataset(hass)
+        if name == "calendar_list_events":
+            return await _calendar_list_events(
+                hass, args.get("entity_id", ""),
+                args.get("hours", 24),
+            )
+        if name == "weather_get_twice_daily_forecast":
+            return await _weather_get_twice_daily_forecast(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "recorder_get_statistics_metadata":
+            return await _recorder_get_statistics_metadata(hass)
+        if name == "recorder_list_runs":
+            return await _recorder_list_runs(hass)
+        if name == "recorder_get_statistic_ids":
+            return await _recorder_get_statistic_ids(hass)
+        if name == "event_bus_subscribe_once":
+            return await _event_bus_subscribe_once(
+                hass, args.get("event_type", ""),
+                args.get("timeout", 10),
+            )
+        if name == "automation_get_last_triggered":
+            return await _automation_get_last_triggered(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "automation_duplicate":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_duplicate(
+                hass, args.get("entity_id", ""),
+                args.get("new_alias"),
+            )
+        if name == "script_get_last_triggered":
+            return await _script_get_last_triggered(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "entity_set_category":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_set_category(
+                hass, args.get("entity_id", ""),
+                args.get("category"),
+            )
+        if name == "entity_set_hidden":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_set_hidden(
+                hass, args.get("entity_id", ""),
+                args.get("hidden", True),
+            )
+        if name == "device_registry_list_by_area":
+            return await _device_registry_list_by_area(
+                hass, args.get("area_id", ""),
+            )
+        if name == "device_list_entities":
+            return await _device_list_entities(
+                hass, args.get("device_id", ""),
+            )
+        if name == "area_get_details":
+            return await _area_get_details(
+                hass, args.get("area_id", ""),
+            )
+        if name == "floor_get_details":
+            return await _floor_get_details(
+                hass, args.get("floor_id", ""),
+            )
+        if name == "label_get_details":
+            return await _label_get_details(
+                hass, args.get("label_id", ""),
+            )
+        if name == "water_heater_set_temp":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _water_heater_set_temp(
+                hass, args.get("entity_id", ""),
+                args.get("temperature", 0),
+            )
+        if name == "water_heater_set_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _water_heater_set_mode(
+                hass, args.get("entity_id", ""),
+                args.get("operation_mode", ""),
+            )
+        if name == "image_get_state":
+            return await _image_get_state(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "switch_batch_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _switch_batch_control(
+                hass, args.get("entity_ids", []),
+                args.get("action", "turn_on"),
+            )
+        if name == "scene_snapshot_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _scene_snapshot_create(
+                hass, args.get("entity_ids", []),
+                args.get("scene_name", "snapshot"),
+            )
+        if name == "conversation_agent_info":
+            return await _conversation_agent_info(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -21032,6 +21140,499 @@ async def _event_entity_trigger(
         data.update(event_data)
     hass.bus.async_fire(f"event_entity_{event_type}", data)
     return {"ok": True, "entity_id": entity_id, "event_type": event_type}
+
+
+# ---------------------------------------------------------------------------
+# Wave 63 — person locate, thread dataset, calendar events, weather twice-daily,
+# recorder metadata/runs/statistic_ids, event subscribe, automation/script
+# last_triggered/duplicate, entity category/hidden, device by area/entities,
+# area/floor/label details, water heater, image state, switch batch, scene
+# snapshot, conversation agent info
+# ---------------------------------------------------------------------------
+
+
+async def _person_locate(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get detailed location info for a person entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Person '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "latitude": attrs.get("latitude"),
+        "longitude": attrs.get("longitude"),
+        "gps_accuracy": attrs.get("gps_accuracy"),
+        "source": attrs.get("source"),
+        "friendly_name": attrs.get("friendly_name"),
+    }
+
+
+async def _thread_get_dataset(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Thread network dataset info."""
+    try:
+        from homeassistant.components.thread import async_get_preferred_dataset
+        dataset = await async_get_preferred_dataset(hass)
+        if dataset is None:
+            return {"ok": True, "dataset": None, "note": "No Thread dataset configured"}
+        return {"ok": True, "dataset": str(dataset)}
+    except ImportError:
+        return {"error": "thread component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Thread dataset failed: {exc}"}
+
+
+async def _calendar_list_events(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """List upcoming calendar events for an entity."""
+    try:
+        start = datetime.now(timezone.utc)
+        end = start + timedelta(hours=hours)
+        from homeassistant.components.calendar import async_get_events
+        events = await async_get_events(hass, entity_id, start, end)
+        items = []
+        for ev in events:
+            items.append({
+                "summary": getattr(ev, "summary", str(ev)),
+                "start": str(getattr(ev, "start", "")),
+                "end": str(getattr(ev, "end", "")),
+                "description": getattr(ev, "description", None),
+                "location": getattr(ev, "location", None),
+            })
+        return {"ok": True, "entity_id": entity_id, "count": len(items),
+                "events": items[:200]}
+    except ImportError:
+        return {"error": "calendar component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Calendar list events failed: {exc}"}
+
+
+async def _weather_get_twice_daily_forecast(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get twice-daily weather forecast."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Weather entity '{entity_id}' not found"}
+    try:
+        from homeassistant.components.weather import async_get_forecasts
+        result = await async_get_forecasts(hass, entity_id, "twice_daily")
+        forecasts = result.get(entity_id, {}).get("forecast", [])
+        return {"ok": True, "entity_id": entity_id, "count": len(forecasts),
+                "forecast": forecasts[:20]}
+    except (ImportError, AttributeError):
+        attrs = dict(state.attributes)
+        return {"ok": True, "entity_id": entity_id,
+                "forecast": attrs.get("forecast", [])[:20],
+                "note": "Used legacy attribute fallback"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Weather forecast failed: {exc}"}
+
+
+async def _recorder_get_statistics_metadata(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """Get metadata about all recorded statistics."""
+    try:
+        meta = await _recorder_get_instance(hass).async_add_executor_job(
+            _recorder_statistics.list_statistic_ids, hass,
+        )
+        items = []
+        for m in meta:
+            items.append({
+                "statistic_id": m.get("statistic_id"),
+                "source": m.get("source"),
+                "unit_of_measurement": m.get("statistics_unit_of_measurement"),
+                "has_mean": m.get("has_mean"),
+                "has_sum": m.get("has_sum"),
+            })
+        return {"ok": True, "count": len(items), "metadata": items[:500]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder statistics metadata failed: {exc}"}
+
+
+async def _recorder_list_runs(hass: HomeAssistant) -> dict[str, Any]:
+    """List recorder run periods."""
+    try:
+        from homeassistant.components.recorder.models import RecorderRuns
+        instance = _recorder_get_instance(hass)
+        def _get_runs():
+            with instance.get_session() as session:
+                runs = session.query(RecorderRuns).order_by(
+                    RecorderRuns.start.desc()
+                ).limit(50).all()
+                return [{"start": str(r.start), "end": str(r.end),
+                         "closed_incorrect": r.closed_incorrect,
+                         "created": str(r.created)} for r in runs]
+        items = await hass.async_add_executor_job(_get_runs)
+        return {"ok": True, "count": len(items), "runs": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder list runs failed: {exc}"}
+
+
+async def _recorder_get_statistic_ids(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """Get all recorded statistic IDs."""
+    try:
+        ids = await _recorder_get_instance(hass).async_add_executor_job(
+            _recorder_statistics.list_statistic_ids, hass,
+        )
+        statistic_ids = [m.get("statistic_id") for m in ids]
+        return {"ok": True, "count": len(statistic_ids),
+                "statistic_ids": statistic_ids[:500]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder get statistic ids failed: {exc}"}
+
+
+async def _event_bus_subscribe_once(
+    hass: HomeAssistant, event_type: str, timeout: int = 10,
+) -> dict[str, Any]:
+    """Subscribe to an event type and wait for the next occurrence."""
+    if not event_type:
+        return {"error": "event_type is required"}
+    result: dict[str, Any] = {}
+    event = asyncio.Event()
+
+    @callback
+    def _listener(ev):
+        result["event_type"] = ev.event_type
+        result["data"] = dict(ev.data)
+        result["time_fired"] = ev.time_fired.isoformat() if ev.time_fired else None
+        event.set()
+
+    unsub = hass.bus.async_listen_once(event_type, _listener)
+    try:
+        await asyncio.wait_for(event.wait(), timeout=timeout)
+        return {"ok": True, **result}
+    except asyncio.TimeoutError:
+        unsub()
+        return {"ok": True, "event_type": event_type, "timed_out": True,
+                "timeout": timeout}
+
+
+async def _automation_get_last_triggered(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get the last triggered time for an automation."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Automation '{entity_id}' not found"}
+    lt = state.attributes.get("last_triggered")
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "last_triggered": str(lt) if lt else None,
+        "friendly_name": state.attributes.get("friendly_name"),
+    }
+
+
+async def _automation_duplicate(
+    hass: HomeAssistant, entity_id: str,
+    new_alias: str | None = None,
+) -> dict[str, Any]:
+    """Duplicate an automation in automations.yaml."""
+    try:
+        config_dir = hass.config.config_dir
+        auto_id = entity_id.replace("automation.", "")
+        automations_path = os.path.join(config_dir, "automations.yaml")
+
+        def _do_dup() -> tuple[bool, str]:
+            with open(automations_path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, list):
+                return False, "automations.yaml is not a list"
+            source = None
+            for item in raw:
+                if isinstance(item, dict) and (
+                    item.get("id") == auto_id
+                    or item.get("alias", "").lower().replace(" ", "_") == auto_id
+                ):
+                    source = item
+                    break
+            if source is None:
+                return False, f"Automation '{auto_id}' not found"
+            import copy
+            dup = copy.deepcopy(source)
+            dup["id"] = f"{auto_id}_copy_{int(datetime.now(timezone.utc).timestamp())}"
+            if new_alias:
+                dup["alias"] = new_alias
+            else:
+                dup["alias"] = f"{source.get('alias', auto_id)} (Copy)"
+            raw.append(dup)
+            with open(automations_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+            return True, dup["id"]
+
+        ok, result = await hass.async_add_executor_job(_do_dup)
+        if not ok:
+            return {"error": result}
+        return {"ok": True, "entity_id": entity_id, "new_id": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation duplicate failed: {exc}"}
+
+
+async def _script_get_last_triggered(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get the last triggered time for a script."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Script '{entity_id}' not found"}
+    lt = state.attributes.get("last_triggered")
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "last_triggered": str(lt) if lt else None,
+        "friendly_name": state.attributes.get("friendly_name"),
+    }
+
+
+async def _entity_set_category(
+    hass: HomeAssistant, entity_id: str,
+    category: str | None = None,
+) -> dict[str, Any]:
+    """Set the entity_category for an entity in the registry."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not found in registry"}
+    try:
+        from homeassistant.helpers.entity_registry import EntityCategory
+        cat = EntityCategory(category) if category else None
+        reg.async_update_entity(entity_id, entity_category=cat)
+        return {"ok": True, "entity_id": entity_id,
+                "entity_category": category}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set entity category failed: {exc}"}
+
+
+async def _entity_set_hidden(
+    hass: HomeAssistant, entity_id: str, hidden: bool = True,
+) -> dict[str, Any]:
+    """Show or hide an entity in the entity registry."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not found in registry"}
+    try:
+        from homeassistant.helpers.entity_registry import RegistryEntryHider
+        hider = RegistryEntryHider.USER if hidden else None
+        reg.async_update_entity(entity_id, hidden_by=hider)
+        return {"ok": True, "entity_id": entity_id, "hidden": hidden}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set entity hidden failed: {exc}"}
+
+
+async def _device_registry_list_by_area(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """List all devices in a specific area."""
+    dev_reg = dr.async_get(hass)
+    devices = []
+    for dev in dev_reg.devices.values():
+        if dev.area_id == area_id:
+            devices.append({
+                "id": dev.id,
+                "name": dev.name_by_user or dev.name,
+                "model": dev.model,
+                "manufacturer": dev.manufacturer,
+                "via_device_id": dev.via_device_id,
+            })
+    return {"ok": True, "area_id": area_id, "count": len(devices),
+            "devices": devices}
+
+
+async def _device_list_entities(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List all entities belonging to a device."""
+    ent_reg = er.async_get(hass)
+    entities = []
+    for entry in ent_reg.entities.values():
+        if entry.device_id == device_id:
+            state = hass.states.get(entry.entity_id)
+            entities.append({
+                "entity_id": entry.entity_id,
+                "name": entry.name or entry.original_name,
+                "domain": entry.domain,
+                "platform": entry.platform,
+                "state": state.state if state else None,
+                "disabled": entry.disabled_by is not None,
+            })
+    return {"ok": True, "device_id": device_id, "count": len(entities),
+            "entities": entities}
+
+
+async def _area_get_details(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Get detailed info about an area."""
+    area_reg = ar.async_get(hass)
+    area = area_reg.async_get_area(area_id)
+    if area is None:
+        return {"error": f"Area '{area_id}' not found"}
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+    device_count = sum(1 for d in dev_reg.devices.values() if d.area_id == area_id)
+    entity_count = sum(1 for e in ent_reg.entities.values() if e.area_id == area_id)
+    return {
+        "ok": True,
+        "area_id": area.id,
+        "name": area.name,
+        "floor_id": getattr(area, "floor_id", None),
+        "labels": list(getattr(area, "labels", set())),
+        "picture": area.picture,
+        "device_count": device_count,
+        "entity_count": entity_count,
+    }
+
+
+async def _floor_get_details(
+    hass: HomeAssistant, floor_id: str,
+) -> dict[str, Any]:
+    """Get detailed info about a floor."""
+    floor_reg = fr.async_get(hass)
+    floor = floor_reg.async_get_floor(floor_id)
+    if floor is None:
+        return {"error": f"Floor '{floor_id}' not found"}
+    area_reg = ar.async_get(hass)
+    areas = [a for a in area_reg.async_list_areas() if getattr(a, "floor_id", None) == floor_id]
+    return {
+        "ok": True,
+        "floor_id": floor.floor_id,
+        "name": floor.name,
+        "level": getattr(floor, "level", None),
+        "icon": getattr(floor, "icon", None),
+        "area_count": len(areas),
+        "areas": [{"id": a.id, "name": a.name} for a in areas],
+    }
+
+
+async def _label_get_details(
+    hass: HomeAssistant, label_id: str,
+) -> dict[str, Any]:
+    """Get detailed info about a label."""
+    label_reg = lr.async_get(hass)
+    label = label_reg.async_get_label(label_id)
+    if label is None:
+        return {"error": f"Label '{label_id}' not found"}
+    return {
+        "ok": True,
+        "label_id": label.label_id,
+        "name": label.name,
+        "color": getattr(label, "color", None),
+        "icon": getattr(label, "icon", None),
+        "description": getattr(label, "description", None),
+    }
+
+
+async def _water_heater_set_temp(
+    hass: HomeAssistant, entity_id: str, temperature: float,
+) -> dict[str, Any]:
+    """Set water heater target temperature."""
+    try:
+        await hass.services.async_call(
+            "water_heater", "set_temperature",
+            {"entity_id": entity_id, "temperature": temperature},
+        )
+        return {"ok": True, "entity_id": entity_id, "temperature": temperature}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Water heater set temp failed: {exc}"}
+
+
+async def _water_heater_set_mode(
+    hass: HomeAssistant, entity_id: str, operation_mode: str,
+) -> dict[str, Any]:
+    """Set water heater operation mode."""
+    try:
+        await hass.services.async_call(
+            "water_heater", "set_operation_mode",
+            {"entity_id": entity_id, "operation_mode": operation_mode},
+        )
+        return {"ok": True, "entity_id": entity_id,
+                "operation_mode": operation_mode}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Water heater set mode failed: {exc}"}
+
+
+async def _image_get_state(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get state and metadata of an image entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Image entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "access_token": attrs.get("access_token"),
+        "entity_picture": attrs.get("entity_picture"),
+        "friendly_name": attrs.get("friendly_name"),
+    }
+
+
+async def _switch_batch_control(
+    hass: HomeAssistant, entity_ids: list[str],
+    action: str = "turn_on",
+) -> dict[str, Any]:
+    """Control multiple switches at once."""
+    if action not in ("turn_on", "turn_off", "toggle"):
+        return {"error": f"Invalid action '{action}'"}
+    try:
+        await hass.services.async_call(
+            "switch", action, {"entity_id": entity_ids},
+        )
+        return {"ok": True, "action": action, "count": len(entity_ids),
+                "entity_ids": entity_ids}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Switch batch control failed: {exc}"}
+
+
+async def _scene_snapshot_create(
+    hass: HomeAssistant, entity_ids: list[str],
+    scene_name: str = "snapshot",
+) -> dict[str, Any]:
+    """Create a scene from the current state of specified entities."""
+    try:
+        scene_id = f"scene.{_slugify(scene_name)}"
+        await hass.services.async_call(
+            "scene", "create",
+            {"scene_id": _slugify(scene_name),
+             "snapshot_entities": entity_ids},
+        )
+        return {"ok": True, "scene_id": scene_id,
+                "entities_count": len(entity_ids)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Scene snapshot create failed: {exc}"}
+
+
+async def _conversation_agent_info(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """Get info about available conversation agents."""
+    try:
+        from homeassistant.components.conversation import async_get_agent_info
+        agents = async_get_agent_info(hass)
+        items = []
+        for agent in agents:
+            items.append({
+                "id": agent.id,
+                "name": agent.name,
+            })
+        return {"ok": True, "count": len(items), "agents": items}
+    except ImportError:
+        return {"error": "conversation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Conversation agent info failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -31931,6 +32532,246 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "event_type": {"type": "string", "description": "Event type to fire"},
                 "event_data": {"type": "object", "description": "Optional event payload data"},
             }, "required": ["entity_id", "event_type"]},
+        },
+    },
+    # --- Wave 63 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "person_locate",
+            "description": "Get detailed location info for a person entity (state, lat/lon, GPS accuracy, source).",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Person entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "thread_get_dataset",
+            "description": "Get the preferred Thread network dataset info.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_list_events",
+            "description": "List upcoming calendar events for an entity within a time window.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Calendar entity ID"},
+                "hours": {"type": "integer", "description": "Hours to look ahead (default 24)", "default": 24},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "weather_get_twice_daily_forecast",
+            "description": "Get twice-daily weather forecast for a weather entity.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Weather entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_get_statistics_metadata",
+            "description": "Get metadata about all recorded statistics (statistic_id, source, unit, has_mean/sum).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_list_runs",
+            "description": "List recorder run periods (start/end times, closed_incorrect flag).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_get_statistic_ids",
+            "description": "Get all recorded statistic IDs.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "event_bus_subscribe_once",
+            "description": "Subscribe to an event type and wait for the next occurrence (with timeout).",
+            "parameters": {"type": "object", "properties": {
+                "event_type": {"type": "string", "description": "Event type to listen for"},
+                "timeout": {"type": "integer", "description": "Seconds to wait (default 10)", "default": 10},
+            }, "required": ["event_type"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_get_last_triggered",
+            "description": "Get the last triggered time and state for an automation.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Automation entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_duplicate",
+            "description": "Duplicate an automation in automations.yaml with optional new alias. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Automation entity ID to duplicate"},
+                "new_alias": {"type": "string", "description": "Optional alias for the copy"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_get_last_triggered",
+            "description": "Get the last triggered time and state for a script.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Script entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_set_category",
+            "description": "Set the entity_category for an entity in the registry (config/diagnostic/null). Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity ID"},
+                "category": {"type": "string", "description": "Category: config, diagnostic, or null to clear"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_set_hidden",
+            "description": "Show or hide an entity in the entity registry. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity ID"},
+                "hidden": {"type": "boolean", "description": "True to hide, false to show"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_registry_list_by_area",
+            "description": "List all devices in a specific area.",
+            "parameters": {"type": "object", "properties": {
+                "area_id": {"type": "string", "description": "Area ID"},
+            }, "required": ["area_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_list_entities",
+            "description": "List all entities belonging to a specific device.",
+            "parameters": {"type": "object", "properties": {
+                "device_id": {"type": "string", "description": "Device ID"},
+            }, "required": ["device_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_get_details",
+            "description": "Get detailed info about an area (floor, labels, picture, device/entity counts).",
+            "parameters": {"type": "object", "properties": {
+                "area_id": {"type": "string", "description": "Area ID"},
+            }, "required": ["area_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "floor_get_details",
+            "description": "Get detailed info about a floor (level, icon, areas list).",
+            "parameters": {"type": "object", "properties": {
+                "floor_id": {"type": "string", "description": "Floor ID"},
+            }, "required": ["floor_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "label_get_details",
+            "description": "Get detailed info about a label (name, color, icon, description).",
+            "parameters": {"type": "object", "properties": {
+                "label_id": {"type": "string", "description": "Label ID"},
+            }, "required": ["label_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "water_heater_set_temp",
+            "description": "Set water heater target temperature. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Water heater entity ID"},
+                "temperature": {"type": "number", "description": "Target temperature"},
+            }, "required": ["entity_id", "temperature"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "water_heater_set_mode",
+            "description": "Set water heater operation mode. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Water heater entity ID"},
+                "operation_mode": {"type": "string", "description": "Operation mode"},
+            }, "required": ["entity_id", "operation_mode"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "image_get_state",
+            "description": "Get state and metadata of an image entity (access_token, entity_picture, etc.).",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Image entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "switch_batch_control",
+            "description": "Control multiple switches at once (turn_on/turn_off/toggle). Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Switch entity IDs"},
+                "action": {"type": "string", "enum": ["turn_on", "turn_off", "toggle"], "default": "turn_on"},
+            }, "required": ["entity_ids"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scene_snapshot_create",
+            "description": "Create a scene from the current state of specified entities. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Entity IDs to capture"},
+                "scene_name": {"type": "string", "description": "Name for the scene", "default": "snapshot"},
+            }, "required": ["entity_ids"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "conversation_agent_info",
+            "description": "Get info about available conversation agents.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
 ]
