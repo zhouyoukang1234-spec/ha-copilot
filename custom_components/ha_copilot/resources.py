@@ -88,6 +88,11 @@ _USER_AGENT = "ha-copilot-resource-hub"
 _CACHE_TTL = 600.0  # seconds; HACS feeds change slowly
 _cache: dict[str, tuple[float, Any]] = {}
 
+# GitHub search result cache — survives rate-limit windows so callers get stale
+# data instead of a hard error when the 30-req/min search quota is exhausted.
+_GH_SEARCH_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_GH_SEARCH_CACHE_TTL = 3600.0  # 1 hour; results rarely change
+
 
 def _safe_path(hass: HomeAssistant, rel_path: str) -> str:
     """Resolve a config-relative path, refusing to escape the config dir."""
@@ -117,12 +122,17 @@ def _request_headers(url: str) -> dict[str, str]:
 
 async def _fetch_json(hass: HomeAssistant, url: str, timeout: float = 20.0) -> Any:
     session = async_get_clientsession(hass)
+    is_gh_search = "api.github.com/search/" in url
     async with session.get(
         url, headers=_request_headers(url), timeout=timeout
     ) as resp:
         if resp.status == 403 and "api.github.com" in url:
             remaining = resp.headers.get("X-RateLimit-Remaining")
             if remaining == "0":
+                if is_gh_search and url in _GH_SEARCH_CACHE:
+                    ts, cached = _GH_SEARCH_CACHE[url]
+                    cached["_cached"] = True
+                    return cached
                 raise RuntimeError(
                     "GitHub API rate limit exceeded. Export a GITHUB_TOKEN "
                     "(or GH_TOKEN) for the HA process to raise the limit."
@@ -136,7 +146,15 @@ async def _fetch_json(hass: HomeAssistant, url: str, timeout: float = 20.0) -> A
                 "(check the owner/name spelling, or it may be private)."
             )
         resp.raise_for_status()
-        return await resp.json(content_type=None)
+        data = await resp.json(content_type=None)
+        if is_gh_search and isinstance(data, dict):
+            now = time.time()
+            _GH_SEARCH_CACHE[url] = (now, data)
+            stale = [k for k, (ts, _) in _GH_SEARCH_CACHE.items()
+                     if now - ts > _GH_SEARCH_CACHE_TTL]
+            for k in stale:
+                del _GH_SEARCH_CACHE[k]
+        return data
 
 
 async def _fetch_text(hass: HomeAssistant, url: str, timeout: float = 20.0) -> str:
@@ -286,13 +304,16 @@ async def search_github(
                 "license": (r.get("license") or {}).get("spdx_id"),
             }
         )
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "query": q,
         "total": (data or {}).get("total_count", len(items)),
         "count": len(items),
         "results": items,
     }
+    if (data or {}).get("_cached"):
+        out["cached"] = True
+    return out
 
 
 async def search_blueprints(
@@ -356,13 +377,16 @@ async def search_blueprints(
                 ),
             }
         )
-    return {
+    out: dict[str, Any] = {
         "ok": True,
         "query": q,
         "total": (data or {}).get("total_count", len(items)),
         "count": len(items),
         "results": items,
     }
+    if (data or {}).get("_cached"):
+        out["cached"] = True
+    return out
 
 
 async def discover_resources(
