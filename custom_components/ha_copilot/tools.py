@@ -8339,6 +8339,124 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 43: thread/matter, assist pipeline, TTS, STT, update entity
+# ---------------------------------------------------------------------------
+
+
+async def _thread_list_routers(hass: HomeAssistant) -> dict[str, Any]:
+    """List Thread border routers."""
+    try:
+        from homeassistant.components.thread import async_get_preferred_dataset
+        dataset = await async_get_preferred_dataset(hass)
+        return {
+            "ok": True,
+            "has_preferred_dataset": dataset is not None,
+        }
+    except ImportError:
+        return {"error": "thread component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Thread list routers failed: {exc}"}
+
+
+async def _matter_device_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List Matter devices."""
+    try:
+        from homeassistant.components.matter import get_matter_server
+        server = get_matter_server(hass)
+        nodes = server.get_nodes() if server else []
+        result = [
+            {"node_id": n.node_id, "name": getattr(n, "name", ""),
+             "available": getattr(n, "available", False)}
+            for n in nodes[:50]
+        ]
+        return {"ok": True, "devices": result}
+    except ImportError:
+        return {"error": "matter component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Matter device list failed: {exc}"}
+
+
+async def _assist_pipeline_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List assist pipelines."""
+    try:
+        from homeassistant.components.assist_pipeline import async_get_pipelines
+        pipelines = async_get_pipelines(hass)
+        result = [
+            {"id": p.id, "name": p.name,
+             "language": p.language,
+             "stt_engine": getattr(p, "stt_engine", None),
+             "tts_engine": getattr(p, "tts_engine", None)}
+            for p in pipelines
+        ]
+        return {"ok": True, "pipelines": result[:20]}
+    except ImportError:
+        return {"error": "assist_pipeline component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Assist pipeline list failed: {exc}"}
+
+
+async def _tts_list_engines(hass: HomeAssistant) -> dict[str, Any]:
+    """List TTS engines."""
+    try:
+        states = hass.states.async_all("tts")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        services = hass.services.async_services()
+        tts_services = list(services.get("tts", {}).keys())
+        return {"ok": True, "entities": result, "services": tts_services[:20]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"TTS list engines failed: {exc}"}
+
+
+async def _stt_list_engines(hass: HomeAssistant) -> dict[str, Any]:
+    """List STT engines."""
+    try:
+        states = hass.states.async_all("stt")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "engines": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"STT list engines failed: {exc}"}
+
+
+async def _update_entity_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List update entities."""
+    try:
+        states = hass.states.async_all("update")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "installed_version": s.attributes.get("installed_version"),
+             "latest_version": s.attributes.get("latest_version"),
+             "in_progress": s.attributes.get("in_progress", False)}
+            for s in states
+        ]
+        return {"ok": True, "updates": result[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Update entity list failed: {exc}"}
+
+
+async def _update_entity_install(
+    hass: HomeAssistant, entity_id: str,
+    backup: bool = True,
+) -> dict[str, Any]:
+    """Install an update."""
+    try:
+        data: dict[str, Any] = {"entity_id": entity_id}
+        if backup:
+            data["backup"] = backup
+        await hass.services.async_call(
+            "update", "install", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Update entity install failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "install_started"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 42: sensor aggregation, binary sensor, notify targets, recorder,
 #           ZHA, Z-Wave JS, bluetooth, USB, backup, homeassistant, frontend
 # ---------------------------------------------------------------------------
@@ -14771,6 +14889,26 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 43 dispatch ---
+        if name == "thread_list_routers":
+            return await _thread_list_routers(hass)
+        if name == "matter_device_list":
+            return await _matter_device_list(hass)
+        if name == "assist_pipeline_list":
+            return await _assist_pipeline_list(hass)
+        if name == "tts_list_engines":
+            return await _tts_list_engines(hass)
+        if name == "stt_list_engines":
+            return await _stt_list_engines(hass)
+        if name == "update_entity_list":
+            return await _update_entity_list(hass)
+        if name == "update_entity_install":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _update_entity_install(
+                hass, args.get("entity_id", ""),
+                bool(args.get("backup", True)),
+            )
         # --- Wave 42 dispatch ---
         if name == "sensor_list_by_class":
             return await _sensor_list_by_class(
@@ -20574,6 +20712,70 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 43 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "thread_list_routers",
+            "description": "List Thread border routers.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "matter_device_list",
+            "description": "List Matter devices.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assist_pipeline_list",
+            "description": "List assist pipelines.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tts_list_engines",
+            "description": "List TTS engines.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stt_list_engines",
+            "description": "List STT engines.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_entity_list",
+            "description": "List update entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_entity_install",
+            "description": "Install an update.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "backup": {"type": "boolean", "description": "Create backup first (default true)"},
+                },
                 "required": ["entity_id"],
             },
         },
