@@ -4926,6 +4926,328 @@ async def _list_entity_domains(hass: HomeAssistant) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# HA core internals — addons, areas, config entries, system, blueprints
+# ---------------------------------------------------------------------------
+
+
+async def _start_addon(hass: HomeAssistant, slug: str) -> dict[str, Any]:
+    """Start a Home Assistant add-on by slug."""
+    try:
+        await hass.services.async_call(
+            "hassio", "addon_start", {"addon": slug}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Start addon failed: {exc}"}
+    return {"ok": True, "slug": slug, "action": "started"}
+
+
+async def _stop_addon(hass: HomeAssistant, slug: str) -> dict[str, Any]:
+    """Stop a Home Assistant add-on by slug."""
+    try:
+        await hass.services.async_call(
+            "hassio", "addon_stop", {"addon": slug}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Stop addon failed: {exc}"}
+    return {"ok": True, "slug": slug, "action": "stopped"}
+
+
+async def _restart_addon(hass: HomeAssistant, slug: str) -> dict[str, Any]:
+    """Restart a Home Assistant add-on by slug."""
+    try:
+        await hass.services.async_call(
+            "hassio", "addon_restart", {"addon": slug}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Restart addon failed: {exc}"}
+    return {"ok": True, "slug": slug, "action": "restarted"}
+
+
+async def _get_addon_logs(
+    hass: HomeAssistant, slug: str, lines: int = 100,
+) -> dict[str, Any]:
+    """Get log output from a Home Assistant add-on."""
+    try:
+        from homeassistant.components.hassio import get_supervisor_client
+
+        client = get_supervisor_client(hass)
+        logs = await client.addons.addon_logs(slug)
+        log_lines = (logs or "").strip().split("\n")
+        return {"ok": True, "slug": slug,
+                "lines": log_lines[-lines:],
+                "total_lines": len(log_lines)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Get addon logs failed: {exc}"}
+
+
+async def _list_area_devices(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """List all devices assigned to a specific area."""
+    from homeassistant.helpers import area_registry as ar, device_registry as dr
+
+    area_reg = ar.async_get(hass)
+    dev_reg = dr.async_get(hass)
+
+    area = area_reg.async_get_area(area_id)
+    if not area:
+        for a in area_reg.async_list_areas():
+            if a.name.lower() == area_id.lower():
+                area = a
+                break
+
+    if not area:
+        return {"error": f"Area '{area_id}' not found"}
+
+    devices = []
+    for device in dev_reg.devices.values():
+        if device.area_id == area.id:
+            devices.append({
+                "device_id": device.id,
+                "name": device.name,
+                "model": device.model,
+                "manufacturer": device.manufacturer,
+            })
+
+    return {"ok": True, "area": area.name, "area_id": area.id,
+            "count": len(devices), "devices": devices}
+
+
+async def _list_area_entities(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """List all entities assigned to a specific area (directly or via device)."""
+    from homeassistant.helpers import (
+        area_registry as ar,
+        device_registry as dr,
+        entity_registry as er,
+    )
+
+    area_reg = ar.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+
+    area = area_reg.async_get_area(area_id)
+    if not area:
+        for a in area_reg.async_list_areas():
+            if a.name.lower() == area_id.lower():
+                area = a
+                break
+
+    if not area:
+        return {"error": f"Area '{area_id}' not found"}
+
+    device_ids = {d.id for d in dev_reg.devices.values() if d.area_id == area.id}
+
+    entities = []
+    for entry in ent_reg.entities.values():
+        if entry.area_id == area.id or entry.device_id in device_ids:
+            state = hass.states.get(entry.entity_id)
+            entities.append({
+                "entity_id": entry.entity_id,
+                "name": entry.name or entry.original_name,
+                "domain": entry.domain,
+                "state": state.state if state else None,
+            })
+
+    return {"ok": True, "area": area.name, "area_id": area.id,
+            "count": len(entities), "entities": entities}
+
+
+async def _delete_blueprint(
+    hass: HomeAssistant, path: str, domain: str = "automation",
+) -> dict[str, Any]:
+    """Delete a blueprint YAML file."""
+    bp_dir = hass.config.path("blueprints", domain)
+    full_path = os.path.join(bp_dir, path) if not os.path.isabs(path) else path
+
+    if not os.path.exists(full_path):
+        return {"error": f"Blueprint not found: {full_path}"}
+
+    try:
+        os.remove(full_path)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Delete blueprint failed: {exc}"}
+
+    return {"ok": True, "deleted": full_path}
+
+
+async def _delete_config_entry(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Remove an integration config entry."""
+    try:
+        result = await hass.config_entries.async_remove(entry_id)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Delete config entry failed: {exc}"}
+    return {"ok": True, "entry_id": entry_id, "result": result}
+
+
+async def _disable_config_entry(
+    hass: HomeAssistant, entry_id: str, disable: bool = True,
+) -> dict[str, Any]:
+    """Enable or disable an integration config entry."""
+    try:
+        from homeassistant.config_entries import ConfigEntryDisabler
+
+        if disable:
+            await hass.config_entries.async_set_disabled_by(
+                entry_id, ConfigEntryDisabler.USER,
+            )
+        else:
+            await hass.config_entries.async_set_disabled_by(entry_id, None)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"{'Disable' if disable else 'Enable'} config entry failed: {exc}"}
+    return {"ok": True, "entry_id": entry_id, "disabled": disable}
+
+
+async def _reload_integration(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Reload all config entries for an integration domain."""
+    entries = [e for e in hass.config_entries.async_entries()
+               if e.domain == domain]
+    if not entries:
+        return {"error": f"No config entries found for domain: {domain}"}
+
+    results = []
+    for entry in entries:
+        try:
+            await hass.config_entries.async_reload(entry.entry_id)
+            results.append({"entry_id": entry.entry_id, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entry_id": entry.entry_id, "error": str(exc)})
+
+    return {"ok": True, "domain": domain, "reloaded": len(results), "results": results}
+
+
+async def _get_hardware_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get hardware information: CPU, memory, disk usage."""
+    import shutil
+
+    info: dict[str, Any] = {}
+
+    try:
+        with open("/proc/cpuinfo") as f:
+            cpuinfo = f.read()
+            cores = cpuinfo.count("processor")
+            model = ""
+            for line in cpuinfo.split("\n"):
+                if "model name" in line:
+                    model = line.split(":")[1].strip()
+                    break
+            info["cpu"] = {"cores": cores, "model": model}
+    except Exception:  # noqa: BLE001
+        info["cpu"] = "unavailable"
+
+    try:
+        with open("/proc/meminfo") as f:
+            meminfo = f.read()
+            mem_total = mem_free = 0
+            for line in meminfo.split("\n"):
+                if line.startswith("MemTotal:"):
+                    mem_total = int(line.split()[1]) // 1024
+                elif line.startswith("MemAvailable:"):
+                    mem_free = int(line.split()[1]) // 1024
+            info["memory_mb"] = {"total": mem_total, "available": mem_free,
+                                 "used": mem_total - mem_free}
+    except Exception:  # noqa: BLE001
+        info["memory_mb"] = "unavailable"
+
+    try:
+        usage = shutil.disk_usage(hass.config.config_dir)
+        info["disk_mb"] = {
+            "total": usage.total // (1024 * 1024),
+            "used": usage.used // (1024 * 1024),
+            "free": usage.free // (1024 * 1024),
+        }
+    except Exception:  # noqa: BLE001
+        info["disk_mb"] = "unavailable"
+
+    try:
+        with open("/proc/uptime") as f:
+            uptime_sec = float(f.read().split()[0])
+            info["uptime_hours"] = round(uptime_sec / 3600, 1)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {"ok": True, **info}
+
+
+async def _get_os_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get HA OS and supervisor information."""
+    import platform
+
+    info: dict[str, Any] = {
+        "ha_version": hass.config.version if hasattr(hass.config, "version") else "unknown",
+        "python_version": platform.python_version(),
+        "os": platform.system(),
+        "os_release": platform.release(),
+        "machine": platform.machine(),
+        "config_dir": hass.config.config_dir,
+    }
+
+    try:
+        from homeassistant.components.hassio import get_supervisor_client
+
+        client = get_supervisor_client(hass)
+        os_data = await client.os.info()
+        info["ha_os_version"] = os_data.version if hasattr(os_data, "version") else str(os_data)
+    except Exception:  # noqa: BLE001
+        info["ha_os"] = "not running HA OS (or Supervisor unavailable)"
+
+    try:
+        from homeassistant.components.hassio import get_supervisor_client
+
+        client = get_supervisor_client(hass)
+        sup = await client.supervisor.info()
+        info["supervisor_version"] = sup.version if hasattr(sup, "version") else str(sup)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {"ok": True, **info}
+
+
+async def _list_template_entities(hass: HomeAssistant) -> dict[str, Any]:
+    """List entities backed by the template integration."""
+    from homeassistant.helpers import entity_registry as er
+
+    reg = er.async_get(hass)
+    template_entities = []
+    for entry in reg.entities.values():
+        if entry.platform == "template":
+            state = hass.states.get(entry.entity_id)
+            template_entities.append({
+                "entity_id": entry.entity_id,
+                "name": entry.name or entry.original_name,
+                "domain": entry.domain,
+                "state": state.state if state else None,
+            })
+
+    return {"ok": True, "count": len(template_entities), "entities": template_entities}
+
+
+async def _list_credentials(hass: HomeAssistant) -> dict[str, Any]:
+    """List authentication providers and configured credentials."""
+    providers = []
+    try:
+        for provider in hass.auth.auth_providers:
+            providers.append({
+                "type": provider.type,
+                "name": getattr(provider, "name", provider.type),
+                "id": getattr(provider, "id", None),
+            })
+    except Exception:  # noqa: BLE001
+        pass
+
+    if not providers:
+        return {"ok": True, "count": 0, "providers": [],
+                "note": "Auth provider enumeration not available"}
+
+    return {"ok": True, "count": len(providers), "providers": providers}
+
+
+# ---------------------------------------------------------------------------
 # Workflow orchestration — batch & config operations (Stage 4 evolution)
 # ---------------------------------------------------------------------------
 
@@ -5984,6 +6306,52 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             )
         if name == "list_entity_domains":
             return await _list_entity_domains(hass)
+        if name == "start_addon":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _start_addon(hass, args.get("slug", ""))
+        if name == "stop_addon":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _stop_addon(hass, args.get("slug", ""))
+        if name == "restart_addon":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _restart_addon(hass, args.get("slug", ""))
+        if name == "get_addon_logs":
+            return await _get_addon_logs(
+                hass, args.get("slug", ""), int(args.get("lines", 100)),
+            )
+        if name == "list_area_devices":
+            return await _list_area_devices(hass, args.get("area_id", ""))
+        if name == "list_area_entities":
+            return await _list_area_entities(hass, args.get("area_id", ""))
+        if name == "delete_blueprint":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _delete_blueprint(
+                hass, args.get("path", ""), args.get("domain", "automation"),
+            )
+        if name == "delete_config_entry":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _delete_config_entry(hass, args.get("entry_id", ""))
+        if name == "disable_config_entry":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _disable_config_entry(
+                hass, args.get("entry_id", ""), bool(args.get("disable", True)),
+            )
+        if name == "reload_integration":
+            return await _reload_integration(hass, args.get("domain", ""))
+        if name == "get_hardware_info":
+            return await _get_hardware_info(hass)
+        if name == "get_os_info":
+            return await _get_os_info(hass)
+        if name == "list_template_entities":
+            return await _list_template_entities(hass)
+        if name == "list_credentials":
+            return await _list_credentials(hass)
         if name == "read_logs":
             return await _read_logs(hass, args.get("lines", 60))
         if name == "create_area":
@@ -7567,6 +7935,167 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "list_entity_domains",
             "description": "List all active entity domains with entity counts.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_addon",
+            "description": "Start a Home Assistant add-on by slug.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stop_addon",
+            "description": "Stop a Home Assistant add-on by slug.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "restart_addon",
+            "description": "Restart a Home Assistant add-on by slug.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_addon_logs",
+            "description": "Get log output from a Home Assistant add-on.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "slug": {"type": "string"},
+                    "lines": {"type": "integer", "description": "Lines to return (default 100)"},
+                },
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_area_devices",
+            "description": "List all devices assigned to a specific area.",
+            "parameters": {
+                "type": "object",
+                "properties": {"area_id": {"type": "string", "description": "Area ID or name"}},
+                "required": ["area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_area_entities",
+            "description": "List all entities assigned to a specific area (directly or via device).",
+            "parameters": {
+                "type": "object",
+                "properties": {"area_id": {"type": "string", "description": "Area ID or name"}},
+                "required": ["area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_blueprint",
+            "description": "Delete a blueprint YAML file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path under blueprints/<domain>/"},
+                    "domain": {"type": "string", "enum": ["automation", "script"], "description": "Blueprint domain (default: automation)"},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_config_entry",
+            "description": "Remove an integration config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "disable_config_entry",
+            "description": "Enable or disable an integration config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entry_id": {"type": "string"},
+                    "disable": {"type": "boolean", "description": "true=disable, false=enable"},
+                },
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_integration",
+            "description": "Reload all config entries for an integration domain.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_hardware_info",
+            "description": "Get hardware info: CPU, memory, disk usage, uptime.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_os_info",
+            "description": "Get HA OS, Python, supervisor version and platform info.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_template_entities",
+            "description": "List all entities backed by the template integration.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_credentials",
+            "description": "List authentication providers and configured credentials.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
