@@ -21277,6 +21277,51 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _lock_status_all(hass)
         if name == "comfort_index_calculate":
             return await _comfort_index_calculate(hass)
+        # --- Wave 81 dispatch ---
+        if name == "automation_create_time":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_create_time(hass, args.get("alias", ""), args.get("time", ""), args.get("action_domain", ""), args.get("action_service", ""), args.get("action_entity_id", ""))
+        if name == "automation_create_state":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_create_state(hass, args.get("alias", ""), args.get("trigger_entity_id", ""), args.get("to_state", ""), args.get("action_domain", ""), args.get("action_service", ""), args.get("action_entity_id", ""))
+        if name == "automation_create_sun":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_create_sun(hass, args.get("alias", ""), args.get("event", "sunset"), args.get("offset", ""), args.get("action_domain", ""), args.get("action_service", ""), args.get("action_entity_id", ""))
+        if name == "template_list_custom":
+            return await _template_list_custom(hass)
+        if name == "history_statistics_summary":
+            return await _history_statistics_summary(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "history_state_frequency":
+            return await _history_state_frequency(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "lovelace_get_views":
+            return await _lovelace_get_views(hass)
+        if name == "bluetooth_get_rssi":
+            return await _bluetooth_get_rssi(hass, args.get("entity_id", ""))
+        if name == "utility_meter_list_all":
+            return await _utility_meter_list_all(hass)
+        if name == "utility_meter_get_info":
+            return await _utility_meter_get_info(hass, args.get("entity_id", ""))
+        if name == "zone_list_with_radius":
+            return await _zone_list_with_radius(hass)
+        if name == "zone_entities_inside":
+            return await _zone_entities_inside(hass, args.get("zone_entity_id", ""))
+        if name == "logbook_entries_by_domain":
+            return await _logbook_entries_by_domain(hass, args.get("domain", ""))
+        if name == "logbook_count_by_entity":
+            return await _logbook_count_by_entity(hass, args.get("entity_id", ""))
+        if name == "entity_diagnostic_report":
+            return await _entity_diagnostic_report(hass, args.get("entity_id", ""))
+        if name == "entity_last_error":
+            return await _entity_last_error(hass, args.get("entity_id", ""))
+        if name == "area_device_count":
+            return await _area_device_count(hass)
+        if name == "area_light_summary":
+            return await _area_light_summary(hass)
+        if name == "climate_mode_distribution":
+            return await _climate_mode_distribution(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -29799,6 +29844,447 @@ async def _comfort_index_calculate(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "avg_temperature": avg_temp,
             "avg_humidity": avg_humidity, "comfort_level": comfort,
             "temp_sensors": len(temp_vals), "humidity_sensors": len(humidity_vals)}
+
+
+# ---------------------------------------------------------------------------
+# Wave 81 — automation builders, template listing, history deep, lovelace
+# views, bluetooth RSSI, utility meters, zone advanced, logbook deep,
+# entity diagnostics, area device/light, climate mode distribution
+# ---------------------------------------------------------------------------
+
+
+async def _automation_create_time(
+    hass: HomeAssistant, alias: str, time: str,
+    action_domain: str, action_service: str, action_entity_id: str,
+) -> dict[str, Any]:
+    """Create a time-triggered automation."""
+    try:
+        await hass.services.async_call("automation", "reload", {})
+    except Exception:  # noqa: BLE001
+        pass
+    config = {
+        "alias": alias or "Time Automation",
+        "trigger": [{"platform": "time", "at": time}],
+        "action": [{"service": f"{action_domain}.{action_service}",
+                     "target": {"entity_id": action_entity_id}}],
+    }
+    import yaml
+    config_dir = hass.config.config_dir
+    path = os.path.join(config_dir, "automations.yaml")
+
+    def _write():
+        existing = []
+        if os.path.exists(path):
+            with open(path) as fh:
+                data = yaml.safe_load(fh)
+                if isinstance(data, list):
+                    existing = data
+        existing.append(config)
+        with open(path, "w") as fh:
+            yaml.safe_dump(existing, fh, default_flow_style=False, allow_unicode=True)
+        return len(existing)
+
+    try:
+        count = await hass.async_add_executor_job(_write)
+        return {"ok": True, "alias": config["alias"], "total_automations": count}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation create failed: {exc}"}
+
+
+async def _automation_create_state(
+    hass: HomeAssistant, alias: str, trigger_entity_id: str,
+    to_state: str, action_domain: str, action_service: str,
+    action_entity_id: str,
+) -> dict[str, Any]:
+    """Create a state-triggered automation."""
+    config = {
+        "alias": alias or "State Automation",
+        "trigger": [{"platform": "state", "entity_id": trigger_entity_id, "to": to_state}],
+        "action": [{"service": f"{action_domain}.{action_service}",
+                     "target": {"entity_id": action_entity_id}}],
+    }
+    import yaml
+    config_dir = hass.config.config_dir
+    path = os.path.join(config_dir, "automations.yaml")
+
+    def _write():
+        existing = []
+        if os.path.exists(path):
+            with open(path) as fh:
+                data = yaml.safe_load(fh)
+                if isinstance(data, list):
+                    existing = data
+        existing.append(config)
+        with open(path, "w") as fh:
+            yaml.safe_dump(existing, fh, default_flow_style=False, allow_unicode=True)
+        return len(existing)
+
+    try:
+        count = await hass.async_add_executor_job(_write)
+        return {"ok": True, "alias": config["alias"], "total_automations": count}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation create failed: {exc}"}
+
+
+async def _automation_create_sun(
+    hass: HomeAssistant, alias: str, event: str, offset: str,
+    action_domain: str, action_service: str, action_entity_id: str,
+) -> dict[str, Any]:
+    """Create a sun-triggered automation."""
+    trigger = {"platform": "sun", "event": event}
+    if offset:
+        trigger["offset"] = offset
+    config = {
+        "alias": alias or f"Sun {event} Automation",
+        "trigger": [trigger],
+        "action": [{"service": f"{action_domain}.{action_service}",
+                     "target": {"entity_id": action_entity_id}}],
+    }
+    import yaml
+    config_dir = hass.config.config_dir
+    path = os.path.join(config_dir, "automations.yaml")
+
+    def _write():
+        existing = []
+        if os.path.exists(path):
+            with open(path) as fh:
+                data = yaml.safe_load(fh)
+                if isinstance(data, list):
+                    existing = data
+        existing.append(config)
+        with open(path, "w") as fh:
+            yaml.safe_dump(existing, fh, default_flow_style=False, allow_unicode=True)
+        return len(existing)
+
+    try:
+        count = await hass.async_add_executor_job(_write)
+        return {"ok": True, "alias": config["alias"], "total_automations": count}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation create failed: {exc}"}
+
+
+async def _template_list_custom(hass: HomeAssistant) -> dict[str, Any]:
+    """List template sensor entities."""
+    results = []
+    for state in hass.states.async_all("sensor"):
+        if "template" in (state.attributes.get("friendly_name") or "").lower() or \
+           "template" in state.entity_id.lower():
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    for state in hass.states.async_all("binary_sensor"):
+        if "template" in state.entity_id.lower():
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "templates": results}
+
+
+async def _history_statistics_summary(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get statistics summary for an entity from recorder."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        values = []
+        for s in items:
+            try:
+                values.append(float(s.state))
+            except (ValueError, TypeError):
+                pass
+        if values:
+            return {"ok": True, "entity_id": entity_id, "hours": hours,
+                    "min": round(min(values), 2), "max": round(max(values), 2),
+                    "avg": round(sum(values) / len(values), 2),
+                    "sample_count": len(values)}
+        return {"ok": True, "entity_id": entity_id, "note": "No numeric data found"}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"History statistics failed: {exc}"}
+
+
+async def _history_state_frequency(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get frequency of each state value."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        freq: dict[str, int] = {}
+        for s in items:
+            freq[s.state] = freq.get(s.state, 0) + 1
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "total_changes": len(items),
+                "frequency": dict(sorted(freq.items(), key=lambda x: x[1], reverse=True))}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"History frequency failed: {exc}"}
+
+
+async def _lovelace_get_views(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Lovelace dashboard views."""
+    lovelace = hass.data.get("lovelace", {})
+    if isinstance(lovelace, dict):
+        dashboards = lovelace.get("dashboards", {})
+        if isinstance(dashboards, dict):
+            results = []
+            for dash_id, dash in dashboards.items():
+                results.append({"id": dash_id, "data": str(dash)[:200]})
+            return {"ok": True, "count": len(results), "dashboards": results}
+    config = lovelace if isinstance(lovelace, dict) else {}
+    return {"ok": True, "note": "Lovelace data available",
+            "keys": list(config.keys()) if isinstance(config, dict) else []}
+
+
+async def _bluetooth_get_rssi(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get Bluetooth RSSI info for a device."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "rssi": attrs.get("rssi"), "source": attrs.get("source"),
+            "friendly_name": attrs.get("friendly_name")}
+
+
+async def _utility_meter_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all utility meter entities."""
+    results = []
+    for state in hass.states.async_all("sensor"):
+        if "utility" in state.entity_id.lower() or \
+           state.attributes.get("device_class") in ("energy", "gas", "water"):
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "unit": state.attributes.get("unit_of_measurement"),
+                "device_class": state.attributes.get("device_class"),
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "meters": results}
+
+
+async def _utility_meter_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get detailed utility meter info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id,
+            "value": state.state,
+            "unit": attrs.get("unit_of_measurement"),
+            "device_class": attrs.get("device_class"),
+            "state_class": attrs.get("state_class"),
+            "last_reset": str(attrs.get("last_reset", "")),
+            "friendly_name": attrs.get("friendly_name")}
+
+
+async def _zone_list_with_radius(hass: HomeAssistant) -> dict[str, Any]:
+    """List all zones with their radius."""
+    results = []
+    for state in hass.states.async_all("zone"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "friendly_name": attrs.get("friendly_name"),
+            "latitude": attrs.get("latitude"),
+            "longitude": attrs.get("longitude"),
+            "radius": attrs.get("radius"),
+            "icon": attrs.get("icon"),
+            "persons_in": int(state.state) if state.state.isdigit() else 0,
+        })
+    return {"ok": True, "count": len(results), "zones": results}
+
+
+async def _zone_entities_inside(
+    hass: HomeAssistant, zone_entity_id: str,
+) -> dict[str, Any]:
+    """List entities currently inside a zone."""
+    zone = hass.states.get(zone_entity_id)
+    if zone is None:
+        return {"error": f"Zone '{zone_entity_id}' not found"}
+    zone_name = zone.attributes.get("friendly_name", zone_entity_id.split(".")[-1])
+    inside = []
+    for state in hass.states.async_all("person"):
+        if state.state.lower() == zone_name.lower():
+            inside.append({
+                "entity_id": state.entity_id,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    for state in hass.states.async_all("device_tracker"):
+        if state.state.lower() == zone_name.lower():
+            inside.append({
+                "entity_id": state.entity_id,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "zone": zone_entity_id, "zone_name": zone_name,
+            "count": len(inside), "entities": inside}
+
+
+async def _logbook_entries_by_domain(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Get logbook-style recent entries for a domain."""
+    entities = hass.states.async_all(domain)
+    results = []
+    for state in entities:
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "last_changed": str(state.last_changed),
+            "friendly_name": state.attributes.get("friendly_name"),
+        })
+    results.sort(key=lambda x: x["last_changed"], reverse=True)
+    return {"ok": True, "domain": domain, "count": len(results),
+            "entries": results[:50]}
+
+
+async def _logbook_count_by_entity(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get state change count for entity (approximation from recorder)."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=24)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        count = len(changes.get(entity_id, []))
+        return {"ok": True, "entity_id": entity_id, "hours": 24,
+                "change_count": count}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook count failed: {exc}"}
+
+
+async def _entity_diagnostic_report(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Generate diagnostic report for an entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    ent_reg = er.async_get(hass)
+    entry = ent_reg.async_get(entity_id)
+    now = datetime.now(timezone.utc)
+    age_hours = (now - state.last_updated).total_seconds() / 3600
+    report = {
+        "entity_id": entity_id,
+        "state": state.state,
+        "last_changed": str(state.last_changed),
+        "last_updated": str(state.last_updated),
+        "hours_since_update": round(age_hours, 1),
+        "attribute_count": len(state.attributes),
+        "is_unavailable": state.state == "unavailable",
+        "is_unknown": state.state == "unknown",
+    }
+    if entry:
+        report["platform"] = entry.platform
+        report["disabled"] = entry.disabled
+        report["device_id"] = entry.device_id
+        report["area_id"] = entry.area_id
+    return {"ok": True, **report}
+
+
+async def _entity_last_error(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Check if entity is in error state."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    has_error = state.state in ("unavailable", "unknown")
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "has_error": has_error,
+            "last_changed": str(state.last_changed),
+            "friendly_name": state.attributes.get("friendly_name")}
+
+
+async def _area_device_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Count devices per area."""
+    dev_reg = dr.async_get(hass)
+    area_reg = ar.async_get(hass)
+    counts: dict[str, int] = {}
+    for device in dev_reg.devices.values():
+        aid = device.area_id or "unassigned"
+        counts[aid] = counts.get(aid, 0) + 1
+    results = []
+    for aid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
+        area = area_reg.async_get_area(aid) if aid != "unassigned" else None
+        results.append({
+            "area_id": aid,
+            "area_name": area.name if area else "Unassigned",
+            "device_count": count,
+        })
+    return {"ok": True, "area_count": len(results), "areas": results}
+
+
+async def _area_light_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize light states per area."""
+    ent_reg = er.async_get(hass)
+    area_reg = ar.async_get(hass)
+    area_lights: dict[str, dict[str, int]] = {}
+    for entry in ent_reg.entities.values():
+        if not entry.entity_id.startswith("light."):
+            continue
+        aid = entry.area_id or "unassigned"
+        if aid not in area_lights:
+            area_lights[aid] = {"on": 0, "off": 0, "other": 0}
+        state = hass.states.get(entry.entity_id)
+        if state:
+            if state.state == "on":
+                area_lights[aid]["on"] += 1
+            elif state.state == "off":
+                area_lights[aid]["off"] += 1
+            else:
+                area_lights[aid]["other"] += 1
+    results = []
+    for aid, counts in area_lights.items():
+        area = area_reg.async_get_area(aid) if aid != "unassigned" else None
+        results.append({
+            "area_id": aid,
+            "area_name": area.name if area else "Unassigned",
+            **counts,
+            "total": counts["on"] + counts["off"] + counts["other"],
+        })
+    return {"ok": True, "area_count": len(results), "areas": results}
+
+
+async def _climate_mode_distribution(hass: HomeAssistant) -> dict[str, Any]:
+    """Get distribution of HVAC modes across climate entities."""
+    modes: dict[str, int] = {}
+    details = []
+    for state in hass.states.async_all("climate"):
+        modes[state.state] = modes.get(state.state, 0) + 1
+        details.append({
+            "entity_id": state.entity_id,
+            "mode": state.state,
+            "friendly_name": state.attributes.get("friendly_name"),
+        })
+    return {"ok": True, "total": len(details), "distribution": modes,
+            "details": details}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -41686,4 +42172,24 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "security_status_summary", "description": "Comprehensive security status (locks, doors, windows, alarms).", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "lock_status_all", "description": "Get status of all locks.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "comfort_index_calculate", "description": "Calculate comfort index from temperature and humidity.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 81 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "automation_create_time", "description": "Create a time-triggered automation. Write op.", "parameters": {"type": "object", "properties": {"alias": {"type": "string"}, "time": {"type": "string"}, "action_domain": {"type": "string"}, "action_service": {"type": "string"}, "action_entity_id": {"type": "string"}}, "required": ["time", "action_domain", "action_service", "action_entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_create_state", "description": "Create a state-triggered automation. Write op.", "parameters": {"type": "object", "properties": {"alias": {"type": "string"}, "trigger_entity_id": {"type": "string"}, "to_state": {"type": "string"}, "action_domain": {"type": "string"}, "action_service": {"type": "string"}, "action_entity_id": {"type": "string"}}, "required": ["trigger_entity_id", "to_state", "action_domain", "action_service", "action_entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_create_sun", "description": "Create a sun event-triggered automation. Write op.", "parameters": {"type": "object", "properties": {"alias": {"type": "string"}, "event": {"type": "string", "enum": ["sunrise", "sunset"]}, "offset": {"type": "string"}, "action_domain": {"type": "string"}, "action_service": {"type": "string"}, "action_entity_id": {"type": "string"}}, "required": ["event", "action_domain", "action_service", "action_entity_id"]}}},
+    {"type": "function", "function": {"name": "template_list_custom", "description": "List template sensor entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "history_statistics_summary", "description": "Get min/max/avg statistics for a numeric entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "history_state_frequency", "description": "Get frequency of each state value over time.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "lovelace_get_views", "description": "Get Lovelace dashboard info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "bluetooth_get_rssi", "description": "Get Bluetooth RSSI info for a device.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "utility_meter_list_all", "description": "List all utility meter entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "utility_meter_get_info", "description": "Get detailed utility meter info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "zone_list_with_radius", "description": "List all zones with radius.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zone_entities_inside", "description": "List entities currently inside a zone.", "parameters": {"type": "object", "properties": {"zone_entity_id": {"type": "string"}}, "required": ["zone_entity_id"]}}},
+    {"type": "function", "function": {"name": "logbook_entries_by_domain", "description": "Get recent logbook entries for a domain.", "parameters": {"type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}}},
+    {"type": "function", "function": {"name": "logbook_count_by_entity", "description": "Get state change count for an entity (24h).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "entity_diagnostic_report", "description": "Generate diagnostic report for an entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "entity_last_error", "description": "Check if entity is in error/unavailable state.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "area_device_count", "description": "Count devices per area.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "area_light_summary", "description": "Summarize light states per area.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "climate_mode_distribution", "description": "Get distribution of HVAC modes.", "parameters": {"type": "object", "properties": {}}}},
 ]
