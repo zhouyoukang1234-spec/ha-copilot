@@ -8339,6 +8339,205 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 57: tts url, camera record, logbook, entity batch, service domain,
+#           integration info, area/device entities
+# ---------------------------------------------------------------------------
+
+
+async def _tts_get_url(
+    hass: HomeAssistant, engine: str, message: str,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Get TTS audio URL for a message."""
+    try:
+        from homeassistant.components.tts import async_get_url
+        url = await async_get_url(hass, engine, message, language=language)
+        return {"ok": True, "url": url, "engine": engine}
+    except ImportError:
+        return {"error": "tts component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"TTS get URL failed: {exc}"}
+
+
+async def _camera_record(
+    hass: HomeAssistant, entity_id: str, filename: str,
+    duration: int = 30,
+) -> dict[str, Any]:
+    """Record from a camera."""
+    try:
+        await hass.services.async_call(
+            "camera", "record",
+            {"entity_id": entity_id, "filename": filename,
+             "duration": duration},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Camera record failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "filename": filename,
+            "duration": duration}
+
+
+async def _logbook_recent(
+    hass: HomeAssistant, hours: int = 1,
+    entity_id: str | None = None,
+) -> dict[str, Any]:
+    """Get recent logbook entries."""
+    try:
+        from datetime import datetime, timedelta, timezone
+        from homeassistant.components.logbook import async_log_entries
+        start = datetime.now(timezone.utc) - timedelta(hours=hours)
+        end = datetime.now(timezone.utc)
+        entries = await async_log_entries(
+            hass, start, end, entity_ids=[entity_id] if entity_id else None,
+        )
+        result = [
+            {"when": str(e.get("when", "")),
+             "name": e.get("name", ""),
+             "message": e.get("message", ""),
+             "entity_id": e.get("entity_id", "")}
+            for e in (entries or [])[:30]
+        ]
+        return {"ok": True, "hours": hours, "entries": result}
+    except ImportError:
+        return {"error": "logbook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook recent failed: {exc}"}
+
+
+async def _entity_batch_get_state(
+    hass: HomeAssistant, entity_ids: list[str],
+) -> dict[str, Any]:
+    """Get states for multiple entities at once."""
+    try:
+        results = {}
+        for eid in entity_ids[:20]:
+            state = hass.states.get(eid)
+            if state is not None:
+                results[eid] = {
+                    "state": state.state,
+                    "last_changed": str(state.last_changed),
+                }
+            else:
+                results[eid] = {"error": "not found"}
+        return {"ok": True, "states": results}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity batch get state failed: {exc}"}
+
+
+async def _service_domain_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all available service domains."""
+    try:
+        services = hass.services.async_services()
+        domains = sorted(services.keys())
+        result = {}
+        for d in domains:
+            result[d] = sorted(services[d].keys())
+        return {"ok": True, "domains": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Service domain list failed: {exc}"}
+
+
+async def _integration_info(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Get detailed info about an integration."""
+    try:
+        from homeassistant.loader import async_get_integration
+        integration = await async_get_integration(hass, domain)
+        return {
+            "ok": True,
+            "domain": integration.domain,
+            "name": integration.name,
+            "version": getattr(integration, "version", ""),
+            "is_built_in": integration.is_built_in,
+            "documentation": getattr(integration, "documentation", ""),
+        }
+    except ImportError:
+        return {"error": "loader not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Integration info failed: {exc}"}
+
+
+async def _area_get_devices(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Get all devices in an area."""
+    try:
+        from homeassistant.helpers.device_registry import (
+            async_get as async_get_device_registry,
+        )
+        dr = async_get_device_registry(hass)
+        devices = [
+            {"id": d.id, "name": d.name or d.name_by_user or "",
+             "manufacturer": d.manufacturer or "",
+             "model": d.model or ""}
+            for d in dr.devices.values()
+            if d.area_id == area_id
+        ]
+        return {"ok": True, "area_id": area_id, "devices": devices[:50]}
+    except ImportError:
+        return {"error": "device_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area get devices failed: {exc}"}
+
+
+async def _area_get_entities(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Get all entities in an area (direct + via device)."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        from homeassistant.helpers.device_registry import (
+            async_get as async_get_device_registry,
+        )
+        er = async_get_entity_registry(hass)
+        dr = async_get_device_registry(hass)
+        device_ids_in_area = {
+            d.id for d in dr.devices.values() if d.area_id == area_id
+        }
+        entities = []
+        for e in er.entities.values():
+            if e.area_id == area_id or (
+                e.device_id and e.device_id in device_ids_in_area
+            ):
+                entities.append({
+                    "entity_id": e.entity_id,
+                    "name": e.name or e.original_name or "",
+                    "platform": e.platform,
+                })
+        return {"ok": True, "area_id": area_id, "entities": entities[:50]}
+    except ImportError:
+        return {"error": "entity/device registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area get entities failed: {exc}"}
+
+
+async def _device_get_entities(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get all entities for a device."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        er = async_get_entity_registry(hass)
+        entities = [
+            {"entity_id": e.entity_id,
+             "name": e.name or e.original_name or "",
+             "domain": e.domain, "platform": e.platform}
+            for e in er.entities.values()
+            if e.device_id == device_id
+        ]
+        return {"ok": True, "device_id": device_id, "entities": entities[:50]}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device get entities failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 56: matter nodes, update entity, backup download, storage info,
 #           core info/check, supervisor stats
 # ---------------------------------------------------------------------------
@@ -16797,6 +16996,40 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 57 dispatch ---
+        if name == "tts_get_url":
+            return await _tts_get_url(
+                hass, args.get("engine", ""),
+                args.get("message", ""),
+                args.get("language"),
+            )
+        if name == "camera_record":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _camera_record(
+                hass, args.get("entity_id", ""),
+                args.get("filename", ""),
+                int(args.get("duration", 30)),
+            )
+        if name == "logbook_recent":
+            return await _logbook_recent(
+                hass, int(args.get("hours", 1)),
+                args.get("entity_id"),
+            )
+        if name == "entity_batch_get_state":
+            return await _entity_batch_get_state(
+                hass, args.get("entity_ids", []),
+            )
+        if name == "service_domain_list":
+            return await _service_domain_list(hass)
+        if name == "integration_info":
+            return await _integration_info(hass, args.get("domain", ""))
+        if name == "area_get_devices":
+            return await _area_get_devices(hass, args.get("area_id", ""))
+        if name == "area_get_entities":
+            return await _area_get_entities(hass, args.get("area_id", ""))
+        if name == "device_get_entities":
+            return await _device_get_entities(hass, args.get("device_id", ""))
         # --- Wave 56 dispatch ---
         if name == "matter_list_nodes":
             return await _matter_list_nodes(hass)
@@ -23025,6 +23258,123 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 57 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "tts_get_url",
+            "description": "Get TTS audio URL for a message.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "engine": {"type": "string"},
+                    "message": {"type": "string"},
+                    "language": {"type": "string"},
+                },
+                "required": ["engine", "message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "camera_record",
+            "description": "Record from a camera.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "filename": {"type": "string"},
+                    "duration": {"type": "integer", "description": "Duration in seconds (default 30)"},
+                },
+                "required": ["entity_id", "filename"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "logbook_recent",
+            "description": "Get recent logbook entries.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "hours": {"type": "integer", "description": "Hours to look back (default 1)"},
+                    "entity_id": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_batch_get_state",
+            "description": "Get states for multiple entities at once.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["entity_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "service_domain_list",
+            "description": "List all available service domains and their services.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_info",
+            "description": "Get detailed info about an integration.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_get_devices",
+            "description": "Get all devices in an area.",
+            "parameters": {
+                "type": "object",
+                "properties": {"area_id": {"type": "string"}},
+                "required": ["area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_get_entities",
+            "description": "Get all entities in an area (direct + via device).",
+            "parameters": {
+                "type": "object",
+                "properties": {"area_id": {"type": "string"}},
+                "required": ["area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_get_entities",
+            "description": "Get all entities for a device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
             },
         },
     },
