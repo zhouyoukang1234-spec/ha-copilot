@@ -8339,6 +8339,100 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 46: event entity, device automation triggers/conditions/actions,
+#           diagnostics
+# ---------------------------------------------------------------------------
+
+
+async def _event_entity_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all event entities."""
+    try:
+        states = hass.states.async_all("event")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "event_types": s.attributes.get("event_types", [])}
+            for s in states
+        ]
+        return {"ok": True, "events": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Event entity list failed: {exc}"}
+
+
+async def _device_list_triggers(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List automation triggers for a device."""
+    try:
+        from homeassistant.helpers import device_automation
+        triggers = await device_automation.async_get_device_automations(
+            hass, device_automation.DeviceAutomationType.TRIGGER, [device_id],
+        )
+        result = triggers.get(device_id, [])
+        return {"ok": True, "device_id": device_id, "triggers": result[:50]}
+    except ImportError:
+        return {"error": "device_automation not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device list triggers failed: {exc}"}
+
+
+async def _device_list_conditions(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List automation conditions for a device."""
+    try:
+        from homeassistant.helpers import device_automation
+        conditions = await device_automation.async_get_device_automations(
+            hass, device_automation.DeviceAutomationType.CONDITION, [device_id],
+        )
+        result = conditions.get(device_id, [])
+        return {"ok": True, "device_id": device_id, "conditions": result[:50]}
+    except ImportError:
+        return {"error": "device_automation not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device list conditions failed: {exc}"}
+
+
+async def _device_list_actions(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List automation actions for a device."""
+    try:
+        from homeassistant.helpers import device_automation
+        actions = await device_automation.async_get_device_automations(
+            hass, device_automation.DeviceAutomationType.ACTION, [device_id],
+        )
+        result = actions.get(device_id, [])
+        return {"ok": True, "device_id": device_id, "actions": result[:50]}
+    except ImportError:
+        return {"error": "device_automation not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device list actions failed: {exc}"}
+
+
+async def _diagnostics_get(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Get diagnostics info for an integration."""
+    try:
+        entries = hass.config_entries.async_entries(domain)
+        if not entries:
+            return {"error": f"No config entries for domain {domain}"}
+        entry = entries[0]
+        return {
+            "ok": True,
+            "domain": domain,
+            "entry_id": entry.entry_id,
+            "title": entry.title,
+            "state": str(entry.state),
+            "version": getattr(entry, "version", None),
+        }
+    except AttributeError:
+        return {"error": f"No entries found for domain {domain}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Diagnostics get failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 45: registry operations, repair issues, integration setup/remove,
 #           helper create/delete
 # ---------------------------------------------------------------------------
@@ -15307,6 +15401,17 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 46 dispatch ---
+        if name == "event_entity_list":
+            return await _event_entity_list(hass)
+        if name == "device_list_triggers":
+            return await _device_list_triggers(hass, args.get("device_id", ""))
+        if name == "device_list_conditions":
+            return await _device_list_conditions(hass, args.get("device_id", ""))
+        if name == "device_list_actions":
+            return await _device_list_actions(hass, args.get("device_id", ""))
+        if name == "diagnostics_get":
+            return await _diagnostics_get(hass, args.get("domain", ""))
         # --- Wave 45 dispatch ---
         if name == "entity_disable":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -21236,6 +21341,63 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 46 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "event_entity_list",
+            "description": "List all event entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_list_triggers",
+            "description": "List automation triggers for a device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_list_conditions",
+            "description": "List automation conditions for a device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_list_actions",
+            "description": "List automation actions for a device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "diagnostics_get",
+            "description": "Get diagnostics info for an integration.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
             },
         },
     },
