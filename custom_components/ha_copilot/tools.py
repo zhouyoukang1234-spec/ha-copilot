@@ -20524,6 +20524,61 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _media_player_queue_info(hass, args.get("entity_id", ""))
         if name == "climate_get_hvac_modes":
             return await _climate_get_hvac_modes(hass, args.get("entity_id", ""))
+        # --- Wave 66 dispatch ---
+        if name == "cover_get_position":
+            return await _cover_get_position(hass, args.get("entity_id", ""))
+        if name == "cover_set_tilt":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _cover_set_tilt(hass, args.get("entity_id", ""), args.get("tilt_position", 0))
+        if name == "lock_get_state":
+            return await _lock_get_state(hass, args.get("entity_id", ""))
+        if name == "light_get_supported_features":
+            return await _light_get_supported_features(hass, args.get("entity_id", ""))
+        if name == "light_get_color_modes":
+            return await _light_get_color_modes(hass, args.get("entity_id", ""))
+        if name == "fan_get_speed_list":
+            return await _fan_get_speed_list(hass, args.get("entity_id", ""))
+        if name == "fan_get_preset_modes":
+            return await _fan_get_preset_modes(hass, args.get("entity_id", ""))
+        if name == "sensor_list_by_unit":
+            return await _sensor_list_by_unit(hass, args.get("unit", ""))
+        if name == "zone_list_details":
+            return await _zone_list_details(hass)
+        if name == "zone_check_entity":
+            return await _zone_check_entity(hass, args.get("entity_id", ""), args.get("zone", ""))
+        if name == "sun_get_info":
+            return await _sun_get_info(hass)
+        if name == "logbook_count_by_domain":
+            return await _logbook_count_by_domain(hass, args.get("hours", 24))
+        if name == "logbook_get_entity_changes":
+            return await _logbook_get_entity_changes(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "automation_check_conditions":
+            return await _automation_check_conditions(hass, args.get("entity_id", ""))
+        if name == "device_get_actions":
+            return await _device_get_actions(hass, args.get("device_id", ""))
+        if name == "device_get_triggers":
+            return await _device_get_triggers(hass, args.get("device_id", ""))
+        if name == "device_get_conditions":
+            return await _device_get_conditions(hass, args.get("device_id", ""))
+        if name == "event_type_list":
+            return await _event_type_list(hass)
+        if name == "binary_sensor_list_active":
+            return await _binary_sensor_list_active(hass)
+        if name == "state_count_by_domain":
+            return await _state_count_by_domain(hass)
+        if name == "state_list_by_value":
+            return await _state_list_by_value(hass, args.get("value", ""))
+        if name == "notification_history_list":
+            return await _notification_history_list(hass)
+        if name == "area_list_entities":
+            return await _area_list_entities(hass, args.get("area_id", ""))
+        if name == "label_list_entities":
+            return await _label_list_entities(hass, args.get("label_id", ""))
+        if name == "automation_validate_yaml":
+            return await _automation_validate_yaml(hass)
+        if name == "script_validate_yaml":
+            return await _script_validate_yaml(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -22617,6 +22672,530 @@ async def _climate_get_hvac_modes(
         "min_temp": attrs.get("min_temp"),
         "max_temp": attrs.get("max_temp"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Wave 66 — cover/lock/light/fan details, sensor by unit, zone, sun, logbook
+# analysis, automation conditions, device actions/triggers/conditions, event
+# types, binary sensor active, state aggregation, notification history, area/
+# label entities, YAML validation
+# ---------------------------------------------------------------------------
+
+
+async def _cover_get_position(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get cover position and tilt details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Cover '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "current_position": attrs.get("current_position"),
+        "current_tilt_position": attrs.get("current_tilt_position"),
+        "device_class": attrs.get("device_class"),
+        "supported_features": attrs.get("supported_features"),
+    }
+
+
+async def _cover_set_tilt(
+    hass: HomeAssistant, entity_id: str, tilt_position: int,
+) -> dict[str, Any]:
+    """Set cover tilt position."""
+    try:
+        await hass.services.async_call(
+            "cover", "set_cover_tilt_position",
+            {"entity_id": entity_id, "tilt_position": tilt_position},
+        )
+        return {"ok": True, "entity_id": entity_id,
+                "tilt_position": tilt_position}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cover set tilt failed: {exc}"}
+
+
+async def _lock_get_state(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get detailed lock state info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Lock '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "is_locked": state.state == "locked",
+        "changed_by": attrs.get("changed_by"),
+        "code_format": attrs.get("code_format"),
+        "supported_features": attrs.get("supported_features"),
+    }
+
+
+async def _light_get_supported_features(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get light supported features bitmap and decode."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Light '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    features = attrs.get("supported_features", 0)
+    feature_names = []
+    feature_map = {1: "SUPPORT_BRIGHTNESS", 2: "SUPPORT_COLOR_TEMP",
+                   4: "SUPPORT_EFFECT", 8: "SUPPORT_FLASH",
+                   16: "SUPPORT_COLOR", 32: "SUPPORT_TRANSITION",
+                   64: "SUPPORT_WHITE_VALUE"}
+    for bit, name in feature_map.items():
+        if features & bit:
+            feature_names.append(name)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "supported_features": features,
+        "feature_names": feature_names,
+        "color_mode": attrs.get("color_mode"),
+        "min_color_temp_kelvin": attrs.get("min_color_temp_kelvin"),
+        "max_color_temp_kelvin": attrs.get("max_color_temp_kelvin"),
+    }
+
+
+async def _light_get_color_modes(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get available color modes for a light."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Light '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "color_mode": attrs.get("color_mode"),
+        "supported_color_modes": attrs.get("supported_color_modes", []),
+        "effect_list": attrs.get("effect_list", []),
+        "brightness": attrs.get("brightness"),
+        "color_temp_kelvin": attrs.get("color_temp_kelvin"),
+        "hs_color": attrs.get("hs_color"),
+        "rgb_color": attrs.get("rgb_color"),
+    }
+
+
+async def _fan_get_speed_list(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get available speed settings for a fan."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Fan '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "percentage": attrs.get("percentage"),
+        "percentage_step": attrs.get("percentage_step"),
+        "speed_count": attrs.get("speed_count"),
+        "preset_mode": attrs.get("preset_mode"),
+        "preset_modes": attrs.get("preset_modes", []),
+    }
+
+
+async def _fan_get_preset_modes(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get available preset modes for a fan."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Fan '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "current_preset": attrs.get("preset_mode"),
+        "preset_modes": attrs.get("preset_modes", []),
+        "oscillating": attrs.get("oscillating"),
+        "direction": attrs.get("direction"),
+    }
+
+
+async def _sensor_list_by_unit(
+    hass: HomeAssistant, unit: str,
+) -> dict[str, Any]:
+    """List all sensors with a specific unit of measurement."""
+    results = []
+    for state in hass.states.async_all("sensor"):
+        if state.attributes.get("unit_of_measurement") == unit:
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+                "device_class": state.attributes.get("device_class"),
+            })
+    return {"ok": True, "unit": unit, "count": len(results),
+            "sensors": results[:500]}
+
+
+async def _zone_list_details(hass: HomeAssistant) -> dict[str, Any]:
+    """List all zones with their details."""
+    zones = hass.states.async_all("zone")
+    results = []
+    for state in zones:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "friendly_name": attrs.get("friendly_name"),
+            "latitude": attrs.get("latitude"),
+            "longitude": attrs.get("longitude"),
+            "radius": attrs.get("radius"),
+            "icon": attrs.get("icon"),
+            "persons": attrs.get("persons", []),
+        })
+    return {"ok": True, "count": len(results), "zones": results}
+
+
+async def _zone_check_entity(
+    hass: HomeAssistant, entity_id: str, zone: str,
+) -> dict[str, Any]:
+    """Check if a person/device_tracker entity is in a specific zone."""
+    entity_state = hass.states.get(entity_id)
+    if entity_state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    zone_id = f"zone.{zone}" if not zone.startswith("zone.") else zone
+    zone_state = hass.states.get(zone_id)
+    if zone_state is None:
+        return {"error": f"Zone '{zone_id}' not found"}
+    in_zone = entity_state.state == zone.replace("zone.", "")
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "zone": zone_id,
+        "in_zone": in_zone,
+        "entity_state": entity_state.state,
+    }
+
+
+async def _sun_get_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get sun position and sunrise/sunset times."""
+    state = hass.states.get("sun.sun")
+    if state is None:
+        return {"error": "sun.sun entity not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "state": state.state,
+        "next_dawn": attrs.get("next_dawn"),
+        "next_dusk": attrs.get("next_dusk"),
+        "next_midnight": attrs.get("next_midnight"),
+        "next_noon": attrs.get("next_noon"),
+        "next_rising": attrs.get("next_rising"),
+        "next_setting": attrs.get("next_setting"),
+        "elevation": attrs.get("elevation"),
+        "azimuth": attrs.get("azimuth"),
+        "rising": attrs.get("rising"),
+    }
+
+
+async def _logbook_count_by_domain(
+    hass: HomeAssistant, hours: int = 24,
+) -> dict[str, Any]:
+    """Count logbook events by domain over a period."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.logbook import async_get_events
+        events = await async_get_events(hass, start, end)
+        counts: dict[str, int] = {}
+        for ev in events:
+            domain = getattr(ev, "domain", None) or "unknown"
+            counts[domain] = counts.get(domain, 0) + 1
+        return {"ok": True, "hours": hours, "counts": counts,
+                "total_events": sum(counts.values())}
+    except ImportError:
+        return {"error": "logbook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook count failed: {exc}"}
+
+
+async def _logbook_get_entity_changes(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get logbook entries for a specific entity."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.logbook import async_get_events
+        events = await async_get_events(hass, start, end, entity_ids=[entity_id])
+        items = []
+        for ev in events:
+            items.append({
+                "when": str(getattr(ev, "when", "")),
+                "name": getattr(ev, "name", ""),
+                "message": getattr(ev, "message", ""),
+                "domain": getattr(ev, "domain", ""),
+                "entity_id": getattr(ev, "entity_id", ""),
+            })
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "count": len(items), "entries": items[:200]}
+    except ImportError:
+        return {"error": "logbook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook entity changes failed: {exc}"}
+
+
+async def _automation_check_conditions(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Check condition definitions for an automation."""
+    try:
+        config_dir = hass.config.config_dir
+        auto_id = entity_id.replace("automation.", "")
+        path = os.path.join(config_dir, "automations.yaml")
+
+        def _read():
+            with open(path, encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+        raw = await hass.async_add_executor_job(_read)
+        if not isinstance(raw, list):
+            return {"error": "automations.yaml is not a list"}
+        for item in raw:
+            if isinstance(item, dict) and (
+                item.get("id") == auto_id
+                or item.get("alias", "").lower().replace(" ", "_") == auto_id
+            ):
+                conditions = item.get("condition", item.get("conditions", []))
+                if isinstance(conditions, dict):
+                    conditions = [conditions]
+                return {
+                    "ok": True,
+                    "entity_id": entity_id,
+                    "condition_count": len(conditions),
+                    "conditions": conditions,
+                }
+        return {"error": f"Automation '{auto_id}' not found"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation check conditions failed: {exc}"}
+
+
+async def _device_get_actions(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get available actions for a device."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        actions = await async_get_device_automations(hass, "action", device_id)
+        return {"ok": True, "device_id": device_id,
+                "count": len(actions), "actions": actions}
+    except ImportError:
+        return {"error": "device_automation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device actions failed: {exc}"}
+
+
+async def _device_get_triggers(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get available triggers for a device."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        triggers = await async_get_device_automations(hass, "trigger", device_id)
+        return {"ok": True, "device_id": device_id,
+                "count": len(triggers), "triggers": triggers}
+    except ImportError:
+        return {"error": "device_automation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device triggers failed: {exc}"}
+
+
+async def _device_get_conditions(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get available conditions for a device."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        conditions = await async_get_device_automations(hass, "condition", device_id)
+        return {"ok": True, "device_id": device_id,
+                "count": len(conditions), "conditions": conditions}
+    except ImportError:
+        return {"error": "device_automation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device conditions failed: {exc}"}
+
+
+async def _event_type_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all event types that currently have listeners."""
+    listeners = hass.bus.async_listeners()
+    items = sorted(listeners.items(), key=lambda x: x[1], reverse=True)
+    return {
+        "ok": True,
+        "count": len(items),
+        "event_types": [{"type": k, "listeners": v} for k, v in items],
+    }
+
+
+async def _binary_sensor_list_active(hass: HomeAssistant) -> dict[str, Any]:
+    """List all binary sensors currently in 'on' state."""
+    results = []
+    for state in hass.states.async_all("binary_sensor"):
+        if state.state == "on":
+            results.append({
+                "entity_id": state.entity_id,
+                "device_class": state.attributes.get("device_class"),
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "sensors": results[:500]}
+
+
+async def _state_count_by_domain(hass: HomeAssistant) -> dict[str, Any]:
+    """Count entities by domain."""
+    counts: dict[str, int] = {}
+    for state in hass.states.async_all():
+        domain = state.entity_id.split(".")[0]
+        counts[domain] = counts.get(domain, 0) + 1
+    sorted_counts = dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))
+    return {"ok": True, "total": sum(counts.values()), "counts": sorted_counts}
+
+
+async def _state_list_by_value(
+    hass: HomeAssistant, value: str,
+) -> dict[str, Any]:
+    """List all entities with a specific state value."""
+    results = []
+    for state in hass.states.async_all():
+        if state.state == value:
+            results.append({
+                "entity_id": state.entity_id,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "value": value, "count": len(results),
+            "entities": results[:500]}
+
+
+async def _notification_history_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List active persistent notifications."""
+    notifs = hass.states.async_all("persistent_notification")
+    results = []
+    for state in notifs:
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "title": state.attributes.get("title"),
+            "message": state.attributes.get("message"),
+            "created_at": state.last_changed.isoformat(),
+        })
+    return {"ok": True, "count": len(results), "notifications": results}
+
+
+async def _area_list_entities(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """List all entities assigned to a specific area."""
+    ent_reg = er.async_get(hass)
+    results = []
+    for entry in ent_reg.entities.values():
+        if entry.area_id == area_id:
+            state = hass.states.get(entry.entity_id)
+            results.append({
+                "entity_id": entry.entity_id,
+                "domain": entry.domain,
+                "name": entry.name or entry.original_name,
+                "state": state.state if state else None,
+            })
+    return {"ok": True, "area_id": area_id, "count": len(results),
+            "entities": results}
+
+
+async def _label_list_entities(
+    hass: HomeAssistant, label_id: str,
+) -> dict[str, Any]:
+    """List all entities with a specific label."""
+    ent_reg = er.async_get(hass)
+    results = []
+    for entry in ent_reg.entities.values():
+        labels = getattr(entry, "labels", set())
+        if label_id in labels:
+            state = hass.states.get(entry.entity_id)
+            results.append({
+                "entity_id": entry.entity_id,
+                "domain": entry.domain,
+                "name": entry.name or entry.original_name,
+                "state": state.state if state else None,
+            })
+    return {"ok": True, "label_id": label_id, "count": len(results),
+            "entities": results}
+
+
+async def _automation_validate_yaml(hass: HomeAssistant) -> dict[str, Any]:
+    """Validate automations.yaml structure."""
+    try:
+        config_dir = hass.config.config_dir
+        path = os.path.join(config_dir, "automations.yaml")
+
+        def _validate():
+            with open(path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if raw is None:
+                return {"ok": True, "valid": True, "count": 0, "note": "Empty file"}
+            if not isinstance(raw, list):
+                return {"ok": True, "valid": False, "error": "Not a list"}
+            errors = []
+            for i, item in enumerate(raw):
+                if not isinstance(item, dict):
+                    errors.append(f"Item {i} is not a dict")
+                    continue
+                if "alias" not in item and "id" not in item:
+                    errors.append(f"Item {i} has no alias or id")
+            return {
+                "ok": True,
+                "valid": len(errors) == 0,
+                "count": len(raw),
+                "errors": errors[:50],
+            }
+
+        return await hass.async_add_executor_job(_validate)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation YAML validation failed: {exc}"}
+
+
+async def _script_validate_yaml(hass: HomeAssistant) -> dict[str, Any]:
+    """Validate scripts.yaml structure."""
+    try:
+        config_dir = hass.config.config_dir
+        path = os.path.join(config_dir, "scripts.yaml")
+
+        def _validate():
+            with open(path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if raw is None:
+                return {"ok": True, "valid": True, "count": 0, "note": "Empty file"}
+            if not isinstance(raw, dict):
+                return {"ok": True, "valid": False, "error": "Not a dict"}
+            errors = []
+            for key, val in raw.items():
+                if not isinstance(val, dict):
+                    errors.append(f"Script '{key}' value is not a dict")
+                elif "sequence" not in val and "action" not in val:
+                    errors.append(f"Script '{key}' has no sequence/action")
+            return {
+                "ok": True,
+                "valid": len(errors) == 0,
+                "count": len(raw),
+                "errors": errors[:50],
+            }
+
+        return await hass.async_add_executor_job(_validate)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script YAML validation failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -34172,4 +34751,31 @@ TOOL_SPECS: list[dict[str, Any]] = [
             }, "required": ["entity_id"]},
         },
     },
+    # --- Wave 66 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "cover_get_position", "description": "Get cover position and tilt details.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Cover entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "cover_set_tilt", "description": "Set cover tilt position. Write op — gated by allow_write.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Cover entity ID"}, "tilt_position": {"type": "integer", "description": "Tilt position 0-100"}}, "required": ["entity_id", "tilt_position"]}}},
+    {"type": "function", "function": {"name": "lock_get_state", "description": "Get detailed lock state info (locked/unlocked, changed_by, code_format).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Lock entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "light_get_supported_features", "description": "Get light supported features bitmap decoded (brightness, color_temp, effect, etc.).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Light entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "light_get_color_modes", "description": "Get available color modes, effect list, and current color info for a light.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Light entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "fan_get_speed_list", "description": "Get available speed settings for a fan (percentage, step, count).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Fan entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "fan_get_preset_modes", "description": "Get available preset modes for a fan (oscillating, direction).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Fan entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "sensor_list_by_unit", "description": "List all sensors with a specific unit of measurement.", "parameters": {"type": "object", "properties": {"unit": {"type": "string", "description": "Unit of measurement (e.g. °C, kWh, %)"}}, "required": ["unit"]}}},
+    {"type": "function", "function": {"name": "zone_list_details", "description": "List all zones with coordinates, radius, and persons inside.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zone_check_entity", "description": "Check if a person/device_tracker is in a specific zone.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Person or tracker entity ID"}, "zone": {"type": "string", "description": "Zone name or entity ID"}}, "required": ["entity_id", "zone"]}}},
+    {"type": "function", "function": {"name": "sun_get_info", "description": "Get sun position, elevation, azimuth, and next sunrise/sunset times.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "logbook_count_by_domain", "description": "Count logbook events by domain over a period.", "parameters": {"type": "object", "properties": {"hours": {"type": "integer", "description": "Hours to look back (default 24)", "default": 24}}}}},
+    {"type": "function", "function": {"name": "logbook_get_entity_changes", "description": "Get logbook entries for a specific entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Entity ID"}, "hours": {"type": "integer", "description": "Hours to look back (default 24)", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_check_conditions", "description": "Check condition definitions for an automation from automations.yaml.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Automation entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "device_get_actions", "description": "Get available device automation actions for a device.", "parameters": {"type": "object", "properties": {"device_id": {"type": "string", "description": "Device ID"}}, "required": ["device_id"]}}},
+    {"type": "function", "function": {"name": "device_get_triggers", "description": "Get available device automation triggers for a device.", "parameters": {"type": "object", "properties": {"device_id": {"type": "string", "description": "Device ID"}}, "required": ["device_id"]}}},
+    {"type": "function", "function": {"name": "device_get_conditions", "description": "Get available device automation conditions for a device.", "parameters": {"type": "object", "properties": {"device_id": {"type": "string", "description": "Device ID"}}, "required": ["device_id"]}}},
+    {"type": "function", "function": {"name": "event_type_list", "description": "List all event types that currently have listeners, with listener counts.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "binary_sensor_list_active", "description": "List all binary sensors currently in 'on' state.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "state_count_by_domain", "description": "Count all entities grouped by domain.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "state_list_by_value", "description": "List all entities with a specific state value.", "parameters": {"type": "object", "properties": {"value": {"type": "string", "description": "State value to search for"}}, "required": ["value"]}}},
+    {"type": "function", "function": {"name": "notification_history_list", "description": "List active persistent notifications.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "area_list_entities", "description": "List all entities assigned to a specific area.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string", "description": "Area ID"}}, "required": ["area_id"]}}},
+    {"type": "function", "function": {"name": "label_list_entities", "description": "List all entities with a specific label.", "parameters": {"type": "object", "properties": {"label_id": {"type": "string", "description": "Label ID"}}, "required": ["label_id"]}}},
+    {"type": "function", "function": {"name": "automation_validate_yaml", "description": "Validate automations.yaml structure (check for list format, alias/id presence).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "script_validate_yaml", "description": "Validate scripts.yaml structure (check for dict format, sequence presence).", "parameters": {"type": "object", "properties": {}}}},
 ]
