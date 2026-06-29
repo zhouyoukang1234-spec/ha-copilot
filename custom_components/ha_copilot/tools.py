@@ -21801,6 +21801,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _event_bus_traffic_analysis(hass)
         if name == "proximity_zone_summary":
             return await _proximity_zone_summary(hass)
+        # --- Wave 93 dispatch ---
+        if name == "irrigation_zone_status":
+            return await _irrigation_zone_status(hass)
+        if name == "irrigation_schedule_overview":
+            return await _irrigation_schedule_overview(hass)
+        if name == "fireplace_status":
+            return await _fireplace_status(hass)
+        if name == "sauna_status_check":
+            return await _sauna_status_check(hass)
+        if name == "wine_cellar_conditions":
+            return await _wine_cellar_conditions(hass)
+        if name == "home_theater_status":
+            return await _home_theater_status(hass)
+        if name == "home_theater_audio_check":
+            return await _home_theater_audio_check(hass)
+        if name == "laundry_machine_status":
+            return await _laundry_machine_status(hass)
+        if name == "laundry_cycle_estimate":
+            return await _laundry_cycle_estimate(hass)
+        if name == "kitchen_appliance_status":
+            return await _kitchen_appliance_status(hass)
+        if name == "kitchen_temperature_check":
+            return await _kitchen_temperature_check(hass)
+        if name == "stair_light_automation_check":
+            return await _stair_light_automation_check(hass)
+        if name == "baby_room_environment":
+            return await _baby_room_environment(hass)
+        if name == "baby_monitor_status":
+            return await _baby_monitor_status(hass)
+        if name == "guest_mode_status":
+            return await _guest_mode_status(hass)
+        if name == "guest_network_isolation":
+            return await _guest_network_isolation(hass)
+        if name == "outdoor_lighting_status":
+            return await _outdoor_lighting_status(hass)
+        if name == "outdoor_temperature_check":
+            return await _outdoor_temperature_check(hass)
+        if name == "power_factor_check":
+            return await _power_factor_check(hass)
+        if name == "scene_usage_ranking":
+            return await _scene_usage_ranking(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -34745,6 +34786,290 @@ async def _proximity_zone_summary(hass: HomeAssistant) -> dict[str, Any]:
             "zones": zones, "proximities": proximities}
 
 
+# ---------------------------------------------------------------------------
+# Wave 93 — irrigation, fireplace, sauna, wine cellar, home theater, laundry,
+# kitchen, stairs, baby, guest, outdoor, power quality, scene intelligence
+# ---------------------------------------------------------------------------
+
+
+async def _irrigation_zone_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Get irrigation zone status."""
+    results = []
+    for s in hass.states.async_all("switch"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("irrigation", "sprinkler", "zone_valve")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("valve"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("irrigation", "sprinkler", "water")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "zones": results}
+
+
+async def _irrigation_schedule_overview(hass: HomeAssistant) -> dict[str, Any]:
+    """Overview irrigation schedules."""
+    schedules = []
+    for s in hass.states.async_all("schedule"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("irrigation", "sprinkler", "water")):
+            schedules.append({"entity_id": s.entity_id, "state": s.state,
+                              "next_event": s.attributes.get("next_event"),
+                              "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("automation"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("irrigation", "sprinkler", "watering")):
+            schedules.append({"entity_id": s.entity_id, "state": s.state,
+                              "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(schedules), "schedules": schedules}
+
+
+async def _fireplace_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check fireplace status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "fireplace" in name or "hearth" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "fireplaces": results}
+
+
+async def _sauna_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check sauna/steam room status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "sauna" in name or "steam_room" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sauna": results}
+
+
+async def _wine_cellar_conditions(hass: HomeAssistant) -> dict[str, Any]:
+    """Check wine cellar/storage conditions."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "wine" in name or "cellar" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "device_class": s.attributes.get("device_class"),
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _home_theater_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check home theater system status."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("theater", "theatre", "projector", "receiver", "av_", "surround")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "source": s.attributes.get("source"),
+                            "volume": s.attributes.get("volume_level"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _home_theater_audio_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check home theater audio configuration."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("receiver", "soundbar", "surround", "subwoofer", "av_")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "sound_mode": s.attributes.get("sound_mode"),
+                            "sound_mode_list": s.attributes.get("sound_mode_list"),
+                            "volume": s.attributes.get("volume_level"),
+                            "is_muted": s.attributes.get("is_volume_muted")})
+    return {"ok": True, "count": len(results), "audio_devices": results}
+
+
+async def _laundry_machine_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check laundry machine status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("washer", "dryer", "washing_machine", "laundry")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "machines": results}
+
+
+async def _laundry_cycle_estimate(hass: HomeAssistant) -> dict[str, Any]:
+    """Estimate laundry cycle time remaining."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("washer", "dryer", "washing_machine")) and s.state == "on":
+            mins_running = (now - s.last_changed).total_seconds() / 60
+            results.append({"entity_id": s.entity_id,
+                            "minutes_running": round(mins_running, 1),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "running": len(results), "cycles": results}
+
+
+async def _kitchen_appliance_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check kitchen appliance status."""
+    results = []
+    keywords = ("oven", "stove", "fridge", "refrigerator", "dishwasher", "microwave",
+                "coffee", "toaster", "kettle", "kitchen")
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in keywords):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "appliances": results}
+
+
+async def _kitchen_temperature_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check kitchen temperature sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if "kitchen" in name and dc in ("temperature", "humidity"):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "device_class": dc,
+                            "unit": s.attributes.get("unit_of_measurement")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _stair_light_automation_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check stair/hallway light automations."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("stair", "hallway", "corridor", "landing")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    stair_lights = []
+    for s in hass.states.async_all("light"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("stair", "hallway", "corridor")):
+            stair_lights.append({"entity_id": s.entity_id, "state": s.state})
+    return {"ok": True, "automations": len(results), "lights": len(stair_lights),
+            "automation_list": results, "light_list": stair_lights}
+
+
+async def _baby_room_environment(hass: HomeAssistant) -> dict[str, Any]:
+    """Check baby room environment conditions."""
+    issues = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if not any(kw in name for kw in ("baby", "nursery", "child")):
+            continue
+        dc = s.attributes.get("device_class", "")
+        try:
+            val = float(s.state)
+        except (ValueError, TypeError):
+            continue
+        if dc == "temperature":
+            if val < 18 or val > 22:
+                issues.append({"sensor": s.entity_id, "issue": f"Temp {val}° outside 18-22°"})
+        elif dc == "humidity":
+            if val < 40 or val > 60:
+                issues.append({"sensor": s.entity_id, "issue": f"Humidity {val}% outside 40-60%"})
+    return {"ok": True, "issue_count": len(issues), "issues": issues}
+
+
+async def _baby_monitor_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check baby monitor status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "baby" in name and ("monitor" in name or "camera" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "monitors": results}
+
+
+async def _guest_mode_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check guest mode related entities."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "guest" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "guest_entities": results}
+
+
+async def _guest_network_isolation(hass: HomeAssistant) -> dict[str, Any]:
+    """Check guest network isolation status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "guest" in name and any(kw in name for kw in ("wifi", "network", "ssid", "vlan")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "network_entities": results}
+
+
+async def _outdoor_lighting_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check outdoor lighting status."""
+    results = []
+    for s in hass.states.async_all("light"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("outdoor", "exterior", "garden", "porch", "patio",
+                                      "driveway", "pathway", "landscape")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "brightness": s.attributes.get("brightness"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    on_count = sum(1 for r in results if r["state"] == "on")
+    return {"ok": True, "total": len(results), "on": on_count, "lights": results}
+
+
+async def _outdoor_temperature_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check outdoor temperature sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if s.attributes.get("device_class") == "temperature" and \
+           any(kw in name for kw in ("outdoor", "exterior", "outside", "garden")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    weather = hass.states.async_all("weather")
+    for w in weather:
+        results.append({"entity_id": w.entity_id,
+                        "temperature": w.attributes.get("temperature"),
+                        "humidity": w.attributes.get("humidity")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _power_factor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check power factor sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "power_factor":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "power_factor" in name or "pf" in name.split("_"):
+            if s.entity_id not in [r["entity_id"] for r in results]:
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _scene_usage_ranking(hass: HomeAssistant) -> dict[str, Any]:
+    """Rank scenes by usage."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("scene"):
+        hours = (now - s.last_changed).total_seconds() / 3600
+        results.append({"entity_id": s.entity_id,
+                        "friendly_name": s.attributes.get("friendly_name"),
+                        "hours_since_activated": round(hours, 1)})
+    results.sort(key=lambda x: x["hours_since_activated"])
+    return {"ok": True, "count": len(results), "scenes": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -46893,4 +47218,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "switch_on_time_ranking", "description": "Rank switches by on time.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "event_bus_traffic_analysis", "description": "Analyze event bus traffic.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "proximity_zone_summary", "description": "Summarize proximity zones.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 93 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "irrigation_zone_status", "description": "Get irrigation zone status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "irrigation_schedule_overview", "description": "Overview irrigation schedules.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "fireplace_status", "description": "Check fireplace status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "sauna_status_check", "description": "Check sauna status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "wine_cellar_conditions", "description": "Check wine cellar conditions.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_theater_status", "description": "Check home theater status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_theater_audio_check", "description": "Check theater audio config.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "laundry_machine_status", "description": "Check laundry machine status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "laundry_cycle_estimate", "description": "Estimate laundry cycle time.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "kitchen_appliance_status", "description": "Check kitchen appliances.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "kitchen_temperature_check", "description": "Check kitchen temperature.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "stair_light_automation_check", "description": "Check stair light automations.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "baby_room_environment", "description": "Check baby room environment.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "baby_monitor_status", "description": "Check baby monitor status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "guest_mode_status", "description": "Check guest mode entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "guest_network_isolation", "description": "Check guest network isolation.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "outdoor_lighting_status", "description": "Check outdoor lighting.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "outdoor_temperature_check", "description": "Check outdoor temperature.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "power_factor_check", "description": "Check power factor sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "scene_usage_ranking", "description": "Rank scenes by usage.", "parameters": {"type": "object", "properties": {}}}},
 ]
