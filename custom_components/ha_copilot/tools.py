@@ -8339,6 +8339,275 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 37: todo, datetime, template advanced, tag, person, sun, weather
+#           forecast, zone, logbook, network adapters
+# ---------------------------------------------------------------------------
+
+
+async def _todo_list_items(
+    hass: HomeAssistant, entity_id: str,
+    status: str | None = None,
+) -> dict[str, Any]:
+    """List items in a todo list."""
+    try:
+        from homeassistant.components.todo import async_get_todo_list
+        todo = async_get_todo_list(hass, entity_id)
+        if todo is None:
+            return {"error": f"Todo list {entity_id} not found"}
+        items = await todo.async_get_items()
+        if status:
+            items = [i for i in items if getattr(i, "status", "") == status]
+        result = [
+            {"uid": getattr(i, "uid", ""), "summary": getattr(i, "summary", ""),
+             "status": getattr(i, "status", "")}
+            for i in items[:100]
+        ]
+        return {"ok": True, "entity_id": entity_id, "items": result}
+    except ImportError:
+        return {"error": "todo component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo list items failed: {exc}"}
+
+
+async def _todo_move_item(
+    hass: HomeAssistant, entity_id: str,
+    uid: str, previous_uid: str | None = None,
+) -> dict[str, Any]:
+    """Move a todo item."""
+    data: dict[str, Any] = {"entity_id": entity_id, "uid": uid}
+    if previous_uid:
+        data["previous_uid"] = previous_uid
+    try:
+        await hass.services.async_call(
+            "todo", "move_item", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo move item failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "uid": uid, "action": "moved"}
+
+
+async def _datetime_parse(
+    hass: HomeAssistant, value: str,
+) -> dict[str, Any]:
+    """Parse a datetime string."""
+    try:
+        from homeassistant.util import dt as dt_util
+        parsed = dt_util.parse_datetime(value)
+        if parsed is None:
+            dt_date = dt_util.parse_date(value)
+            if dt_date is not None:
+                return {"ok": True, "date": str(dt_date), "type": "date"}
+            return {"error": f"Cannot parse: {value}"}
+        return {"ok": True, "datetime": str(parsed), "type": "datetime"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Datetime parse failed: {exc}"}
+
+
+async def _datetime_now(hass: HomeAssistant) -> dict[str, Any]:
+    """Get current datetime."""
+    try:
+        from homeassistant.util import dt as dt_util
+        now = dt_util.now()
+        return {
+            "ok": True, "datetime": str(now),
+            "date": str(now.date()), "time": str(now.time()),
+            "timezone": str(now.tzinfo),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Datetime now failed: {exc}"}
+
+
+async def _datetime_timestamp(hass: HomeAssistant) -> dict[str, Any]:
+    """Get current UTC timestamp."""
+    try:
+        from homeassistant.util import dt as dt_util
+        now = dt_util.utcnow()
+        return {
+            "ok": True, "timestamp": now.timestamp(),
+            "utc": str(now), "iso": now.isoformat(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Datetime timestamp failed: {exc}"}
+
+
+async def _template_render_advanced(
+    hass: HomeAssistant, template_str: str,
+    variables: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Render a Jinja2 template with variables."""
+    try:
+        from homeassistant.helpers.template import Template
+        tpl = Template(template_str, hass)
+        result = tpl.async_render(variables=variables or {})
+        return {"ok": True, "result": str(result)[:5000]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Template render advanced failed: {exc}"}
+
+
+async def _tag_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List NFC/RFID tags."""
+    try:
+        from homeassistant.components.tag import async_get_tag_store
+        store = await async_get_tag_store(hass)
+        tags = [
+            {"id": t.id, "name": t.name}
+            for t in store.tags.values()
+        ]
+        return {"ok": True, "tags": tags[:100]}
+    except ImportError:
+        return {"error": "tag component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Tag list failed: {exc}"}
+
+
+async def _person_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all person entities."""
+    try:
+        states = hass.states.async_all("person")
+        persons = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "persons": persons}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Person list failed: {exc}"}
+
+
+async def _person_get(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get person entity details."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Person {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": state.entity_id,
+            "name": state.name, "state": state.state,
+            "attributes": dict(state.attributes),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Person get failed: {exc}"}
+
+
+async def _sun_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get sun position and next sunrise/sunset."""
+    try:
+        state = hass.states.get("sun.sun")
+        if state is None:
+            return {"error": "sun.sun entity not found"}
+        attrs = dict(state.attributes)
+        return {
+            "ok": True, "state": state.state,
+            "next_dawn": attrs.get("next_dawn"),
+            "next_dusk": attrs.get("next_dusk"),
+            "next_rising": attrs.get("next_rising"),
+            "next_setting": attrs.get("next_setting"),
+            "elevation": attrs.get("elevation"),
+            "azimuth": attrs.get("azimuth"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Sun info failed: {exc}"}
+
+
+async def _weather_get_forecast(
+    hass: HomeAssistant, entity_id: str,
+    forecast_type: str = "daily",
+) -> dict[str, Any]:
+    """Get weather forecast."""
+    try:
+        await hass.services.async_call(
+            "weather", "get_forecasts",
+            {"entity_id": entity_id, "type": forecast_type},
+            blocking=True,
+        )
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Weather {entity_id} not found"}
+        attrs = dict(state.attributes)
+        forecast = attrs.get("forecast", [])
+        return {
+            "ok": True, "entity_id": entity_id,
+            "state": state.state,
+            "forecast": forecast[:10],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Weather get forecast failed: {exc}"}
+
+
+async def _zone_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all zones."""
+    try:
+        states = hass.states.async_all("zone")
+        zones = [
+            {"entity_id": s.entity_id, "name": s.name,
+             "latitude": s.attributes.get("latitude"),
+             "longitude": s.attributes.get("longitude"),
+             "radius": s.attributes.get("radius")}
+            for s in states
+        ]
+        return {"ok": True, "zones": zones}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Zone list failed: {exc}"}
+
+
+async def _zone_get(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get zone details."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Zone {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": state.entity_id,
+            "name": state.name,
+            "latitude": state.attributes.get("latitude"),
+            "longitude": state.attributes.get("longitude"),
+            "radius": state.attributes.get("radius"),
+            "persons_in_zone": state.state,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Zone get failed: {exc}"}
+
+
+async def _logbook_entries(
+    hass: HomeAssistant, entity_id: str | None = None,
+    hours: int = 24,
+) -> dict[str, Any]:
+    """Get logbook entries."""
+    try:
+        from homeassistant.util import dt as dt_util
+        from datetime import timedelta
+        now = dt_util.utcnow()
+        start = now - timedelta(hours=hours)
+        from homeassistant.components.logbook import async_get_events
+        events = await async_get_events(hass, start, now, entity_id)
+        result = [
+            {"when": str(e.get("when", "")), "name": e.get("name", ""),
+             "message": e.get("message", "")}
+            for e in (events[:50] if events else [])
+        ]
+        return {"ok": True, "entries": result}
+    except ImportError:
+        return {"error": "logbook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook entries failed: {exc}"}
+
+
+async def _network_adapters(hass: HomeAssistant) -> dict[str, Any]:
+    """List network adapters."""
+    try:
+        from homeassistant.components.network import async_get_adapters
+        adapters = await async_get_adapters(hass)
+        return {"ok": True, "adapters": adapters[:20] if adapters else []}
+    except ImportError:
+        return {"error": "network component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Network adapters failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 36: trace, blueprint, config flow, entity/device registry, repairs,
 #           analytics, hardware, diagnostics
 # ---------------------------------------------------------------------------
@@ -13199,6 +13468,52 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 37 dispatch ---
+        if name == "todo_list_items":
+            return await _todo_list_items(
+                hass, args.get("entity_id", ""), args.get("status"),
+            )
+        if name == "todo_move_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _todo_move_item(
+                hass, args.get("entity_id", ""),
+                args.get("uid", ""), args.get("previous_uid"),
+            )
+        if name == "datetime_parse":
+            return await _datetime_parse(hass, args.get("value", ""))
+        if name == "datetime_now":
+            return await _datetime_now(hass)
+        if name == "datetime_timestamp":
+            return await _datetime_timestamp(hass)
+        if name == "template_render_advanced":
+            return await _template_render_advanced(
+                hass, args.get("template", ""), args.get("variables"),
+            )
+        if name == "tag_list":
+            return await _tag_list(hass)
+        if name == "person_list":
+            return await _person_list(hass)
+        if name == "person_get":
+            return await _person_get(hass, args.get("entity_id", ""))
+        if name == "sun_info":
+            return await _sun_info(hass)
+        if name == "weather_get_forecast":
+            return await _weather_get_forecast(
+                hass, args.get("entity_id", ""),
+                args.get("forecast_type", "daily"),
+            )
+        if name == "zone_list":
+            return await _zone_list(hass)
+        if name == "zone_get":
+            return await _zone_get(hass, args.get("entity_id", ""))
+        if name == "logbook_entries":
+            return await _logbook_entries(
+                hass, args.get("entity_id"),
+                int(args.get("hours", 24)),
+            )
+        if name == "network_adapters":
+            return await _network_adapters(hass)
         # --- Wave 36 dispatch ---
         if name == "trace_get":
             return await _trace_get(
@@ -18664,6 +18979,174 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 37 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_list_items",
+            "description": "List items in a todo list.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "status": {"type": "string", "description": "needs_action/completed"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_move_item",
+            "description": "Move a todo item in a list.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "uid": {"type": "string"},
+                    "previous_uid": {"type": "string"},
+                },
+                "required": ["entity_id", "uid"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "datetime_parse",
+            "description": "Parse a datetime string.",
+            "parameters": {
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "datetime_now",
+            "description": "Get current datetime.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "datetime_timestamp",
+            "description": "Get current UTC timestamp.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "template_render_advanced",
+            "description": "Render a Jinja2 template with variables.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "template": {"type": "string"},
+                    "variables": {"type": "object"},
+                },
+                "required": ["template"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tag_list",
+            "description": "List NFC/RFID tags.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "person_list",
+            "description": "List all person entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "person_get",
+            "description": "Get person entity details.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sun_info",
+            "description": "Get sun position and next sunrise/sunset.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "weather_get_forecast",
+            "description": "Get weather forecast.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "forecast_type": {"type": "string", "description": "daily/hourly/twice_daily"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zone_list",
+            "description": "List all zones.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zone_get",
+            "description": "Get zone details.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "logbook_entries",
+            "description": "Get logbook entries.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "hours": {"type": "integer", "description": "Hours to look back (default 24)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "network_adapters",
+            "description": "List network adapters.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 36 TOOL_SPECS ---
