@@ -8339,6 +8339,174 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 25: humidifier toggle, alarm custom bypass/trigger, remote,
+#           input button, group set/remove, counter set value
+# ---------------------------------------------------------------------------
+
+
+async def _humidifier_toggle(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Toggle a humidifier."""
+    try:
+        await hass.services.async_call(
+            "humidifier", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Humidifier toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _alarm_control_panel_arm_custom_bypass(
+    hass: HomeAssistant, entity_id: str, code: str | None = None,
+) -> dict[str, Any]:
+    """Arm alarm with custom bypass."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if code:
+        data["code"] = code
+    try:
+        await hass.services.async_call(
+            "alarm_control_panel", "alarm_arm_custom_bypass",
+            data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Alarm arm custom bypass failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "arm_custom_bypass"}
+
+
+async def _alarm_control_panel_trigger(
+    hass: HomeAssistant, entity_id: str, code: str | None = None,
+) -> dict[str, Any]:
+    """Trigger an alarm."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if code:
+        data["code"] = code
+    try:
+        await hass.services.async_call(
+            "alarm_control_panel", "alarm_trigger", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Alarm trigger failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "triggered"}
+
+
+async def _remote_turn_on(
+    hass: HomeAssistant, entity_id: str, activity: str | None = None,
+) -> dict[str, Any]:
+    """Turn on a remote."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if activity:
+        data["activity"] = activity
+    try:
+        await hass.services.async_call(
+            "remote", "turn_on", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remote turn on failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+
+
+async def _remote_turn_off(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Turn off a remote."""
+    try:
+        await hass.services.async_call(
+            "remote", "turn_off", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remote turn off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+
+
+async def _remote_toggle(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Toggle a remote."""
+    try:
+        await hass.services.async_call(
+            "remote", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remote toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _remote_delete_command(
+    hass: HomeAssistant, entity_id: str,
+    command: list[str], device: str | None = None,
+) -> dict[str, Any]:
+    """Delete a learned command from a remote."""
+    data: dict[str, Any] = {"entity_id": entity_id, "command": command}
+    if device:
+        data["device"] = device
+    try:
+        await hass.services.async_call(
+            "remote", "delete_command", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remote delete command failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "command_deleted"}
+
+
+async def _input_button_press(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Press an input_button entity."""
+    try:
+        await hass.services.async_call(
+            "input_button", "press", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input button press failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "pressed"}
+
+
+async def _group_set(
+    hass: HomeAssistant, name: str, entities: list[str],
+    object_id: str | None = None,
+) -> dict[str, Any]:
+    """Create or update a group."""
+    data: dict[str, Any] = {"name": name, "entities": entities}
+    if object_id:
+        data["object_id"] = object_id
+    try:
+        await hass.services.async_call(
+            "group", "set", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Group set failed: {exc}"}
+    return {"ok": True, "name": name, "entities": entities}
+
+
+async def _group_remove(
+    hass: HomeAssistant, object_id: str,
+) -> dict[str, Any]:
+    """Remove a group."""
+    try:
+        await hass.services.async_call(
+            "group", "remove", {"object_id": object_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Group remove failed: {exc}"}
+    return {"ok": True, "object_id": object_id, "action": "removed"}
+
+
+async def _counter_set_value(
+    hass: HomeAssistant, entity_id: str, value: int,
+) -> dict[str, Any]:
+    """Set a counter to a specific value."""
+    try:
+        await hass.services.async_call(
+            "counter", "set_value",
+            {"entity_id": entity_id, "value": value}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Counter set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+# ---------------------------------------------------------------------------
 # Wave 24: vacuum segment, select, valve stop/toggle, lawn mower,
 #           media seek, siren toggle, cover tilt stop/toggle, notify
 # ---------------------------------------------------------------------------
@@ -11001,6 +11169,65 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 25 dispatch ---
+        if name == "humidifier_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _humidifier_toggle(hass, args.get("entity_id", ""))
+        if name == "alarm_control_panel_arm_custom_bypass":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _alarm_control_panel_arm_custom_bypass(
+                hass, args.get("entity_id", ""), args.get("code"),
+            )
+        if name == "alarm_control_panel_trigger":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _alarm_control_panel_trigger(
+                hass, args.get("entity_id", ""), args.get("code"),
+            )
+        if name == "remote_turn_on":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remote_turn_on(
+                hass, args.get("entity_id", ""), args.get("activity"),
+            )
+        if name == "remote_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remote_turn_off(hass, args.get("entity_id", ""))
+        if name == "remote_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remote_toggle(hass, args.get("entity_id", ""))
+        if name == "remote_delete_command":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remote_delete_command(
+                hass, args.get("entity_id", ""),
+                args.get("command", []), args.get("device"),
+            )
+        if name == "input_button_press":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_button_press(hass, args.get("entity_id", ""))
+        if name == "group_set":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _group_set(
+                hass, args.get("name", ""), args.get("entities", []),
+                args.get("object_id"),
+            )
+        if name == "group_remove":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _group_remove(hass, args.get("object_id", ""))
+        if name == "counter_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _counter_set_value(
+                hass, args.get("entity_id", ""), int(args.get("value", 0)),
+            )
         # --- Wave 24 dispatch ---
         if name == "vacuum_clean_segment":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -15748,6 +15975,159 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 25 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "humidifier_toggle",
+            "description": "Toggle a humidifier.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "alarm_control_panel_arm_custom_bypass",
+            "description": "Arm alarm with custom bypass.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "code": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "alarm_control_panel_trigger",
+            "description": "Trigger an alarm.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "code": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remote_turn_on",
+            "description": "Turn on a remote with optional activity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "activity": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remote_turn_off",
+            "description": "Turn off a remote.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remote_toggle",
+            "description": "Toggle a remote.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remote_delete_command",
+            "description": "Delete a learned command from a remote.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "array", "items": {"type": "string"}},
+                    "device": {"type": "string"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_button_press",
+            "description": "Press an input_button entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "group_set",
+            "description": "Create or update a group.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "entities": {"type": "array", "items": {"type": "string"}},
+                    "object_id": {"type": "string"},
+                },
+                "required": ["name", "entities"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "group_remove",
+            "description": "Remove a group.",
+            "parameters": {
+                "type": "object",
+                "properties": {"object_id": {"type": "string"}},
+                "required": ["object_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "counter_set_value",
+            "description": "Set a counter to a specific value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "integer"},
+                },
+                "required": ["entity_id", "value"],
             },
         },
     },
