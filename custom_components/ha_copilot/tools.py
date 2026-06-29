@@ -20239,6 +20239,58 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _state_restore(
                 hass, args.get("snapshot", []),
             )
+        # --- Wave 62 dispatch ---
+        if name == "automation_set_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_set_mode(
+                hass, args.get("entity_id", ""),
+                args.get("mode", "single"),
+            )
+        if name == "script_set_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _script_set_mode(
+                hass, args.get("entity_id", ""),
+                args.get("mode", "single"),
+            )
+        if name == "entity_platform_reload":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_platform_reload(
+                hass, args.get("platform", ""),
+            )
+        if name == "config_entry_start_options_flow":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _config_entry_start_options_flow(
+                hass, args.get("entry_id", ""),
+            )
+        if name == "media_browse":
+            return await _media_browse(
+                hass, args.get("media_content_id"),
+                args.get("media_content_type"),
+            )
+        if name == "media_resolve":
+            return await _media_resolve(
+                hass, args.get("media_content_id", ""),
+                args.get("media_content_type", ""),
+            )
+        if name == "alarm_custom_bypass":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _alarm_custom_bypass(
+                hass, args.get("entity_id", ""),
+                args.get("code"),
+            )
+        if name == "event_entity_trigger":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _event_entity_trigger(
+                hass, args.get("entity_id", ""),
+                args.get("event_type", ""),
+                args.get("event_data"),
+            )
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -20786,6 +20838,200 @@ async def _state_restore(
             errors.append({"entity_id": eid, "error": str(exc)})
     return {"ok": True, "restored": restored, "error_count": len(errors),
             "errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Wave 62 — automation/script mode, entity platform reload, options flow,
+# media browse/resolve, alarm custom bypass, event entity trigger
+# ---------------------------------------------------------------------------
+
+
+async def _automation_set_mode(
+    hass: HomeAssistant, entity_id: str, mode: str,
+) -> dict[str, Any]:
+    """Set automation execution mode (single/restart/queued/parallel)."""
+    valid_modes = ("single", "restart", "queued", "parallel")
+    if mode not in valid_modes:
+        return {"error": f"Invalid mode '{mode}'. Use: {', '.join(valid_modes)}"}
+    try:
+        config_dir = hass.config.config_dir
+        auto_id = entity_id.replace("automation.", "")
+        automations_path = os.path.join(config_dir, "automations.yaml")
+        def _do_auto_mode() -> tuple[bool, str]:
+            with open(automations_path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, list):
+                return False, "automations.yaml is not a list"
+            for item in raw:
+                if isinstance(item, dict) and (
+                    item.get("id") == auto_id
+                    or item.get("alias", "").lower().replace(" ", "_") == auto_id
+                ):
+                    item["mode"] = mode
+                    with open(automations_path, "w", encoding="utf-8") as f:
+                        yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+                    return True, ""
+            return False, f"Automation '{auto_id}' not found in automations.yaml"
+        ok, err = await hass.async_add_executor_job(_do_auto_mode)
+        if not ok:
+            return {"error": err}
+        return {"ok": True, "entity_id": entity_id, "mode": mode}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set automation mode failed: {exc}"}
+
+
+async def _script_set_mode(
+    hass: HomeAssistant, entity_id: str, mode: str,
+) -> dict[str, Any]:
+    """Set script execution mode (single/restart/queued/parallel)."""
+    valid_modes = ("single", "restart", "queued", "parallel")
+    if mode not in valid_modes:
+        return {"error": f"Invalid mode '{mode}'. Use: {', '.join(valid_modes)}"}
+    try:
+        config_dir = hass.config.config_dir
+        scripts_path = os.path.join(config_dir, "scripts.yaml")
+        script_id = entity_id.replace("script.", "")
+        def _do_script_mode() -> tuple[bool, str]:
+            with open(scripts_path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, dict):
+                return False, "scripts.yaml is not a dict"
+            if script_id not in raw:
+                return False, f"Script '{script_id}' not found in scripts.yaml"
+            raw[script_id]["mode"] = mode
+            with open(scripts_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+            return True, ""
+        ok, err = await hass.async_add_executor_job(_do_script_mode)
+        if not ok:
+            return {"error": err}
+        return {"ok": True, "entity_id": entity_id, "mode": mode}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set script mode failed: {exc}"}
+
+
+async def _entity_platform_reload(
+    hass: HomeAssistant, platform: str,
+) -> dict[str, Any]:
+    """Reload all entities for a specific platform/integration."""
+    try:
+        await hass.services.async_call(
+            platform, "reload", {},
+        )
+        return {"ok": True, "platform": platform, "reloaded": True}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Platform reload failed: {exc}"}
+
+
+async def _config_entry_start_options_flow(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Start an options flow for a config entry."""
+    try:
+        entry = None
+        for e in hass.config_entries.async_entries():
+            if e.entry_id == entry_id:
+                entry = e
+                break
+        if entry is None:
+            return {"error": f"Config entry '{entry_id}' not found"}
+        result = await hass.config_entries.options.async_init(entry_id)
+        return {
+            "ok": True,
+            "entry_id": entry_id,
+            "flow_id": result.get("flow_id"),
+            "type": result.get("type"),
+            "step_id": result.get("step_id"),
+            "data_schema": str(result.get("data_schema", "")),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Start options flow failed: {exc}"}
+
+
+async def _media_browse(
+    hass: HomeAssistant,
+    media_content_id: str | None = None,
+    media_content_type: str | None = None,
+) -> dict[str, Any]:
+    """Browse media library content."""
+    try:
+        from homeassistant.components.media_source import async_browse_media
+        result = await async_browse_media(
+            hass,
+            media_content_id=media_content_id,
+            content_filter=None,
+        )
+        children = []
+        for child in (result.children or []):
+            children.append({
+                "title": child.title,
+                "media_content_id": child.media_content_id,
+                "media_content_type": child.media_content_type,
+                "media_class": child.media_class,
+                "can_play": child.can_play,
+                "can_expand": child.can_expand,
+            })
+        return {
+            "ok": True,
+            "title": result.title,
+            "media_content_id": result.media_content_id,
+            "children_count": len(children),
+            "children": children[:200],
+        }
+    except ImportError:
+        return {"error": "media_source component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media browse failed: {exc}"}
+
+
+async def _media_resolve(
+    hass: HomeAssistant, media_content_id: str,
+    media_content_type: str,
+) -> dict[str, Any]:
+    """Resolve a media content ID to a playable URL."""
+    try:
+        from homeassistant.components.media_source import async_resolve_media
+        result = await async_resolve_media(hass, media_content_id, None)
+        return {
+            "ok": True,
+            "url": result.url,
+            "mime_type": result.mime_type,
+        }
+    except ImportError:
+        return {"error": "media_source component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media resolve failed: {exc}"}
+
+
+async def _alarm_custom_bypass(
+    hass: HomeAssistant, entity_id: str,
+    code: str | None = None,
+) -> dict[str, Any]:
+    """Trigger alarm with custom bypass (arm bypassing sensors)."""
+    svc_data: dict[str, Any] = {"entity_id": entity_id}
+    if code:
+        svc_data["code"] = code
+    try:
+        await hass.services.async_call(
+            "alarm_control_panel", "alarm_arm_custom_bypass", svc_data,
+        )
+        return {"ok": True, "entity_id": entity_id, "action": "arm_custom_bypass"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Alarm custom bypass failed: {exc}"}
+
+
+async def _event_entity_trigger(
+    hass: HomeAssistant, entity_id: str,
+    event_type: str, event_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fire an event associated with an event entity."""
+    if not entity_id or not event_type:
+        return {"error": "entity_id and event_type are required"}
+    data = {"entity_id": entity_id, "event_type": event_type}
+    if event_data:
+        data.update(event_data)
+    hass.bus.async_fire(f"event_entity_{event_type}", data)
+    return {"ok": True, "entity_id": entity_id, "event_type": event_type}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -31597,6 +31843,94 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "snapshot": {"type": "array", "items": {"type": "object"}, "description": "Array of {entity_id, state, attributes} from state_snapshot"},
             }, "required": ["snapshot"]},
+        },
+    },
+    # --- Wave 62 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_set_mode",
+            "description": "Set automation execution mode (single/restart/queued/parallel) in automations.yaml. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Automation entity ID"},
+                "mode": {"type": "string", "enum": ["single", "restart", "queued", "parallel"], "description": "Execution mode"},
+            }, "required": ["entity_id", "mode"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_set_mode",
+            "description": "Set script execution mode (single/restart/queued/parallel) in scripts.yaml. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Script entity ID"},
+                "mode": {"type": "string", "enum": ["single", "restart", "queued", "parallel"], "description": "Execution mode"},
+            }, "required": ["entity_id", "mode"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_platform_reload",
+            "description": "Reload all entities for a specific platform/integration. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "platform": {"type": "string", "description": "Platform/integration domain to reload"},
+            }, "required": ["platform"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_start_options_flow",
+            "description": "Start an options flow for a config entry to reconfigure its settings. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entry_id": {"type": "string", "description": "Config entry ID"},
+            }, "required": ["entry_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_browse",
+            "description": "Browse media library content (media_source). Returns children items with title, media_class, can_play/can_expand.",
+            "parameters": {"type": "object", "properties": {
+                "media_content_id": {"type": "string", "description": "Content ID to browse (null for root)"},
+                "media_content_type": {"type": "string", "description": "Content type filter"},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_resolve",
+            "description": "Resolve a media content ID to a playable URL with MIME type.",
+            "parameters": {"type": "object", "properties": {
+                "media_content_id": {"type": "string", "description": "Media content ID to resolve"},
+                "media_content_type": {"type": "string", "description": "Media content type"},
+            }, "required": ["media_content_id", "media_content_type"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "alarm_custom_bypass",
+            "description": "Arm an alarm panel with custom bypass (bypassing specific sensors). Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Alarm panel entity ID"},
+                "code": {"type": "string", "description": "Optional alarm code"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "event_entity_trigger",
+            "description": "Fire an event associated with an event entity on the HA event bus. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Event entity ID"},
+                "event_type": {"type": "string", "description": "Event type to fire"},
+                "event_data": {"type": "object", "description": "Optional event payload data"},
+            }, "required": ["entity_id", "event_type"]},
         },
     },
 ]
