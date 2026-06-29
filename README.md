@@ -41,6 +41,7 @@
 | `read_logs` | 读取 HA 日志尾部用于排错 |
 | `search_community_resources` | 检索 **HACS** 全量目录（自定义集成 / 前端卡片 / 主题）按品牌·设备·关键词 |
 | `search_ha_integrations` | 检索 **Home Assistant 内置集成目录**（约 1470 个）：小白输入品牌或需求（"aqara"、"tuya"、"vacuum"）即知哪些是 HA **原生支持**（无需装 HACS），含 IoT 类别（本地/云）、类型、质量等级与文档页；与 HACS 检索互补（"设备是否被支持 + 怎么加进来"） |
+| `search_ha_addons` | 检索 **HA 加载项商店**（官方 + 知名社区库：Mosquitto/Zigbee2MQTT/ESPHome/Matter Server/deCONZ 等）。匹配硬件后常需配套加载项，输入需求（"mqtt"、"zigbee2mqtt"、"matter"、"backup"）即得可安装加载项及其商店/slug/页面 |
 | `search_github` / `search_blueprints` | 在 GitHub 搜 HA 相关仓库/模板/示例、社区蓝图（蓝图检索带**逐级放宽召回阶梯**：自然多词短语也不会返回 0 结果） |
 | `discover_resources` | **一句自由文本，一次并发搜全部来源**（HACS 目录 + GitHub 仓库 + 社区蓝图 + Zigbee 设备库），返回各来源结果与一份**跨源去重融合的 `top` 榜**（按跨源命中数→stars 排序）。小白输入品牌或需求即可同时拿到“硬件是否被 zigbee2mqtt/zha 支持”+ 可装集成/卡片 + 示例仓库 + 可导入蓝图 |
 | `search_zigbee_devices` | 在社区 **Zigbee 设备库**（blakadder，约 2700 款）里按品牌/型号查设备，返回它被哪些桥接支持——尤其是否 **zigbee2mqtt** / zha——及设备参考页。接入蓝图流水线前先确认硬件受支持及所属技术栈 |
