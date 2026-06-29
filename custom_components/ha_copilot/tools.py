@@ -3473,6 +3473,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.search_esphome_devices(
                 hass, args.get("query", ""), int(args.get("limit", 10))
             )
+        if name == "search_ha_integrations":
+            return await resources.search_ha_integrations(
+                hass, args.get("query", ""), int(args.get("limit", 10))
+            )
         if name == "list_repo_blueprints":
             repo = args.get("repo") or args.get("full_name") or args.get("url")
             if not repo:
@@ -3580,6 +3584,7 @@ _READ_ONLY_TOOLS = frozenset({
     "search_zigbee_devices",
     "search_tasmota_devices",
     "search_esphome_devices",
+    "search_ha_integrations",
     "recommend_resources",
     "recommend_blueprints",
     "recall_memory",
@@ -5156,6 +5161,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "query": {"type": "string", "description": "a device brand, name, or model, e.g. 'athom plug' or 'shelly 1'."},
                 "limit": {"type": "integer", "description": "max devices to return (default 10)."},
+            }, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_ha_integrations",
+            "description": "Search Home Assistant's catalog of built-in integrations (~1470). A non-expert types a brand or need ('aqara', 'tuya', 'vacuum') and learns which integrations ship natively with HA \u2014 no HACS install needed \u2014 with each one's IoT class (local/cloud), type, quality scale and docs page. Complements search_community_resources (HACS custom repos). Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "a brand or need, e.g. 'aqara' or 'vacuum'."},
+                "limit": {"type": "integer", "description": "max integrations to return (default 10)."},
             }, "required": ["query"]},
         },
     },
