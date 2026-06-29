@@ -8339,6 +8339,270 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 42: sensor aggregation, binary sensor, notify targets, recorder,
+#           ZHA, Z-Wave JS, bluetooth, USB, backup, homeassistant, frontend
+# ---------------------------------------------------------------------------
+
+
+async def _sensor_list_by_class(
+    hass: HomeAssistant, device_class: str,
+) -> dict[str, Any]:
+    """List sensors by device class."""
+    try:
+        states = hass.states.async_all("sensor")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "unit": s.attributes.get("unit_of_measurement", "")}
+            for s in states
+            if s.attributes.get("device_class") == device_class
+        ]
+        return {"ok": True, "device_class": device_class, "sensors": result[:100]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Sensor list by class failed: {exc}"}
+
+
+async def _sensor_statistics_summary(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """Get sensor count summary by device class."""
+    try:
+        states = hass.states.async_all("sensor")
+        classes: dict[str, int] = {}
+        for s in states:
+            dc = s.attributes.get("device_class", "unknown") or "unknown"
+            classes[dc] = classes.get(dc, 0) + 1
+        return {"ok": True, "total_sensors": len(states), "by_class": classes}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Sensor statistics summary failed: {exc}"}
+
+
+async def _binary_sensor_list_by_class(
+    hass: HomeAssistant, device_class: str,
+) -> dict[str, Any]:
+    """List binary sensors by device class."""
+    try:
+        states = hass.states.async_all("binary_sensor")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+            if s.attributes.get("device_class") == device_class
+        ]
+        return {"ok": True, "device_class": device_class, "sensors": result[:100]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Binary sensor list by class failed: {exc}"}
+
+
+async def _notify_list_targets(hass: HomeAssistant) -> dict[str, Any]:
+    """List notification service targets."""
+    try:
+        services = hass.services.async_services()
+        notify_services = services.get("notify", {})
+        targets = list(notify_services.keys())
+        return {"ok": True, "targets": targets[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Notify list targets failed: {exc}"}
+
+
+async def _recorder_statistics_adjust(
+    hass: HomeAssistant, statistic_id: str,
+    sum_adjustment: float,
+) -> dict[str, Any]:
+    """Adjust statistics sum value."""
+    try:
+        await hass.services.async_call(
+            "recorder", "adjust_sum_statistics",
+            {"statistic_id": statistic_id, "sum_adjustment": sum_adjustment},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder statistics adjust failed: {exc}"}
+    return {"ok": True, "statistic_id": statistic_id, "action": "adjusted"}
+
+
+async def _zha_device_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List ZHA devices."""
+    try:
+        from homeassistant.components.zha.core.gateway import ZHAGateway
+        gateway: ZHAGateway = hass.data.get("zha", {}).get("zha_gateway")
+        if gateway is None:
+            return {"error": "ZHA gateway not available"}
+        devices = [
+            {"ieee": str(d.ieee), "name": d.name,
+             "manufacturer": d.manufacturer, "model": d.model}
+            for d in gateway.devices.values()
+        ]
+        return {"ok": True, "devices": devices[:100]}
+    except ImportError:
+        return {"error": "zha component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"ZHA device list failed: {exc}"}
+
+
+async def _zha_group_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List ZHA groups."""
+    try:
+        from homeassistant.components.zha.core.gateway import ZHAGateway
+        gateway: ZHAGateway = hass.data.get("zha", {}).get("zha_gateway")
+        if gateway is None:
+            return {"error": "ZHA gateway not available"}
+        groups = [
+            {"id": g.group_id, "name": g.name}
+            for g in gateway.groups.values()
+        ]
+        return {"ok": True, "groups": groups[:50]}
+    except ImportError:
+        return {"error": "zha component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"ZHA group list failed: {exc}"}
+
+
+async def _zwave_node_statistics(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get Z-Wave node communication statistics."""
+    try:
+        from homeassistant.components.zwave_js.helpers import async_get_node_from_device_id
+        node = async_get_node_from_device_id(hass, device_id)
+        stats = node.statistics if node else {}
+        return {"ok": True, "device_id": device_id, "statistics": str(stats)[:2000]}
+    except ImportError:
+        return {"error": "zwave_js component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Z-Wave node statistics failed: {exc}"}
+
+
+async def _zwave_set_config_parameter(
+    hass: HomeAssistant, device_id: str,
+    parameter: int, value: int,
+) -> dict[str, Any]:
+    """Set a Z-Wave node configuration parameter."""
+    try:
+        await hass.services.async_call(
+            "zwave_js", "set_config_parameter",
+            {"device_id": device_id, "parameter": parameter,
+             "value": value},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Z-Wave set config parameter failed: {exc}"}
+    return {"ok": True, "device_id": device_id, "parameter": parameter, "action": "set"}
+
+
+async def _bluetooth_scanner_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List Bluetooth scanners."""
+    try:
+        from homeassistant.components.bluetooth import async_get_scanner
+        scanner = async_get_scanner(hass)
+        return {
+            "ok": True,
+            "scanning": getattr(scanner, "scanning", False),
+        }
+    except ImportError:
+        return {"error": "bluetooth component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Bluetooth scanner list failed: {exc}"}
+
+
+async def _bluetooth_device_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List discovered Bluetooth devices."""
+    try:
+        from homeassistant.components.bluetooth import async_discovered_service_info
+        devices = async_discovered_service_info(hass)
+        result = [
+            {"name": d.name, "address": d.address,
+             "rssi": d.rssi}
+            for d in devices[:50]
+        ]
+        return {"ok": True, "devices": result}
+    except ImportError:
+        return {"error": "bluetooth component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Bluetooth device list failed: {exc}"}
+
+
+async def _usb_device_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List USB devices."""
+    try:
+        from homeassistant.components.usb import async_get_usb
+        usb_info = async_get_usb(hass)
+        result = [
+            {"vid": u.vid, "pid": u.pid, "serial_number": u.serial_number,
+             "manufacturer": u.manufacturer, "description": u.description}
+            for u in usb_info[:20]
+        ]
+        return {"ok": True, "devices": result}
+    except ImportError:
+        return {"error": "usb component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"USB device list failed: {exc}"}
+
+
+async def _backup_create_full(hass: HomeAssistant) -> dict[str, Any]:
+    """Create a full backup."""
+    try:
+        await hass.services.async_call(
+            "backup", "create", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup create full failed: {exc}"}
+    return {"ok": True, "action": "backup_started"}
+
+
+async def _backup_remove(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Remove a backup."""
+    try:
+        from homeassistant.components.backup import async_get_manager
+        manager = async_get_manager(hass)
+        await manager.async_remove_backup(slug)
+        return {"ok": True, "slug": slug, "action": "removed"}
+    except ImportError:
+        return {"error": "backup component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup remove failed: {exc}"}
+
+
+async def _homeassistant_reload_all(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload all YAML-based configurations."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "reload_all", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Homeassistant reload all failed: {exc}"}
+    return {"ok": True, "action": "all_reloaded"}
+
+
+async def _frontend_get_themes(hass: HomeAssistant) -> dict[str, Any]:
+    """Get available frontend themes."""
+    try:
+        themes = hass.data.get("frontend_themes", {})
+        if not isinstance(themes, dict):
+            themes = {}
+        return {"ok": True, "themes": list(themes.keys())[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Frontend get themes failed: {exc}"}
+
+
+async def _frontend_set_theme(
+    hass: HomeAssistant, name: str,
+    mode: str | None = None,
+) -> dict[str, Any]:
+    """Set the frontend theme."""
+    data: dict[str, Any] = {"name": name}
+    if mode:
+        data["mode"] = mode
+    try:
+        await hass.services.async_call(
+            "frontend", "set_theme", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Frontend set theme failed: {exc}"}
+    return {"ok": True, "theme": name, "action": "set"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 41: event bus, input helper lists, schedule, image entity, calendar,
 #           entity platform, device tracker, automation/script/scene/group lists
 # ---------------------------------------------------------------------------
@@ -14507,6 +14771,68 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 42 dispatch ---
+        if name == "sensor_list_by_class":
+            return await _sensor_list_by_class(
+                hass, args.get("device_class", ""),
+            )
+        if name == "sensor_statistics_summary":
+            return await _sensor_statistics_summary(hass)
+        if name == "binary_sensor_list_by_class":
+            return await _binary_sensor_list_by_class(
+                hass, args.get("device_class", ""),
+            )
+        if name == "notify_list_targets":
+            return await _notify_list_targets(hass)
+        if name == "recorder_statistics_adjust":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _recorder_statistics_adjust(
+                hass, args.get("statistic_id", ""),
+                float(args.get("sum_adjustment", 0)),
+            )
+        if name == "zha_device_list":
+            return await _zha_device_list(hass)
+        if name == "zha_group_list":
+            return await _zha_group_list(hass)
+        if name == "zwave_node_statistics":
+            return await _zwave_node_statistics(
+                hass, args.get("device_id", ""),
+            )
+        if name == "zwave_set_config_parameter":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _zwave_set_config_parameter(
+                hass, args.get("device_id", ""),
+                int(args.get("parameter", 0)),
+                int(args.get("value", 0)),
+            )
+        if name == "bluetooth_scanner_list":
+            return await _bluetooth_scanner_list(hass)
+        if name == "bluetooth_device_list":
+            return await _bluetooth_device_list(hass)
+        if name == "usb_device_list":
+            return await _usb_device_list(hass)
+        if name == "backup_create_full":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _backup_create_full(hass)
+        if name == "backup_remove":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _backup_remove(hass, args.get("slug", ""))
+        if name == "homeassistant_reload_all":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _homeassistant_reload_all(hass)
+        if name == "frontend_get_themes":
+            return await _frontend_get_themes(hass)
+        if name == "frontend_set_theme":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _frontend_set_theme(
+                hass, args.get("name", ""), args.get("mode"),
+            )
         # --- Wave 41 dispatch ---
         if name == "event_list_types":
             return await _event_list_types(hass)
@@ -20249,6 +20575,181 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 42 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "sensor_list_by_class",
+            "description": "List sensors by device class.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_class": {"type": "string"}},
+                "required": ["device_class"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sensor_statistics_summary",
+            "description": "Get sensor count summary by device class.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "binary_sensor_list_by_class",
+            "description": "List binary sensors by device class.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_class": {"type": "string"}},
+                "required": ["device_class"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "notify_list_targets",
+            "description": "List notification service targets.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_statistics_adjust",
+            "description": "Adjust statistics sum value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_id": {"type": "string"},
+                    "sum_adjustment": {"type": "number"},
+                },
+                "required": ["statistic_id", "sum_adjustment"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zha_device_list",
+            "description": "List ZHA devices.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zha_group_list",
+            "description": "List ZHA groups.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zwave_node_statistics",
+            "description": "Get Z-Wave node communication statistics.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zwave_set_config_parameter",
+            "description": "Set a Z-Wave node configuration parameter.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device_id": {"type": "string"},
+                    "parameter": {"type": "integer"},
+                    "value": {"type": "integer"},
+                },
+                "required": ["device_id", "parameter", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "bluetooth_scanner_list",
+            "description": "List Bluetooth scanners.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "bluetooth_device_list",
+            "description": "List discovered Bluetooth devices.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "usb_device_list",
+            "description": "List USB devices.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "backup_create_full",
+            "description": "Create a full backup.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "backup_remove",
+            "description": "Remove a backup.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "homeassistant_reload_all",
+            "description": "Reload all YAML-based configurations.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "frontend_get_themes",
+            "description": "Get available frontend themes.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "frontend_set_theme",
+            "description": "Set the frontend theme.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "mode": {"type": "string", "description": "light/dark"},
+                },
+                "required": ["name"],
             },
         },
     },
