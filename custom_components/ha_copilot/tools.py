@@ -22418,6 +22418,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _garage_ventilation_check(hass)
         if name == "weather_station_health":
             return await _weather_station_health(hass)
+        # --- Wave 108 dispatch ---
+        if name == "water_heater_mode_check":
+            return await _water_heater_mode_check(hass)
+        if name == "hot_tub_status":
+            return await _hot_tub_status(hass)
+        if name == "smart_shade_position":
+            return await _smart_shade_position(hass)
+        if name == "automation_blueprint_list":
+            return await _automation_blueprint_list(hass)
+        if name == "webhook_status_check":
+            return await _webhook_status_check(hass)
+        if name == "shell_command_status":
+            return await _shell_command_status(hass)
+        if name == "template_sensor_health":
+            return await _template_sensor_health(hass)
+        if name == "group_size_check":
+            return await _group_size_check(hass)
+        if name == "label_summary":
+            return await _label_summary(hass)
+        if name == "floor_plan_entity_status":
+            return await _floor_plan_entity_status(hass)
+        if name == "tag_registry_check":
+            return await _tag_registry_check(hass)
+        if name == "energy_today_total":
+            return await _energy_today_total(hass)
+        if name == "energy_week_comparison":
+            return await _energy_week_comparison(hass)
+        if name == "peak_power_demand":
+            return await _peak_power_demand(hass)
+        if name == "battery_cycle_count":
+            return await _battery_cycle_count(hass)
+        if name == "smart_irrigation_soil_moisture":
+            return await _smart_irrigation_soil_moisture(hass)
+        if name == "unifi_client_count":
+            return await _unifi_client_count(hass)
+        if name == "pihole_stats_check":
+            return await _pihole_stats_check(hass)
+        if name == "adguard_stats_check":
+            return await _adguard_stats_check(hass)
+        if name == "smart_doorbell_video_check":
+            return await _smart_doorbell_video_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -39632,6 +39673,254 @@ async def _weather_station_health(hass: HomeAssistant) -> dict[str, Any]:
             "sensors": results[:20]}
 
 
+# ---------------------------------------------------------------------------
+# Wave 108 — water heater, hot tub, shade, blueprint, webhook, shell cmd,
+# template sensor, group, label, floor plan, tag, energy today/week/peak,
+# battery cycle, irrigation soil, UniFi, Pi-hole, AdGuard, doorbell video
+# ---------------------------------------------------------------------------
+
+
+async def _water_heater_mode_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check water heater mode."""
+    results = []
+    for s in hass.states.async_all("water_heater"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "temperature": s.attributes.get("temperature"),
+                        "current_temperature": s.attributes.get("current_temperature"),
+                        "operation_mode": s.attributes.get("operation_mode"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "heaters": results}
+
+
+async def _hot_tub_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check hot tub status."""
+    results = []
+    for domain in ("climate", "switch", "sensor"):
+        for s in hass.states.async_all(domain):
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if any(kw in name for kw in ("hot_tub", "spa", "jacuzzi")):
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "domain": domain,
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _smart_shade_position(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart shade positions."""
+    results = []
+    for s in hass.states.async_all("cover"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("shade", "shutter") or \
+           "shade" in (s.attributes.get("friendly_name") or s.entity_id).lower():
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "position": s.attributes.get("current_position"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "shades": results}
+
+
+async def _automation_blueprint_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List automations using blueprints."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        bp = s.attributes.get("blueprint")
+        if bp:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "blueprint": bp,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "automations": results}
+
+
+async def _webhook_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check webhook status."""
+    webhooks = hass.data.get("webhook", {})
+    count = len(webhooks) if isinstance(webhooks, dict) else 0
+    return {"ok": True, "registered_webhooks": count}
+
+
+async def _shell_command_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check shell command status."""
+    cmds = hass.data.get("shell_command", {})
+    count = len(cmds) if isinstance(cmds, dict) else 0
+    return {"ok": True, "registered_commands": count}
+
+
+async def _template_sensor_health(hass: HomeAssistant) -> dict[str, Any]:
+    """Check template sensor health."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "template" in s.entity_id:
+            status = "ok" if s.state not in ("unavailable", "unknown") else s.state
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "status": status,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    unhealthy = sum(1 for r in results if r["status"] != "ok")
+    return {"ok": True, "total": len(results), "unhealthy": unhealthy,
+            "sensors": results[:20]}
+
+
+async def _group_size_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check group sizes."""
+    results = []
+    for s in hass.states.async_all("group"):
+        entities = s.attributes.get("entity_id", [])
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "member_count": len(entities) if isinstance(entities, list) else 0,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "groups": results}
+
+
+async def _label_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize entity labels."""
+    labels: dict[str, int] = {}
+    for s in hass.states.async_all():
+        for label in (s.attributes.get("labels") or []):
+            labels[label] = labels.get(label, 0) + 1
+    ranking = sorted(labels.items(), key=lambda x: x[1], reverse=True)
+    return {"ok": True, "label_count": len(ranking),
+            "labels": [{"label": lb, "count": c} for lb, c in ranking]}
+
+
+async def _floor_plan_entity_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check floor plan entity status."""
+    total = unavail = 0
+    for s in hass.states.async_all():
+        if s.attributes.get("floor_id"):
+            total += 1
+            if s.state == "unavailable":
+                unavail += 1
+    return {"ok": True, "floor_entities": total, "unavailable": unavail}
+
+
+async def _tag_registry_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check tag registry."""
+    tags = hass.data.get("tag", {})
+    count = len(tags) if isinstance(tags, dict) else 0
+    return {"ok": True, "registered_tags": count}
+
+
+async def _energy_today_total(hass: HomeAssistant) -> dict[str, Any]:
+    """Check today's total energy consumption."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "energy" and \
+           s.attributes.get("state_class") == "total_increasing":
+            try:
+                results.append({"entity_id": s.entity_id, "energy_kwh": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    total = sum(r["energy_kwh"] for r in results)
+    return {"ok": True, "count": len(results), "total_kwh": round(total, 2),
+            "sensors": results[:10]}
+
+
+async def _energy_week_comparison(hass: HomeAssistant) -> dict[str, Any]:
+    """Compare energy usage over the week."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "energy":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "state_class": s.attributes.get("state_class"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "energy_sensors": len(results), "sensors": results[:10]}
+
+
+async def _peak_power_demand(hass: HomeAssistant) -> dict[str, Any]:
+    """Check peak power demand."""
+    results = []
+    max_power = 0.0
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "power":
+            try:
+                val = float(s.state)
+                results.append({"entity_id": s.entity_id, "power": val,
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+                if val > max_power:
+                    max_power = val
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "peak_w": max_power,
+            "total_w": round(sum(r["power"] for r in results), 1),
+            "sensors": results[:10]}
+
+
+async def _battery_cycle_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Check battery cycle count."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "battery" in name and ("cycle" in name or "charge_count" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _smart_irrigation_soil_moisture(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart irrigation soil moisture."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("soil" in name or "moisture" in name) and \
+           s.attributes.get("device_class") in ("moisture", "humidity", None):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _unifi_client_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Check UniFi client count."""
+    trackers = []
+    for s in hass.states.async_all("device_tracker"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "unifi" in name or s.attributes.get("source_type") == "router":
+            trackers.append({"entity_id": s.entity_id, "state": s.state,
+                             "friendly_name": s.attributes.get("friendly_name")})
+    home = sum(1 for t in trackers if t["state"] == "home")
+    entries = hass.config_entries.async_entries("unifi")
+    return {"ok": True, "total_clients": len(trackers), "home": home,
+            "unifi_entries": len(entries), "trackers": trackers[:15]}
+
+
+async def _pihole_stats_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Pi-hole stats."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "pihole" in s.entity_id or "pi_hole" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _adguard_stats_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check AdGuard stats."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "adguard" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("switch"):
+        if "adguard" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_doorbell_video_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart doorbell video status."""
+    results = []
+    for s in hass.states.async_all("camera"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "doorbell" in name or "ring" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "streaming": s.state == "streaming",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "cameras": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -52096,4 +52385,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "smart_cooktop_status", "description": "Check cooktop.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "garage_ventilation_check", "description": "Check garage vent.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "weather_station_health", "description": "Check weather station.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 108 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "water_heater_mode_check", "description": "Check water heater.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "hot_tub_status", "description": "Check hot tub.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_shade_position", "description": "Check shade position.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_blueprint_list", "description": "List blueprint automations.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "webhook_status_check", "description": "Check webhooks.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "shell_command_status", "description": "Check shell commands.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "template_sensor_health", "description": "Check template sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "group_size_check", "description": "Check group sizes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "label_summary", "description": "Summarize labels.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "floor_plan_entity_status", "description": "Check floor plan entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "tag_registry_check", "description": "Check tag registry.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_today_total", "description": "Today energy total.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "energy_week_comparison", "description": "Weekly energy comparison.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "peak_power_demand", "description": "Check peak power.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "battery_cycle_count", "description": "Check battery cycles.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_irrigation_soil_moisture", "description": "Check soil moisture.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "unifi_client_count", "description": "Check UniFi clients.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pihole_stats_check", "description": "Check Pi-hole stats.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "adguard_stats_check", "description": "Check AdGuard stats.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_doorbell_video_check", "description": "Check doorbell video.", "parameters": {"type": "object", "properties": {}}}},
 ]
