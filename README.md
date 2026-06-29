@@ -4,7 +4,7 @@
 
 本仓库的本源是：**让操作者本身（强 AI / 外部 agent）全链路操作 Home Assistant 的底层**。这里的"智能体"是操作者自己，**不是**一个被塞进聊天框、寄生在外接模型上的弱模型。基础设施只是适配于操作者的"工具层"，操作者直接驱动它，在不断实践中操作到底、验证到底。
 
-因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（148 个工具），并经**五条本源底层**暴露给外部操作者：
+因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（159 个工具），并经**五条本源底层**暴露给外部操作者：
 
 - **底层一 · 原生 HA 服务**：`ha_copilot.run_tool` 通用服务 + 12 个原生资源服务（`ha_copilot.discover_resources` / `ha_copilot.search_zwave_devices` 等），自动化/脚本/开发者工具可直调。每次调用自动发射 `ha_copilot_tool_called` 事件。
 - **底层二 · MCP**：鉴权的 MCP 服务器端点 `/api/ha_copilot/mcp`（JSON-RPC 2.0），任意 MCP 客户端即可发现并操作整台 HA。
@@ -20,7 +20,7 @@
         ├── MCP 客户端 ──▶ /api/ha_copilot/mcp ────────┐
         ├── 原生 LLM API ──▶ HA 对话代理框架 ────────────┤
         ├── HA 服务 ──▶ 13 个原生服务（自动化可直调）──────┤
-        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（148 确定性工具）──▶ 运行中的 HA
+        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（159 确定性工具）──▶ 运行中的 HA
         └── HTTP ──▶ /api/ha_copilot/run_tool ────────────┘
 ```
 
@@ -64,6 +64,16 @@ response_variable: zwave_results
 | `get_history` | 查询实体最近 N 小时的状态历史（需 recorder） |
 | `reload` / `restart` | 重载某域配置 / 重启 HA（重启默认禁用） |
 | `list_areas` / `registry_overview` | 区域、实体/设备/区域注册表概览 |
+| `diagnose_home` | **全屋诊断**：一次调用返回不可用实体、失败集成、孤儿设备、禁用自动化——所有需要关注的问题 |
+| `get_home_context` | **全屋空间树**：楼层→区域→设备→实体（含当前状态），一次调用获得完整家庭画像 |
+| `audit_automations` | **自动化审计**：从未触发、闲置 30+ 天、禁用的自动化——主动发现自动化健康问题 |
+| `suggest_optimizations` | **优化建议**：未分配实体、无自动化区域、缺失能源监控、无备份自动化——主动改进建议 |
+| `check_device_health` | **设备健康**：低电量(<20%)、弱信号(RSSI/link quality)、停滞传感器(48h+)——需要物理维护的设备 |
+| `batch_call_service` | **批量服务调用**：一次操作多个实体（如关闭所有灯、设置所有窗帘 50%） |
+| `export_config` / `import_config` | **配置导出/导入**：自动化/脚本/场景/仪表盘 YAML 导出备份，导入迁移 |
+| `validate_template` | **模板验证**：在嵌入自动化前检查 Jinja2 模板语法 |
+| `send_notification` | **发送通知**：通过 HA notify 服务发送通知（默认/指定通知器） |
+| `compare_states` | **状态对比**：多实体当前状态并排对比，调试时快速定位差异 |
 | `read_logs` | 读取 HA 日志尾部用于排错 |
 | `search_community_resources` | 检索 **HACS** 全量目录（自定义集成 / 前端卡片 / 主题）按品牌·设备·关键词 |
 | `search_ha_integrations` | 检索 **Home Assistant 内置集成目录**（约 1470 个）：小白输入品牌或需求（"aqara"、"tuya"、"vacuum"）即知哪些是 HA **原生支持**（无需装 HACS），含 IoT 类别（本地/云）、类型、质量等级与文档页；与 HACS 检索互补（"设备是否被支持 + 怎么加进来"） |
