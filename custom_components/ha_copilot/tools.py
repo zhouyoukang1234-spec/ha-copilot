@@ -22871,6 +22871,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _load_balancing_check(hass)
         if name == "energy_cost_forecast":
             return await _energy_cost_forecast(hass)
+        # --- Wave 119 dispatch ---
+        if name == "wifi_channel_check":
+            return await _wifi_channel_check(hass)
+        if name == "wifi_client_list":
+            return await _wifi_client_list(hass)
+        if name == "wifi_signal_quality":
+            return await _wifi_signal_quality(hass)
+        if name == "vpn_connection_status":
+            return await _vpn_connection_status(hass)
+        if name == "dhcp_lease_check":
+            return await _dhcp_lease_check(hass)
+        if name == "port_forward_check":
+            return await _port_forward_check(hass)
+        if name == "firewall_status_check":
+            return await _firewall_status_check(hass)
+        if name == "router_status_check":
+            return await _router_status_check(hass)
+        if name == "switch_port_status":
+            return await _switch_port_status(hass)
+        if name == "api_gateway_status":
+            return await _api_gateway_status(hass)
+        if name == "server_monitor_check":
+            return await _server_monitor_check(hass)
+        if name == "container_status_check":
+            return await _container_status_check(hass)
+        if name == "vm_status_check":
+            return await _vm_status_check(hass)
+        if name == "ip_camera_bandwidth":
+            return await _ip_camera_bandwidth(hass)
+        if name == "mesh_node_status":
+            return await _mesh_node_status(hass)
+        if name == "ssid_management":
+            return await _ssid_management(hass)
+        if name == "network_vlan_check":
+            return await _network_vlan_check(hass)
+        if name == "wan_failover_status":
+            return await _wan_failover_status(hass)
+        if name == "traffic_shaping_check":
+            return await _traffic_shaping_check(hass)
+        if name == "qos_priority_check":
+            return await _qos_priority_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -42879,6 +42920,238 @@ async def _energy_cost_forecast(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "forecasts": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 119 — network/infrastructure deep: WiFi channel/client/signal,
+# VPN, DHCP, port forward, firewall, router, switch ports, API gateway,
+# server monitor, container, VM, IP camera bandwidth, mesh nodes, SSID,
+# VLAN, WAN failover, traffic shaping, QoS priority
+# ---------------------------------------------------------------------------
+
+
+async def _wifi_channel_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check WiFi channel."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "wifi" in name and "channel" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "channels": results}
+
+
+async def _wifi_client_list(hass: HomeAssistant) -> dict[str, Any]:
+    """Check WiFi client list."""
+    results = []
+    for s in hass.states.async_all("device_tracker"):
+        if s.attributes.get("source_type") == "router" or "wifi" in s.entity_id.lower():
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "ip": s.attributes.get("ip"),
+                            "mac": s.attributes.get("mac"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    connected = sum(1 for r in results if r["state"] == "home")
+    return {"ok": True, "total": len(results), "connected": connected,
+            "clients": results}
+
+
+async def _wifi_signal_quality(hass: HomeAssistant) -> dict[str, Any]:
+    """Check WiFi signal quality."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("wifi" in name or "wireless" in name) and ("signal" in name or "rssi" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "signals": results}
+
+
+async def _vpn_connection_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check VPN connection status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "vpn" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "connections": results}
+
+
+async def _dhcp_lease_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check DHCP leases."""
+    results = []
+    for s in hass.states.async_all("device_tracker"):
+        ip = s.attributes.get("ip")
+        if ip:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "ip": ip, "mac": s.attributes.get("mac"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "leases": results}
+
+
+async def _port_forward_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check port forward."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "port" in name and "forward" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "rules": results}
+
+
+async def _firewall_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check firewall status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "firewall" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _router_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check router status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "router" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _switch_port_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check switch port status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "switch" in name and "port" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "ports": results}
+
+
+async def _api_gateway_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check API gateway status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "api" in name and "gateway" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "gateways": results}
+
+
+async def _server_monitor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check server monitor."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "server" in name and ("cpu" in name or "ram" in name or "disk" in name or "load" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "metrics": results}
+
+
+async def _container_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check container status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "container" in name or "docker" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "containers": results}
+
+
+async def _vm_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check VM status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "vm" in name or "virtual_machine" in name or "proxmox" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "vms": results}
+
+
+async def _ip_camera_bandwidth(hass: HomeAssistant) -> dict[str, Any]:
+    """Check IP camera bandwidth."""
+    results = []
+    for s in hass.states.async_all("camera"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "cameras": results}
+
+
+async def _mesh_node_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check mesh node status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "mesh" in name and ("node" in name or "satellite" in name or "point" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "nodes": results}
+
+
+async def _ssid_management(hass: HomeAssistant) -> dict[str, Any]:
+    """Check SSID management."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "ssid" in name or "wireless" in name and "network" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "ssids": results}
+
+
+async def _network_vlan_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check network VLAN."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "vlan" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "vlans": results}
+
+
+async def _wan_failover_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check WAN failover status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "wan" in name and ("failover" in name or "backup" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _traffic_shaping_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check traffic shaping."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "traffic" in name and ("shaping" in name or "shape" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "rules": results}
+
+
+async def _qos_priority_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check QoS priority."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "qos" in name or "quality_of_service" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "rules": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -55575,4 +55848,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "demand_response_status", "description": "Demand response.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "load_balancing_check", "description": "Load balancing.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "energy_cost_forecast", "description": "Energy cost forecast.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 119 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "wifi_channel_check", "description": "WiFi channel check.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "wifi_client_list", "description": "WiFi client list.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "wifi_signal_quality", "description": "WiFi signal quality.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "vpn_connection_status", "description": "VPN connection.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "dhcp_lease_check", "description": "DHCP lease check.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "port_forward_check", "description": "Port forward check.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "firewall_status_check", "description": "Firewall status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "router_status_check", "description": "Router status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "switch_port_status", "description": "Switch port status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "api_gateway_status", "description": "API gateway status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "server_monitor_check", "description": "Server monitor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "container_status_check", "description": "Container status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "vm_status_check", "description": "VM status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ip_camera_bandwidth", "description": "IP camera bandwidth.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mesh_node_status", "description": "Mesh node status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ssid_management", "description": "SSID management.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "network_vlan_check", "description": "Network VLAN.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "wan_failover_status", "description": "WAN failover.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "traffic_shaping_check", "description": "Traffic shaping.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "qos_priority_check", "description": "QoS priority.", "parameters": {"type": "object", "properties": {}}}},
 ]
