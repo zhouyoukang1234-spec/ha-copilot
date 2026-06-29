@@ -22543,6 +22543,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _supervisor_host_info(hass)
         if name == "ha_core_analytics":
             return await _ha_core_analytics(hass)
+        # --- Wave 111 dispatch ---
+        if name == "scene_activation_history":
+            return await _scene_activation_history(hass)
+        if name == "automation_trigger_count":
+            return await _automation_trigger_count(hass)
+        if name == "event_bus_stats":
+            return await _event_bus_stats(hass)
+        if name == "service_call_stats":
+            return await _service_call_stats(hass)
+        if name == "state_change_rate":
+            return await _state_change_rate(hass)
+        if name == "entity_registry_summary":
+            return await _entity_registry_summary(hass)
+        if name == "device_registry_summary":
+            return await _device_registry_summary(hass)
+        if name == "area_registry_summary":
+            return await _area_registry_summary(hass)
+        if name == "person_registry_check":
+            return await _person_registry_check(hass)
+        if name == "zone_occupancy_count":
+            return await _zone_occupancy_count(hass)
+        if name == "calendar_next_event":
+            return await _calendar_next_event(hass)
+        if name == "tod_sensor_check":
+            return await _tod_sensor_check(hass)
+        if name == "workday_check":
+            return await _workday_check(hass)
+        if name == "season_check":
+            return await _season_check(hass)
+        if name == "uptime_check":
+            return await _uptime_check(hass)
+        if name == "ping_monitor_check":
+            return await _ping_monitor_check(hass)
+        if name == "certificate_expiry_check":
+            return await _certificate_expiry_check(hass)
+        if name == "dns_ip_tracker_check":
+            return await _dns_ip_tracker_check(hass)
+        if name == "system_resource_summary":
+            return await _system_resource_summary(hass)
+        if name == "speedtest_result_check":
+            return await _speedtest_result_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -40532,6 +40573,248 @@ async def _ha_core_analytics(hass: HomeAssistant) -> dict[str, Any]:
             "top_domains": [{"domain": d, "count": c} for d, c in top]}
 
 
+# ---------------------------------------------------------------------------
+# Wave 111 — scene history, automation triggers, event bus, service call,
+# state change rate, registries (entity/device/area/person), zone occupancy,
+# calendar, ToD, workday, season, uptime, ping, cert expiry, DNS IP,
+# system resources, speedtest
+# ---------------------------------------------------------------------------
+
+
+async def _scene_activation_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Check scene activation history."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("scene"):
+        hours = (now - s.last_changed).total_seconds() / 3600
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "hours_since_activated": round(hours, 1),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "scenes": results}
+
+
+async def _automation_trigger_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Check automation trigger counts."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        trigger_count = s.attributes.get("current", 0)
+        last_triggered = s.attributes.get("last_triggered")
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "current_running": trigger_count,
+                        "last_triggered": str(last_triggered) if last_triggered else None,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    enabled = sum(1 for r in results if r["state"] == "on")
+    return {"ok": True, "total": len(results), "enabled": enabled,
+            "automations": results[:20]}
+
+
+async def _event_bus_stats(hass: HomeAssistant) -> dict[str, Any]:
+    """Check event bus stats."""
+    listeners = hass.bus.async_listeners()
+    total = sum(listeners.values()) if isinstance(listeners, dict) else 0
+    top = sorted(listeners.items(), key=lambda x: x[1], reverse=True)[:10] if isinstance(listeners, dict) else []
+    return {"ok": True, "total_listeners": total,
+            "event_types": len(listeners) if isinstance(listeners, dict) else 0,
+            "top_events": [{"event": e, "listeners": c} for e, c in top]}
+
+
+async def _service_call_stats(hass: HomeAssistant) -> dict[str, Any]:
+    """Check service call stats."""
+    services = hass.services.async_services()
+    if isinstance(services, dict):
+        total_domains = len(services)
+        total_services = sum(len(v) for v in services.values() if isinstance(v, dict))
+    else:
+        total_domains = total_services = 0
+    return {"ok": True, "domains": total_domains, "total_services": total_services}
+
+
+async def _state_change_rate(hass: HomeAssistant) -> dict[str, Any]:
+    """Check state change rate."""
+    now = datetime.now(timezone.utc)
+    recent = []
+    for s in hass.states.async_all():
+        age_min = (now - s.last_changed).total_seconds() / 60
+        if age_min < 5:
+            recent.append({"entity_id": s.entity_id, "age_seconds": round(age_min * 60)})
+    return {"ok": True, "changes_last_5min": len(recent),
+            "total_entities": len(hass.states.async_all()),
+            "recent": recent[:15]}
+
+
+async def _entity_registry_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize entity registry."""
+    all_states = hass.states.async_all()
+    domains: dict[str, int] = {}
+    for s in all_states:
+        dom = s.entity_id.split(".")[0]
+        domains[dom] = domains.get(dom, 0) + 1
+    unavail = sum(1 for s in all_states if s.state == "unavailable")
+    return {"ok": True, "total": len(all_states), "unavailable": unavail,
+            "domains": len(domains),
+            "top": sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10]}
+
+
+async def _device_registry_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize device registry."""
+    device_reg = hass.data.get("device_registry")
+    if device_reg and hasattr(device_reg, "devices"):
+        count = len(device_reg.devices)
+    else:
+        count = 0
+    return {"ok": True, "device_count": count}
+
+
+async def _area_registry_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize area registry."""
+    area_reg = hass.data.get("area_registry")
+    if area_reg and hasattr(area_reg, "areas"):
+        areas = [{"id": a_id, "name": getattr(a, "name", str(a))}
+                 for a_id, a in area_reg.areas.items()]
+    else:
+        areas = []
+    return {"ok": True, "count": len(areas), "areas": areas}
+
+
+async def _person_registry_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check person registry."""
+    results = []
+    for s in hass.states.async_all("person"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    home = sum(1 for r in results if r["state"] == "home")
+    return {"ok": True, "total": len(results), "home": home, "persons": results}
+
+
+async def _zone_occupancy_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Check zone occupancy."""
+    results = []
+    for s in hass.states.async_all("zone"):
+        count = s.attributes.get("persons", [])
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "person_count": len(count) if isinstance(count, list) else 0,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "zones": len(results), "zone_list": results}
+
+
+async def _calendar_next_event(hass: HomeAssistant) -> dict[str, Any]:
+    """Check calendar next event."""
+    results = []
+    for s in hass.states.async_all("calendar"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "message": s.attributes.get("message"),
+                        "start_time": s.attributes.get("start_time"),
+                        "end_time": s.attributes.get("end_time"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "calendars": results}
+
+
+async def _tod_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check time of day sensors."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        if "tod" in s.entity_id or s.attributes.get("device_class") == "light":
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if any(kw in name for kw in ("morning", "afternoon", "evening",
+                                          "night", "daytime")):
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _workday_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check workday sensor."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        if "workday" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "is_workday": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _season_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check season sensor."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "season" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _uptime_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check uptime sensor."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "uptime" in s.entity_id or s.attributes.get("device_class") == "timestamp":
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if "uptime" in name:
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _ping_monitor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check ping monitor."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        if "ping" in s.entity_id or s.attributes.get("device_class") == "connectivity":
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if "ping" in name:
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "reachable": s.state == "on",
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "monitors": results}
+
+
+async def _certificate_expiry_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check certificate expiry."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "cert_expiry" in s.entity_id or "certificate" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "certificates": results}
+
+
+async def _dns_ip_tracker_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check DNS IP tracker."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "dnsip" in s.entity_id or "external_ip" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _system_resource_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize system resources."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc in ("data_size",) or any(kw in name for kw in ("cpu", "memory", "disk",
+                                                               "swap", "load")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "device_class": dc,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "resources": results[:15]}
+
+
+async def _speedtest_result_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check speedtest results."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "speedtest" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -53060,4 +53343,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "supervisor_os_update", "description": "Check OS update.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "supervisor_host_info", "description": "Check host info.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "ha_core_analytics", "description": "HA core analytics.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 111 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "scene_activation_history", "description": "Scene activation history.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_trigger_count", "description": "Automation trigger counts.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "event_bus_stats", "description": "Event bus stats.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "service_call_stats", "description": "Service call stats.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "state_change_rate", "description": "State change rate.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_registry_summary", "description": "Entity registry summary.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_registry_summary", "description": "Device registry summary.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "area_registry_summary", "description": "Area registry summary.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "person_registry_check", "description": "Check persons.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zone_occupancy_count", "description": "Zone occupancy count.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "calendar_next_event", "description": "Next calendar event.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "tod_sensor_check", "description": "Time of day sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "workday_check", "description": "Check workday.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "season_check", "description": "Check season.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "uptime_check", "description": "Check uptime.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ping_monitor_check", "description": "Check ping monitor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "certificate_expiry_check", "description": "Check cert expiry.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "dns_ip_tracker_check", "description": "Check DNS IP.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_resource_summary", "description": "System resources.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "speedtest_result_check", "description": "Check speedtest.", "parameters": {"type": "object", "properties": {}}}},
 ]
