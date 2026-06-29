@@ -4,22 +4,46 @@
 
 本仓库的本源是：**让操作者本身（强 AI / 外部 agent）全链路操作 Home Assistant 的底层**。这里的"智能体"是操作者自己，**不是**一个被塞进聊天框、寄生在外接模型上的弱模型。基础设施只是适配于操作者的"工具层"，操作者直接驱动它，在不断实践中操作到底、验证到底。
 
-因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**，并经两条本源底层暴露给外部操作者：
+因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**，并经**四条本源底层**暴露给外部操作者：
 
-- **底层一 · 直调**：`ha_copilot.run_tool` 服务，以及鉴权 HTTP 端点 `/api/ha_copilot/tools`（列目录）、`/api/ha_copilot/run_tool`（执行单个工具）。
-- **底层二 · MCP**：鉴权的 MCP 服务器端点 `/api/ha_copilot/mcp`（JSON-RPC 2.0，支持 `initialize` / `tools/list` / `tools/call`），任意 MCP 客户端（即操作者本体）即可发现并操作整台 HA。
+- **底层一 · 原生 HA 服务**：`ha_copilot.run_tool` 通用服务 + 12 个原生资源服务（`ha_copilot.discover_resources` / `ha_copilot.search_zwave_devices` 等），自动化/脚本/开发者工具可直调。
+- **底层二 · MCP**：鉴权的 MCP 服务器端点 `/api/ha_copilot/mcp`（JSON-RPC 2.0），任意 MCP 客户端即可发现并操作整台 HA。
+- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部确定性工具。
+- **底层四 · HTTP**：鉴权 HTTP 端点 `/api/ha_copilot/tools`（列目录）、`/api/ha_copilot/run_tool`（执行工具）。
 
-两条底层共用**同一套** `tools.py` 工具层——一处实现，两种暴露。
+四条底层共用**同一套** `tools.py` 工具层——一处实现，四路暴露。
 
 ```
-操作者本体(外部 agent / 我)
+操作者本体(外部 agent / 对话代理 / 我)
         │
-        ├── MCP 客户端 ──▶ /api/ha_copilot/mcp ──┐
-        │                                        ├──▶ tools.py（确定性工具层）──▶ 运行中的 HA
-        └── 直调 ──▶ run_tool 服务 / HTTP ────────┘
+        ├── MCP 客户端 ──▶ /api/ha_copilot/mcp ────────┐
+        ├── 原生 LLM API ──▶ HA 对话代理框架 ────────────┤
+        ├── HA 服务 ──▶ 13 个原生服务（自动化可直调）──────┤──▶ tools.py（确定性工具层）──▶ 运行中的 HA
+        └── HTTP ──▶ /api/ha_copilot/run_tool ────────────┘
 ```
 
 侧边栏还提供一个**纯确定性、无模型**的工作区面板（类 VS Code）：左侧活动栏在总览/设备/自动化/配置编辑/日志/集成之间切换，右侧"命令台"可直接执行任意工具——与 MCP 暴露的是同一工具层。
+
+### 原生 HA 服务（12 个资源服务）
+
+自动化/脚本可直接调用，返回结构化响应数据：
+
+```yaml
+# 一句话搜全 9 源
+service: ha_copilot.discover_resources
+data:
+  query: "xiaomi vacuum"
+  limit: 5
+response_variable: results
+
+# 查 Z-Wave 设备兼容性
+service: ha_copilot.search_zwave_devices
+data:
+  query: "fibaro fgs213"
+response_variable: zwave_results
+```
+
+完整服务列表：`discover_resources` · `search_hacs` · `search_github` · `search_blueprints` · `search_zigbee_devices` · `search_zwave_devices` · `search_tasmota_devices` · `search_esphome_devices` · `search_ha_integrations` · `search_ha_addons` · `recommend_resources` · `recommend_blueprints`
 
 ## 工具层（操作者可调用的底层能力）
 
@@ -60,7 +84,7 @@
 
 `resources.py` 把"散落在全网的 Home Assistant / 智能家居资源"收敛成确定性工具，两条互补路径取之于网：
 
-- **查询驱动**：`discover_resources(query)` 一句自由文本并发搜 HACS 目录 + GitHub 仓库 + 社区蓝图 + Zigbee 设备库，跨源去重融合成一份 `top` 榜（并附 zigbee 段告知硬件是否受支持）。
+- **查询驱动**：`discover_resources(query)` 一句自由文本并发搜 9 个免费数据源（HACS 目录 + GitHub 仓库 + 社区蓝图 + Zigbee 设备库 + Z-Wave 设备库 + Tasmota 模板库 + ESPHome 设备库 + HA 内置集成 + HA 加载项），跨源去重融合成一份 `top` 榜。
 - **设备驱动**：`recommend_resources()` 零参数读取用户 HA 里真实的设备厂商与实体域，反向融合推荐该装的集成、前端卡片与现成自动化蓝图——用户什么都不懂，也能被精准推荐。
 
 命中后用 `list_repo_blueprints` → `import_blueprint` → `validate_blueprint_inputs` → `create_automation_from_blueprint` 一条链把蓝图变成运行中的自动化/脚本（域自动识别、导入即校验可加载性、参数别名无缝衔接）。任一来源失败（限流/网络）都独立降级、不影响其它来源（见 `partial_errors`）。全程只读取公开数据、无模型、无外部推理端点；唯一的写操作 `import_blueprint` 受 `allow_write` 约束且限制在 config 目录内。可选导出 `GITHUB_TOKEN` / `GH_TOKEN` 为 HA 进程鉴权以提高 GitHub 检索速率上限。
@@ -155,4 +179,4 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
 
 ## 状态
 
-v0.2 — **去模型化**：移除内置 LLM agent 与一切外部推理端点耦合，组件收敛为纯能力层。同一工具层经"直调"与"MCP"两条底层暴露，已在真实 HA 实例上端到端验证（`run_tool` 服务 / HTTP、MCP `initialize`·`tools/list`·`tools/call` 均确定性闭环：写入 → 改状态 → 回读校验）。
+v0.3 — **深度融合**：四路暴露（HA 服务 + MCP + 原生 LLM API + HTTP）；12 个原生资源服务可被自动化直调；9 个免费数据源（HACS 2628 · GitHub · 蓝图 · Zigbee 2700+ · Z-Wave 2375+ · Tasmota 2800+ · ESPHome 770+ · 内置集成 1470 · 加载项 78+）；品牌别名映射（Fibaro→Nice Polska 等）；查询分隔符归一化。55 个 PR 持续迭代验证。
