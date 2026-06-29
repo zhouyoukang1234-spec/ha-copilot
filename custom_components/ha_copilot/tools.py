@@ -8339,6 +8339,161 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 47: weather, person, history, config flow, options flow, network
+# ---------------------------------------------------------------------------
+
+
+async def _weather_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all weather entities."""
+    try:
+        states = hass.states.async_all("weather")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "temperature": s.attributes.get("temperature"),
+             "humidity": s.attributes.get("humidity"),
+             "wind_speed": s.attributes.get("wind_speed")}
+            for s in states
+        ]
+        return {"ok": True, "weather": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Weather list failed: {exc}"}
+
+
+async def _weather_forecast(
+    hass: HomeAssistant, entity_id: str,
+    forecast_type: str = "daily",
+) -> dict[str, Any]:
+    """Get weather forecast."""
+    try:
+        svc = f"get_forecast{'s' if forecast_type == 'twice_daily' else ''}"
+        await hass.services.async_call(
+            "weather", svc,
+            {"entity_id": entity_id, "type": forecast_type},
+            blocking=True, return_response=True,
+        )
+        state = hass.states.get(entity_id)
+        forecast = state.attributes.get("forecast", []) if state else []
+        return {"ok": True, "entity_id": entity_id, "type": forecast_type,
+                "forecast": forecast[:10]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Weather forecast failed: {exc}"}
+
+
+async def _person_set_device_tracker(
+    hass: HomeAssistant, entity_id: str, device_trackers: list[str],
+) -> dict[str, Any]:
+    """Set device trackers for a person."""
+    try:
+        await hass.services.async_call(
+            "person", "set_device_trackers",
+            {"entity_id": entity_id, "device_trackers": device_trackers},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Person set device tracker failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "device_trackers": device_trackers}
+
+
+async def _history_period(
+    hass: HomeAssistant, entity_id: str,
+    hours: int = 24,
+) -> dict[str, Any]:
+    """Get state history for an entity."""
+    try:
+        from datetime import datetime, timedelta, timezone
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, str(entity_id),
+        )
+        result = []
+        for states in changes.values():
+            for s in states[:100]:
+                result.append({
+                    "state": s.state,
+                    "last_changed": str(s.last_changed),
+                })
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "changes": result[:100]}
+    except ImportError:
+        return {"error": "recorder history not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"History period failed: {exc}"}
+
+
+async def _config_flow_list_progress(hass: HomeAssistant) -> dict[str, Any]:
+    """List in-progress config flows."""
+    try:
+        flows = hass.config_entries.flow.async_progress()
+        result = [
+            {"flow_id": f.get("flow_id", ""), "handler": f.get("handler", ""),
+             "context": f.get("context", {})}
+            for f in flows
+        ]
+        return {"ok": True, "flows": result[:20]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config flow list progress failed: {exc}"}
+
+
+async def _config_flow_abort(
+    hass: HomeAssistant, flow_id: str,
+) -> dict[str, Any]:
+    """Abort a config flow."""
+    try:
+        await hass.config_entries.flow.async_abort(flow_id)
+        return {"ok": True, "flow_id": flow_id, "action": "aborted"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config flow abort failed: {exc}"}
+
+
+async def _options_flow_init(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Start an options flow for a config entry."""
+    try:
+        result = await hass.config_entries.options.async_init(entry_id)
+        return {
+            "ok": True, "entry_id": entry_id,
+            "flow_id": result.get("flow_id", ""),
+            "type": result.get("type", ""),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Options flow init failed: {exc}"}
+
+
+async def _options_flow_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List in-progress options flows."""
+    try:
+        flows = hass.config_entries.options.async_progress()
+        result = [
+            {"flow_id": f.get("flow_id", ""), "handler": f.get("handler", "")}
+            for f in flows
+        ]
+        return {"ok": True, "flows": result[:20]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Options flow list failed: {exc}"}
+
+
+async def _network_list_adapters(hass: HomeAssistant) -> dict[str, Any]:
+    """List network adapters."""
+    try:
+        from homeassistant.components.network import async_get_adapters
+        adapters = await async_get_adapters(hass)
+        result = [
+            {"name": a.get("name", ""), "enabled": a.get("enabled", False),
+             "auto": a.get("auto", False),
+             "ipv4": a.get("ipv4", []), "ipv6": a.get("ipv6", [])}
+            for a in adapters
+        ]
+        return {"ok": True, "adapters": result}
+    except ImportError:
+        return {"error": "network component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Network list adapters failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 46: event entity, device automation triggers/conditions/actions,
 #           diagnostics
 # ---------------------------------------------------------------------------
@@ -15401,6 +15556,40 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 47 dispatch ---
+        if name == "weather_list":
+            return await _weather_list(hass)
+        if name == "weather_forecast":
+            return await _weather_forecast(
+                hass, args.get("entity_id", ""),
+                args.get("forecast_type", "daily"),
+            )
+        if name == "person_set_device_tracker":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _person_set_device_tracker(
+                hass, args.get("entity_id", ""),
+                args.get("device_trackers", []),
+            )
+        if name == "history_period":
+            return await _history_period(
+                hass, args.get("entity_id", ""),
+                int(args.get("hours", 24)),
+            )
+        if name == "config_flow_list_progress":
+            return await _config_flow_list_progress(hass)
+        if name == "config_flow_abort":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _config_flow_abort(hass, args.get("flow_id", ""))
+        if name == "options_flow_init":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _options_flow_init(hass, args.get("entry_id", ""))
+        if name == "options_flow_list":
+            return await _options_flow_list(hass)
+        if name == "network_list_adapters":
+            return await _network_list_adapters(hass)
         # --- Wave 46 dispatch ---
         if name == "event_entity_list":
             return await _event_entity_list(hass)
@@ -21342,6 +21531,108 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 47 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "weather_list",
+            "description": "List all weather entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "weather_forecast",
+            "description": "Get weather forecast.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "forecast_type": {"type": "string", "enum": ["daily", "hourly", "twice_daily"]},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "person_set_device_tracker",
+            "description": "Set device trackers for a person.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "device_trackers": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["entity_id", "device_trackers"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "history_period",
+            "description": "Get state history for an entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "hours": {"type": "integer", "description": "Hours of history (default 24)"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_flow_list_progress",
+            "description": "List in-progress config flows.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_flow_abort",
+            "description": "Abort a config flow.",
+            "parameters": {
+                "type": "object",
+                "properties": {"flow_id": {"type": "string"}},
+                "required": ["flow_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "options_flow_init",
+            "description": "Start an options flow for a config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "options_flow_list",
+            "description": "List in-progress options flows.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "network_list_adapters",
+            "description": "List network adapters.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 46 TOOL_SPECS ---
