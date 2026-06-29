@@ -8339,6 +8339,114 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 29: zone, person, image snapshot, device action
+# ---------------------------------------------------------------------------
+
+
+async def _zone_create(
+    hass: HomeAssistant, name: str,
+    latitude: float, longitude: float, radius: float = 100,
+    icon: str | None = None, passive: bool = False,
+) -> dict[str, Any]:
+    """Create a zone."""
+    data: dict[str, Any] = {
+        "name": name, "latitude": latitude,
+        "longitude": longitude, "radius": radius,
+        "passive": passive,
+    }
+    if icon:
+        data["icon"] = icon
+    try:
+        await hass.services.async_call("zone", "create", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Zone create failed: {exc}"}
+    return {"ok": True, "name": name, "action": "created"}
+
+
+async def _zone_delete(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Delete a zone."""
+    try:
+        await hass.services.async_call(
+            "zone", "delete", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Zone delete failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "deleted"}
+
+
+async def _person_create(
+    hass: HomeAssistant, name: str,
+    user_id: str | None = None,
+    device_trackers: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create a person."""
+    data: dict[str, Any] = {"name": name}
+    if user_id:
+        data["user_id"] = user_id
+    if device_trackers:
+        data["device_trackers"] = device_trackers
+    try:
+        await hass.services.async_call("person", "create", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Person create failed: {exc}"}
+    return {"ok": True, "name": name, "action": "created"}
+
+
+async def _person_delete(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Delete a person."""
+    try:
+        await hass.services.async_call(
+            "person", "delete", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Person delete failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "deleted"}
+
+
+async def _image_snapshot(
+    hass: HomeAssistant, entity_id: str, filename: str,
+) -> dict[str, Any]:
+    """Take a snapshot from an image entity."""
+    try:
+        await hass.services.async_call(
+            "camera", "snapshot",
+            {"entity_id": entity_id, "filename": filename}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Image snapshot failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "filename": filename}
+
+
+async def _device_action_execute(
+    hass: HomeAssistant, domain: str, device_id: str,
+    action_type: str, entity_id: str | None = None,
+) -> dict[str, Any]:
+    """Execute a device action."""
+    data: dict[str, Any] = {
+        "domain": domain, "device_id": device_id, "type": action_type,
+    }
+    if entity_id:
+        data["entity_id"] = entity_id
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automation_platform,
+        )
+        platform = await async_get_device_automation_platform(
+            hass, domain, "action",
+        )
+        await platform.async_call_action_from_config(hass, data, {}, None)
+    except ImportError:
+        return {"error": "device_automation not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device action execute failed: {exc}"}
+    return {"ok": True, "device_id": device_id, "action": action_type}
+
+
+# ---------------------------------------------------------------------------
 # Wave 28: update, camera, calendar, todo, weather, backup, mqtt, rest, logbook
 # ---------------------------------------------------------------------------
 
@@ -11542,6 +11650,45 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 29 dispatch ---
+        if name == "zone_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _zone_create(
+                hass, args.get("name", ""),
+                float(args.get("latitude", 0)),
+                float(args.get("longitude", 0)),
+                float(args.get("radius", 100)),
+                args.get("icon"), bool(args.get("passive", False)),
+            )
+        if name == "zone_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _zone_delete(hass, args.get("entity_id", ""))
+        if name == "person_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _person_create(
+                hass, args.get("name", ""),
+                args.get("user_id"), args.get("device_trackers"),
+            )
+        if name == "person_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _person_delete(hass, args.get("entity_id", ""))
+        if name == "image_snapshot":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _image_snapshot(
+                hass, args.get("entity_id", ""), args.get("filename", ""),
+            )
+        if name == "device_action_execute":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _device_action_execute(
+                hass, args.get("domain", ""), args.get("device_id", ""),
+                args.get("action_type", ""), args.get("entity_id"),
+            )
         # --- Wave 28 dispatch ---
         if name == "update_install":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -16500,6 +16647,98 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 29 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "zone_create",
+            "description": "Create a zone.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "latitude": {"type": "number"},
+                    "longitude": {"type": "number"},
+                    "radius": {"type": "number"},
+                    "icon": {"type": "string"},
+                    "passive": {"type": "boolean"},
+                },
+                "required": ["name", "latitude", "longitude"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zone_delete",
+            "description": "Delete a zone.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "person_create",
+            "description": "Create a person.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "user_id": {"type": "string"},
+                    "device_trackers": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "person_delete",
+            "description": "Delete a person.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "image_snapshot",
+            "description": "Take a snapshot from a camera/image entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "filename": {"type": "string"},
+                },
+                "required": ["entity_id", "filename"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_action_execute",
+            "description": "Execute a device action.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "device_id": {"type": "string"},
+                    "action_type": {"type": "string"},
+                    "entity_id": {"type": "string"},
+                },
+                "required": ["domain", "device_id", "action_type"],
             },
         },
     },
