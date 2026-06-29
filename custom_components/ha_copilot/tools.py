@@ -8339,6 +8339,261 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 58: automation/script last triggered & config, scene config/entities,
+#           entity history batch, template helpers, input boolean batch,
+#           light effects, media player queue, climate schedule, device actions
+# ---------------------------------------------------------------------------
+
+
+async def _automation_last_triggered(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get when an automation was last triggered."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "state": state.state,
+            "last_triggered": str(state.attributes.get("last_triggered", "")),
+            "current_state": state.state,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation last triggered failed: {exc}"}
+
+
+async def _automation_get_config(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get automation configuration."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "friendly_name": state.attributes.get("friendly_name", ""),
+            "id": state.attributes.get("id", ""),
+            "last_triggered": str(state.attributes.get("last_triggered", "")),
+            "mode": state.attributes.get("mode", "single"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation get config failed: {exc}"}
+
+
+async def _script_last_triggered(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get when a script was last triggered."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "state": state.state,
+            "last_triggered": str(state.attributes.get("last_triggered", "")),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script last triggered failed: {exc}"}
+
+
+async def _script_get_config(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get script configuration."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "friendly_name": state.attributes.get("friendly_name", ""),
+            "last_triggered": str(state.attributes.get("last_triggered", "")),
+            "mode": state.attributes.get("mode", "single"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script get config failed: {exc}"}
+
+
+async def _scene_get_config(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get scene configuration."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "friendly_name": state.attributes.get("friendly_name", ""),
+            "entity_id_list": state.attributes.get("entity_id", []),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Scene get config failed: {exc}"}
+
+
+async def _scene_get_entities(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get entities that a scene controls."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        entities = state.attributes.get("entity_id", [])
+        return {"ok": True, "entity_id": entity_id, "entities": entities}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Scene get entities failed: {exc}"}
+
+
+async def _entity_history_batch(
+    hass: HomeAssistant, entity_ids: list[str], hours: int = 1,
+) -> dict[str, Any]:
+    """Get history for multiple entities."""
+    try:
+        from datetime import datetime, timedelta, timezone
+        from homeassistant.components.recorder.history import get_significant_states
+        start = datetime.now(timezone.utc) - timedelta(hours=hours)
+        end = datetime.now(timezone.utc)
+        history = await hass.async_add_executor_job(
+            get_significant_states, hass, start, end, entity_ids[:10],
+        )
+        result = {}
+        for eid, states in (history or {}).items():
+            result[eid] = [
+                {"state": s.state, "last_changed": str(s.last_changed)}
+                for s in states[:20]
+            ]
+        return {"ok": True, "hours": hours, "history": result}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity history batch failed: {exc}"}
+
+
+async def _template_list_helpers(hass: HomeAssistant) -> dict[str, Any]:
+    """List template helper entities."""
+    try:
+        states = hass.states.async_all("template")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "helpers": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Template list helpers failed: {exc}"}
+
+
+async def _input_boolean_batch_toggle(
+    hass: HomeAssistant, entity_ids: list[str],
+) -> dict[str, Any]:
+    """Toggle multiple input booleans at once."""
+    try:
+        results = {}
+        for eid in entity_ids[:20]:
+            try:
+                await hass.services.async_call(
+                    "input_boolean", "toggle",
+                    {"entity_id": eid}, blocking=True,
+                )
+                results[eid] = "toggled"
+            except Exception as exc:  # noqa: BLE001
+                results[eid] = f"error: {exc}"
+        return {"ok": True, "results": results}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input boolean batch toggle failed: {exc}"}
+
+
+async def _light_list_effects(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List available effects for a light."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        effects = state.attributes.get("effect_list", [])
+        current = state.attributes.get("effect")
+        return {"ok": True, "entity_id": entity_id,
+                "effects": effects, "current_effect": current}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light list effects failed: {exc}"}
+
+
+async def _media_player_get_queue(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get media player queue info."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "media_title": state.attributes.get("media_title", ""),
+            "media_artist": state.attributes.get("media_artist", ""),
+            "media_album": state.attributes.get("media_album_name", ""),
+            "media_content_type": state.attributes.get("media_content_type", ""),
+            "media_duration": state.attributes.get("media_duration"),
+            "media_position": state.attributes.get("media_position"),
+            "queue_size": state.attributes.get("queue_size", 0),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player get queue failed: {exc}"}
+
+
+async def _climate_get_schedule(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get climate schedule/preset info."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "current_temperature": state.attributes.get("current_temperature"),
+            "target_temp_high": state.attributes.get("target_temp_high"),
+            "target_temp_low": state.attributes.get("target_temp_low"),
+            "hvac_modes": state.attributes.get("hvac_modes", []),
+            "preset_modes": state.attributes.get("preset_modes", []),
+            "preset_mode": state.attributes.get("preset_mode"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate get schedule failed: {exc}"}
+
+
+async def _device_action_list(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List available actions for a device."""
+    try:
+        from homeassistant.helpers import device_registry as dr
+        registry = dr.async_get(hass)
+        device = registry.async_get(device_id)
+        if device is None:
+            return {"error": f"Device {device_id} not found"}
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        actions = await async_get_device_automations(
+            hass, "action", [device_id],
+        )
+        result = [
+            {"domain": a.get("domain", ""), "type": a.get("type", ""),
+             "entity_id": a.get("entity_id", "")}
+            for a in actions.get(device_id, [])[:20]
+        ]
+        return {"ok": True, "device_id": device_id, "actions": result}
+    except ImportError:
+        return {"error": "device_automation not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device action list failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 57: tts url, camera record, logbook, entity batch, service domain,
 #           integration info, area/device entities
 # ---------------------------------------------------------------------------
@@ -16996,6 +17251,52 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 58 dispatch ---
+        if name == "automation_last_triggered":
+            return await _automation_last_triggered(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "automation_get_config":
+            return await _automation_get_config(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "script_last_triggered":
+            return await _script_last_triggered(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "script_get_config":
+            return await _script_get_config(hass, args.get("entity_id", ""))
+        if name == "scene_get_config":
+            return await _scene_get_config(hass, args.get("entity_id", ""))
+        if name == "scene_get_entities":
+            return await _scene_get_entities(hass, args.get("entity_id", ""))
+        if name == "entity_history_batch":
+            return await _entity_history_batch(
+                hass, args.get("entity_ids", []),
+                int(args.get("hours", 1)),
+            )
+        if name == "template_list_helpers":
+            return await _template_list_helpers(hass)
+        if name == "input_boolean_batch_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_boolean_batch_toggle(
+                hass, args.get("entity_ids", []),
+            )
+        if name == "light_list_effects":
+            return await _light_list_effects(hass, args.get("entity_id", ""))
+        if name == "media_player_get_queue":
+            return await _media_player_get_queue(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "climate_get_schedule":
+            return await _climate_get_schedule(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "device_action_list":
+            return await _device_action_list(
+                hass, args.get("device_id", ""),
+            )
         # --- Wave 57 dispatch ---
         if name == "tts_get_url":
             return await _tts_get_url(
@@ -23258,6 +23559,164 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 58 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_last_triggered",
+            "description": "Get when an automation was last triggered.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_get_config",
+            "description": "Get automation configuration.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_last_triggered",
+            "description": "Get when a script was last triggered.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_get_config",
+            "description": "Get script configuration.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scene_get_config",
+            "description": "Get scene configuration.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scene_get_entities",
+            "description": "Get entities that a scene controls.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_history_batch",
+            "description": "Get history for multiple entities.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_ids": {"type": "array", "items": {"type": "string"}},
+                    "hours": {"type": "integer", "description": "Hours to look back (default 1)"},
+                },
+                "required": ["entity_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "template_list_helpers",
+            "description": "List template helper entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_boolean_batch_toggle",
+            "description": "Toggle multiple input booleans at once.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["entity_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "light_list_effects",
+            "description": "List available effects for a light.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_get_queue",
+            "description": "Get media player queue info.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_get_schedule",
+            "description": "Get climate schedule/preset info.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_action_list",
+            "description": "List available actions for a device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
             },
         },
     },
