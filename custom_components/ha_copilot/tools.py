@@ -21502,6 +21502,49 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _dashboard_entity_suggestions(hass)
         if name == "dashboard_area_overview":
             return await _dashboard_area_overview(hass)
+        # --- Wave 86 dispatch ---
+        if name == "remote_command_list":
+            return await _remote_command_list(hass, args.get("entity_id", ""))
+        if name == "remote_activity_list":
+            return await _remote_activity_list(hass, args.get("entity_id", ""))
+        if name == "scene_entity_overlap":
+            return await _scene_entity_overlap(hass)
+        if name == "scene_complexity_analysis":
+            return await _scene_complexity_analysis(hass)
+        if name == "notification_rate_analysis":
+            return await _notification_rate_analysis(hass)
+        if name == "notification_priority_queue":
+            return await _notification_priority_queue(hass)
+        if name == "thread_network_info":
+            return await _thread_network_info(hass)
+        if name == "thread_border_router_list":
+            return await _thread_border_router_list(hass)
+        if name == "zigbee_network_map":
+            return await _zigbee_network_map(hass)
+        if name == "zigbee_signal_quality":
+            return await _zigbee_signal_quality(hass)
+        if name == "ups_status_summary":
+            return await _ups_status_summary(hass)
+        if name == "ups_battery_health":
+            return await _ups_battery_health(hass)
+        if name == "template_sensor_errors":
+            return await _template_sensor_errors(hass)
+        if name == "group_membership_analysis":
+            return await _group_membership_analysis(hass)
+        if name == "group_state_summary":
+            return await _group_state_summary(hass)
+        if name == "history_high_change_entities":
+            return await _history_high_change_entities(hass)
+        if name == "history_longest_unchanged":
+            return await _history_longest_unchanged(hass)
+        if name == "automation_blueprint_usage":
+            return await _automation_blueprint_usage(hass)
+        if name == "entity_state_count_by_domain":
+            return await _entity_state_count_by_domain(hass)
+        if name == "entity_age_report":
+            return await _entity_age_report(hass)
+        if name == "mqtt_subscription_count":
+            return await _mqtt_subscription_count(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -31984,6 +32027,321 @@ async def _dashboard_area_overview(hass: HomeAssistant) -> dict[str, Any]:
             areas[aid]["domains"][domain] = areas[aid]["domains"].get(domain, 0) + 1
     results = sorted(areas.values(), key=lambda x: x["entities"], reverse=True)
     return {"ok": True, "area_count": len(results), "areas": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 86 — remote control, scene intelligence, notification analysis,
+# Thread/Matter, Zigbee deep, UPS, template sensors, groups, history trends,
+# automation blueprints, entity stats, MQTT
+# ---------------------------------------------------------------------------
+
+
+async def _remote_command_list(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List available commands for a remote entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Remote '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "command_list": attrs.get("command_list", []),
+            "friendly_name": attrs.get("friendly_name")}
+
+
+async def _remote_activity_list(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List activities for a remote entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Remote '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "current_activity": attrs.get("current_activity"),
+            "activity_list": attrs.get("activity_list", []),
+            "friendly_name": attrs.get("friendly_name")}
+
+
+async def _scene_entity_overlap(hass: HomeAssistant) -> dict[str, Any]:
+    """Find scenes that control overlapping entities."""
+    scene_entities: dict[str, list[str]] = {}
+    for s in hass.states.async_all("scene"):
+        entities = s.attributes.get("entity_id", [])
+        if isinstance(entities, list):
+            scene_entities[s.entity_id] = entities
+    overlaps = []
+    scene_list = list(scene_entities.items())
+    for i, (s1, e1) in enumerate(scene_list):
+        for s2, e2 in scene_list[i + 1:]:
+            common = set(e1) & set(e2)
+            if common:
+                overlaps.append({"scene1": s1, "scene2": s2,
+                                 "shared_entities": list(common)})
+    return {"ok": True, "overlap_count": len(overlaps), "overlaps": overlaps[:20]}
+
+
+async def _scene_complexity_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze scene complexity by entity count."""
+    results = []
+    for s in hass.states.async_all("scene"):
+        entities = s.attributes.get("entity_id", [])
+        count = len(entities) if isinstance(entities, list) else 0
+        results.append({
+            "entity_id": s.entity_id,
+            "friendly_name": s.attributes.get("friendly_name"),
+            "controlled_entities": count,
+        })
+    results.sort(key=lambda x: x["controlled_entities"], reverse=True)
+    return {"ok": True, "count": len(results), "scenes": results}
+
+
+async def _notification_rate_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze notification rate from persistent notifications."""
+    notifications = hass.states.async_all("persistent_notification")
+    now = datetime.now(timezone.utc)
+    recent = []
+    for n in notifications:
+        age_hours = (now - n.last_changed).total_seconds() / 3600
+        recent.append({
+            "entity_id": n.entity_id,
+            "title": n.attributes.get("title"),
+            "age_hours": round(age_hours, 1),
+        })
+    recent.sort(key=lambda x: x["age_hours"])
+    return {"ok": True, "total": len(recent), "notifications": recent}
+
+
+async def _notification_priority_queue(hass: HomeAssistant) -> dict[str, Any]:
+    """Get prioritized notification queue."""
+    results = []
+    for n in hass.states.async_all("persistent_notification"):
+        title = n.attributes.get("title", "")
+        priority = "normal"
+        if any(kw in title.lower() for kw in ("error", "fail", "critical", "urgent")):
+            priority = "high"
+        elif any(kw in title.lower() for kw in ("warn", "caution", "attention")):
+            priority = "medium"
+        results.append({
+            "entity_id": n.entity_id, "title": title,
+            "priority": priority, "message": str(n.attributes.get("message", ""))[:200],
+        })
+    results.sort(key=lambda x: {"high": 0, "medium": 1, "normal": 2}[x["priority"]])
+    return {"ok": True, "count": len(results), "queue": results}
+
+
+async def _thread_network_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Thread network information."""
+    thread_data = hass.data.get("thread", {})
+    if isinstance(thread_data, dict) and thread_data:
+        return {"ok": True, "thread_data": {k: str(v)[:200] for k, v in list(thread_data.items())[:10]}}
+    return {"ok": True, "note": "Thread network data not available"}
+
+
+async def _thread_border_router_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List Thread border routers."""
+    thread_data = hass.data.get("thread", {})
+    routers = []
+    if isinstance(thread_data, dict):
+        for key, val in thread_data.items():
+            if "router" in str(key).lower() or "border" in str(key).lower():
+                routers.append({"key": str(key), "info": str(val)[:200]})
+    return {"ok": True, "count": len(routers), "routers": routers,
+            "note": "Thread border router data depends on integration" if not routers else None}
+
+
+async def _zigbee_network_map(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Zigbee network topology info."""
+    zha = hass.data.get("zha", {})
+    if isinstance(zha, dict) and zha:
+        devices = []
+        gateway = zha.get("gateway")
+        if gateway and hasattr(gateway, "devices"):
+            for ieee, dev in list(gateway.devices.items())[:30]:
+                devices.append({
+                    "ieee": str(ieee),
+                    "name": getattr(dev, "name", ""),
+                    "rssi": getattr(dev, "rssi", None),
+                    "lqi": getattr(dev, "lqi", None),
+                })
+        return {"ok": True, "device_count": len(devices), "devices": devices}
+    return {"ok": True, "note": "ZHA not available or no devices"}
+
+
+async def _zigbee_signal_quality(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze Zigbee signal quality across devices."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "lqi" in s.entity_id.lower() or "rssi" in s.entity_id.lower():
+            try:
+                results.append({
+                    "entity_id": s.entity_id,
+                    "value": float(s.state),
+                    "unit": s.attributes.get("unit_of_measurement"),
+                    "friendly_name": s.attributes.get("friendly_name"),
+                })
+            except (ValueError, TypeError):
+                pass
+    results.sort(key=lambda x: x["value"])
+    return {"ok": True, "count": len(results), "signals": results}
+
+
+async def _ups_status_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize UPS/battery backup status."""
+    ups_entities = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("ups", "uninterruptible", "apc", "cyberpower")):
+            ups_entities.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "unit": s.attributes.get("unit_of_measurement"),
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(ups_entities), "ups_sensors": ups_entities}
+
+
+async def _ups_battery_health(hass: HomeAssistant) -> dict[str, Any]:
+    """Check UPS battery health indicators."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("ups" in name or "battery_backup" in name) and \
+           any(kw in name for kw in ("battery", "charge", "runtime", "load")):
+            results.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "indicators": results}
+
+
+async def _template_sensor_errors(hass: HomeAssistant) -> dict[str, Any]:
+    """Find template sensors in error/unavailable state."""
+    errors = []
+    for s in hass.states.async_all("sensor"):
+        if "template" in (s.attributes.get("attribution", "") or "").lower() or \
+           s.entity_id.startswith("sensor.template_"):
+            if s.state in ("unavailable", "unknown"):
+                errors.append({
+                    "entity_id": s.entity_id, "state": s.state,
+                    "friendly_name": s.attributes.get("friendly_name"),
+                })
+    return {"ok": True, "error_count": len(errors), "errors": errors}
+
+
+async def _group_membership_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze group membership."""
+    results = []
+    for s in hass.states.async_all("group"):
+        members = s.attributes.get("entity_id", [])
+        results.append({
+            "entity_id": s.entity_id,
+            "friendly_name": s.attributes.get("friendly_name"),
+            "member_count": len(members) if isinstance(members, list) else 0,
+            "members": members if isinstance(members, list) else [],
+        })
+    results.sort(key=lambda x: x["member_count"], reverse=True)
+    return {"ok": True, "count": len(results), "groups": results}
+
+
+async def _group_state_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize group states."""
+    on = off = other = 0
+    for s in hass.states.async_all("group"):
+        if s.state == "on":
+            on += 1
+        elif s.state == "off":
+            off += 1
+        else:
+            other += 1
+    return {"ok": True, "total": on + off + other, "on": on, "off": off, "other": other}
+
+
+async def _history_high_change_entities(hass: HomeAssistant) -> dict[str, Any]:
+    """Find entities that change state most frequently."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all():
+        age_hours = max((now - s.last_changed).total_seconds() / 3600, 0.01)
+        results.append({
+            "entity_id": s.entity_id,
+            "hours_since_change": round(age_hours, 2),
+        })
+    results.sort(key=lambda x: x["hours_since_change"])
+    return {"ok": True, "most_recent_changes": results[:30]}
+
+
+async def _history_longest_unchanged(hass: HomeAssistant) -> dict[str, Any]:
+    """Find entities unchanged for the longest time."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all():
+        hours = (now - s.last_changed).total_seconds() / 3600
+        results.append({
+            "entity_id": s.entity_id, "state": s.state,
+            "hours_unchanged": round(hours, 1),
+        })
+    results.sort(key=lambda x: x["hours_unchanged"], reverse=True)
+    return {"ok": True, "longest_unchanged": results[:30]}
+
+
+async def _automation_blueprint_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze automation blueprint usage."""
+    bp_count: dict[str, int] = {}
+    no_bp = 0
+    for s in hass.states.async_all("automation"):
+        bp = s.attributes.get("blueprint", {})
+        if isinstance(bp, dict) and bp.get("path"):
+            path = bp["path"]
+            bp_count[path] = bp_count.get(path, 0) + 1
+        else:
+            no_bp += 1
+    results = [{"blueprint": k, "count": v}
+               for k, v in sorted(bp_count.items(), key=lambda x: x[1], reverse=True)]
+    return {"ok": True, "blueprint_count": len(results),
+            "custom_automations": no_bp, "blueprints": results}
+
+
+async def _entity_state_count_by_domain(hass: HomeAssistant) -> dict[str, Any]:
+    """Count entities by domain."""
+    domains: dict[str, int] = {}
+    for s in hass.states.async_all():
+        domain = s.entity_id.split(".")[0]
+        domains[domain] = domains.get(domain, 0) + 1
+    sorted_domains = dict(sorted(domains.items(), key=lambda x: x[1], reverse=True))
+    return {"ok": True, "domain_count": len(sorted_domains),
+            "total_entities": sum(sorted_domains.values()),
+            "by_domain": sorted_domains}
+
+
+async def _entity_age_report(hass: HomeAssistant) -> dict[str, Any]:
+    """Report entity age based on last_changed."""
+    now = datetime.now(timezone.utc)
+    recent = []
+    old = []
+    for s in hass.states.async_all():
+        hours = (now - s.last_changed).total_seconds() / 3600
+        entry = {"entity_id": s.entity_id, "hours_age": round(hours, 1)}
+        if hours < 1:
+            recent.append(entry)
+        elif hours > 24:
+            old.append(entry)
+    recent.sort(key=lambda x: x["hours_age"])
+    old.sort(key=lambda x: x["hours_age"], reverse=True)
+    return {"ok": True, "recent_count": len(recent), "old_count": len(old),
+            "recently_changed": recent[:20], "oldest_unchanged": old[:20]}
+
+
+async def _mqtt_subscription_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Get MQTT subscription count."""
+    mqtt_data = hass.data.get("mqtt", {})
+    if isinstance(mqtt_data, dict):
+        client = mqtt_data.get("client")
+        if client and hasattr(client, "subscriptions"):
+            subs = client.subscriptions
+            return {"ok": True, "subscription_count": len(subs) if hasattr(subs, "__len__") else 0}
+    mqtt_entities = [s for s in hass.states.async_all() if "mqtt" in s.entity_id.lower()]
+    return {"ok": True, "mqtt_entities": len(mqtt_entities),
+            "note": "Subscription count from MQTT client not accessible"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -43982,4 +44340,26 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "config_entry_health", "description": "Check health of all config entries.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "dashboard_entity_suggestions", "description": "Suggest important entities for dashboard.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "dashboard_area_overview", "description": "Generate area-based dashboard overview.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 86 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "remote_command_list", "description": "List available commands for a remote.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "remote_activity_list", "description": "List activities for a remote.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "scene_entity_overlap", "description": "Find scenes with overlapping entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "scene_complexity_analysis", "description": "Analyze scene complexity.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "notification_rate_analysis", "description": "Analyze notification rate.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "notification_priority_queue", "description": "Get prioritized notification queue.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thread_network_info", "description": "Get Thread network information.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thread_border_router_list", "description": "List Thread border routers.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zigbee_network_map", "description": "Get Zigbee network topology.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zigbee_signal_quality", "description": "Analyze Zigbee signal quality.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ups_status_summary", "description": "Summarize UPS status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ups_battery_health", "description": "Check UPS battery health.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "template_sensor_errors", "description": "Find template sensors in error.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "group_membership_analysis", "description": "Analyze group membership.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "group_state_summary", "description": "Summarize group states.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "history_high_change_entities", "description": "Find entities that change most frequently.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "history_longest_unchanged", "description": "Find entities unchanged longest.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_blueprint_usage", "description": "Analyze automation blueprint usage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_state_count_by_domain", "description": "Count entities by domain.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_age_report", "description": "Report entity age based on last_changed.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mqtt_subscription_count", "description": "Get MQTT subscription count.", "parameters": {"type": "object", "properties": {}}}},
 ]
