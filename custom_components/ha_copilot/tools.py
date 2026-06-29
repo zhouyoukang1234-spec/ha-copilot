@@ -8339,6 +8339,161 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 24: vacuum segment, select, valve stop/toggle, lawn mower,
+#           media seek, siren toggle, cover tilt stop/toggle, notify
+# ---------------------------------------------------------------------------
+
+
+async def _vacuum_clean_segment(
+    hass: HomeAssistant, entity_id: str, segments: list[int],
+) -> dict[str, Any]:
+    """Clean specific segments/rooms."""
+    try:
+        await hass.services.async_call(
+            "vacuum", "send_command",
+            {"entity_id": entity_id, "command": "app_segment_clean",
+             "params": segments}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum clean segment failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "segments": segments}
+
+
+async def _select_select_option(
+    hass: HomeAssistant, entity_id: str, option: str,
+) -> dict[str, Any]:
+    """Select an option on a select entity."""
+    try:
+        await hass.services.async_call(
+            "select", "select_option",
+            {"entity_id": entity_id, "option": option}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Select option failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "option": option}
+
+
+async def _valve_stop(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Stop a valve."""
+    try:
+        await hass.services.async_call(
+            "valve", "stop_valve", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Valve stop failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "stopped"}
+
+
+async def _valve_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Toggle a valve."""
+    try:
+        await hass.services.async_call(
+            "valve", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Valve toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _lawn_mower_start_mowing(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Start lawn mower mowing."""
+    try:
+        await hass.services.async_call(
+            "lawn_mower", "start_mowing", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Lawn mower start failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "mowing"}
+
+
+async def _lawn_mower_pause(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Pause lawn mower."""
+    try:
+        await hass.services.async_call(
+            "lawn_mower", "pause", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Lawn mower pause failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "paused"}
+
+
+async def _media_player_media_seek(
+    hass: HomeAssistant, entity_id: str, seek_position: float,
+) -> dict[str, Any]:
+    """Seek to a position in media playback."""
+    try:
+        await hass.services.async_call(
+            "media_player", "media_seek",
+            {"entity_id": entity_id, "seek_position": seek_position},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player seek failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "seek_position": seek_position}
+
+
+async def _siren_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Toggle a siren."""
+    try:
+        await hass.services.async_call(
+            "siren", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Siren toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _cover_stop_tilt(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Stop cover tilt."""
+    try:
+        await hass.services.async_call(
+            "cover", "stop_cover_tilt", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cover stop tilt failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "tilt_stopped"}
+
+
+async def _cover_toggle_tilt(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Toggle cover tilt."""
+    try:
+        await hass.services.async_call(
+            "cover", "toggle_cover_tilt", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cover toggle tilt failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "tilt_toggled"}
+
+
+async def _notify_send_message(
+    hass: HomeAssistant, message: str,
+    title: str | None = None, target: str | None = None,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send a notification via the notify service."""
+    svc_data: dict[str, Any] = {"message": message}
+    if title:
+        svc_data["title"] = title
+    if target:
+        svc_data["target"] = target
+    if data:
+        svc_data["data"] = data
+    try:
+        await hass.services.async_call(
+            "notify", "notify", svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Notify send message failed: {exc}"}
+    return {"ok": True, "message": message, "action": "sent"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 23: light/fan/cover toggle, HA restart/stop, media player stop/clear,
 #           reload automations/scripts
 # ---------------------------------------------------------------------------
@@ -10846,6 +11001,61 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 24 dispatch ---
+        if name == "vacuum_clean_segment":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_clean_segment(
+                hass, args.get("entity_id", ""), args.get("segments", []),
+            )
+        if name == "select_select_option":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _select_select_option(
+                hass, args.get("entity_id", ""), args.get("option", ""),
+            )
+        if name == "valve_stop":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _valve_stop(hass, args.get("entity_id", ""))
+        if name == "valve_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _valve_toggle(hass, args.get("entity_id", ""))
+        if name == "lawn_mower_start_mowing":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _lawn_mower_start_mowing(hass, args.get("entity_id", ""))
+        if name == "lawn_mower_pause":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _lawn_mower_pause(hass, args.get("entity_id", ""))
+        if name == "media_player_media_seek":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_media_seek(
+                hass, args.get("entity_id", ""),
+                float(args.get("seek_position", 0)),
+            )
+        if name == "siren_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _siren_toggle(hass, args.get("entity_id", ""))
+        if name == "cover_stop_tilt":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _cover_stop_tilt(hass, args.get("entity_id", ""))
+        if name == "cover_toggle_tilt":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _cover_toggle_tilt(hass, args.get("entity_id", ""))
+        if name == "notify_send_message":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _notify_send_message(
+                hass, args.get("message", ""),
+                args.get("title"), args.get("target"), args.get("data"),
+            )
         # --- Wave 23 dispatch ---
         if name == "light_toggle":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -15538,6 +15748,153 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 24 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_clean_segment",
+            "description": "Clean specific segments/rooms on a vacuum.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "segments": {"type": "array", "items": {"type": "integer"}},
+                },
+                "required": ["entity_id", "segments"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_select_option",
+            "description": "Select an option on a select entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "option": {"type": "string"},
+                },
+                "required": ["entity_id", "option"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "valve_stop",
+            "description": "Stop a valve.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "valve_toggle",
+            "description": "Toggle a valve.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lawn_mower_start_mowing",
+            "description": "Start lawn mower mowing.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lawn_mower_pause",
+            "description": "Pause lawn mower.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_media_seek",
+            "description": "Seek to a position in media playback (seconds).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "seek_position": {"type": "number", "description": "Seconds"},
+                },
+                "required": ["entity_id", "seek_position"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "siren_toggle",
+            "description": "Toggle a siren.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cover_stop_tilt",
+            "description": "Stop cover tilt.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cover_toggle_tilt",
+            "description": "Toggle cover tilt.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "notify_send_message",
+            "description": "Send a notification via the notify service.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "title": {"type": "string"},
+                    "target": {"type": "string"},
+                    "data": {"type": "object"},
+                },
+                "required": ["message"],
             },
         },
     },
