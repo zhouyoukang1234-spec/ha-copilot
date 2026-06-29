@@ -1509,6 +1509,98 @@ async def _list_dashboards(hass: HomeAssistant) -> dict[str, Any]:
     return {"count": len(items), "dashboards": items}
 
 
+async def _get_dashboard_config(
+    hass: HomeAssistant, url_path: str | None = None,
+) -> dict[str, Any]:
+    """Retrieve the full Lovelace config for a dashboard.
+
+    Pass ``url_path`` (from list_dashboards) or None / "lovelace" for default.
+    Returns the raw config dict (views, title, etc.).
+    """
+    from homeassistant.components.lovelace.const import DOMAIN as LOVELACE_DOMAIN
+
+    data = hass.data.get(LOVELACE_DOMAIN)
+    if data is None:
+        return {"error": "lovelace component not loaded"}
+
+    if isinstance(data, dict):
+        dashboards = data.get("dashboards") or {}
+    else:
+        dashboards = getattr(data, "dashboards", {}) or {}
+
+    key = None if url_path in (None, "", "lovelace") else url_path
+    cfg_obj = dashboards.get(key)
+    if cfg_obj is None:
+        return {"error": f"dashboard '{url_path}' not found"}
+
+    try:
+        config = await cfg_obj.async_load(False)
+    except Exception as err:  # noqa: BLE001
+        return {"error": f"failed to load config: {err}"}
+
+    if config is None:
+        return {"ok": True, "url_path": url_path or "lovelace", "config": {}}
+
+    views = config.get("views", [])
+    return {
+        "ok": True,
+        "url_path": url_path or "lovelace",
+        "title": config.get("title"),
+        "view_count": len(views),
+        "views": [
+            {
+                "index": i,
+                "title": v.get("title", f"View {i}"),
+                "path": v.get("path"),
+                "card_count": len(v.get("cards", [])),
+                "cards_summary": [
+                    {"type": c.get("type", "?"), "entity": c.get("entity", "")}
+                    for c in v.get("cards", [])[:20]
+                ],
+            }
+            for i, v in enumerate(views)
+        ],
+    }
+
+
+async def _update_dashboard(
+    hass: HomeAssistant, url_path: str | None, config: dict[str, Any],
+) -> dict[str, Any]:
+    """Save a full Lovelace config for a storage-mode dashboard.
+
+    The ``config`` dict replaces the entire dashboard configuration. Build it
+    from get_dashboard_config's output, modify the views/cards, and call this
+    to save.
+    """
+    from homeassistant.components.lovelace.const import DOMAIN as LOVELACE_DOMAIN
+
+    data = hass.data.get(LOVELACE_DOMAIN)
+    if data is None:
+        return {"error": "lovelace component not loaded"}
+
+    if isinstance(data, dict):
+        dashboards = data.get("dashboards") or {}
+    else:
+        dashboards = getattr(data, "dashboards", {}) or {}
+
+    key = None if url_path in (None, "", "lovelace") else url_path
+    cfg_obj = dashboards.get(key)
+    if cfg_obj is None:
+        return {"error": f"dashboard '{url_path}' not found"}
+
+    mode = getattr(cfg_obj, "mode", None)
+    if mode == "yaml":
+        return {"error": "YAML-mode dashboards cannot be updated programmatically — edit the YAML file directly"}
+
+    try:
+        await cfg_obj.async_save(config)
+    except Exception as err:  # noqa: BLE001
+        return {"error": f"save failed: {err}"}
+
+    return {"ok": True, "url_path": url_path or "lovelace", "saved": True}
+
+
+
 async def _get_energy_prefs(hass: HomeAssistant) -> dict[str, Any]:
     """Return the Energy dashboard preferences, or configured=false."""
     from homeassistant.components.energy import data as edata
@@ -3539,6 +3631,15 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                                           args.get("identifier") or args.get("category_id") or args.get("name"))
         if name == "list_dashboards":
             return await _list_dashboards(hass)
+        if name == "get_dashboard_config":
+            return await _get_dashboard_config(hass, args.get("url_path"))
+        if name == "update_dashboard":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            cfg = args.get("config")
+            if not cfg or not isinstance(cfg, dict):
+                return {"error": "missing required argument: config (dict with views/cards)"}
+            return await _update_dashboard(hass, args.get("url_path"), cfg)
         if name == "get_energy_prefs":
             return await _get_energy_prefs(hass)
         if name == "conversation_process":
@@ -4830,8 +4931,29 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_dashboards",
-            "description": "List Lovelace dashboards (default + storage + YAML) with their url_path and mode — the UI surface map.",
+            "description": "List Lovelace dashboards (default + storage + YAML) with their url_path and mode \u2014 the UI surface map.",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_dashboard_config",
+            "description": "Get the full Lovelace config for a dashboard: views, cards, and their types/entities. Pass url_path from list_dashboards (or omit for default). Use to inspect the current dashboard before editing.",
+            "parameters": {"type": "object", "properties": {
+                "url_path": {"type": "string", "description": "dashboard url_path (omit or 'lovelace' for default)."},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_dashboard",
+            "description": "Save a full Lovelace config for a storage-mode dashboard. Pass the complete config dict (get it from get_dashboard_config, modify views/cards, save back). Cannot update YAML-mode dashboards. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "url_path": {"type": "string", "description": "dashboard url_path (omit or 'lovelace' for default)."},
+                "config": {"type": "object", "description": "full dashboard config: {\"title\": \"...\", \"views\": [{\"title\": \"...\", \"cards\": [...]}]}."},
+            }, "required": ["config"]},
         },
     },
     {
