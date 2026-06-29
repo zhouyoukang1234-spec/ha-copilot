@@ -1506,15 +1506,16 @@ async def recommend_resources(
                 out["blueprint_note"] = f"partial: {bp['partial_errors']}"
 
     # Device-driven hardware cross-check: which of the brands the user actually
-    # owns have community support — zigbee2mqtt-pairable hardware (Zigbee DB), a
-    # ready-to-flash firmware config (Tasmota DB), or a known ESPHome setup
-    # (ESPHome DB) — so a non-expert learns their gear is usable without knowing
-    # to look. Each degrades independently; never breaks the HACS recommendations.
-    zigbee_support: list[dict[str, Any]] = []
-    tasmota_support: list[dict[str, Any]] = []
-    esphome_support: list[dict[str, Any]] = []
-    native_support: list[dict[str, Any]] = []
-    for brand in list(signals["manufacturers"])[:6]:
+    # owns have community support — zigbee2mqtt-pairable hardware (Zigbee DB),
+    # Z-Wave JS compatible (Z-Wave DB), a ready-to-flash firmware config (Tasmota
+    # DB), or a known ESPHome setup (ESPHome DB) — so a non-expert learns their
+    # gear is usable without knowing to look. All brand queries run in parallel;
+    # each degrades independently; never breaks the HACS recommendations.
+    brands = list(signals["manufacturers"])[:6]
+
+    async def _brand_crosscheck(brand: str) -> dict[str, Any]:
+        """Parallel cross-check one brand across all device databases."""
+        result: dict[str, Any] = {"brand": brand}
         try:
             nr = await search_ha_integrations(hass, brand, limit=4)
             nat = [
@@ -1523,11 +1524,11 @@ async def recommend_resources(
                 for d in (nr.get("results") or [])
             ]
             if nat:
-                native_support.append(
-                    {"brand": brand, "matched": nr.get("total_matched") or len(nat),
-                     "examples": nat[:3]}
-                )
-        except Exception:  # noqa: BLE001 - best-effort cross-check
+                result["native"] = {
+                    "matched": nr.get("total_matched") or len(nat),
+                    "examples": nat[:3],
+                }
+        except Exception:  # noqa: BLE001
             pass
         try:
             zr = await search_zigbee_devices(hass, brand, limit=5)
@@ -1537,11 +1538,25 @@ async def recommend_resources(
                 if d.get("zigbee2mqtt_supported")
             ]
             if z2m:
-                zigbee_support.append(
-                    {"brand": brand, "matched": len(zr.get("results") or []),
-                     "zigbee2mqtt_examples": z2m[:3]}
-                )
-        except Exception:  # noqa: BLE001 - best-effort cross-check
+                result["zigbee"] = {
+                    "matched": len(zr.get("results") or []),
+                    "zigbee2mqtt_examples": z2m[:3],
+                }
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            zwr = await search_zwave_devices(hass, brand, limit=5)
+            zw = [
+                {"manufacturer": d["manufacturer"], "model": d["model"],
+                 "url": d["url"]}
+                for d in (zwr.get("results") or [])
+            ]
+            if zw:
+                result["zwave"] = {
+                    "matched": zwr.get("total_matched") or len(zw),
+                    "examples": zw[:3],
+                }
+        except Exception:  # noqa: BLE001
             pass
         try:
             tr = await search_tasmota_devices(hass, brand, limit=5)
@@ -1550,10 +1565,10 @@ async def recommend_resources(
                 for d in (tr.get("results") or [])
             ]
             if tas:
-                tasmota_support.append(
-                    {"brand": brand, "matched": len(tas), "examples": tas[:3]}
-                )
-        except Exception:  # noqa: BLE001 - best-effort cross-check
+                result["tasmota"] = {
+                    "matched": len(tas), "examples": tas[:3],
+                }
+        except Exception:  # noqa: BLE001
             pass
         try:
             er = await search_esphome_devices(hass, brand, limit=4)
@@ -1562,20 +1577,25 @@ async def recommend_resources(
                 for d in (er.get("results") or [])
             ]
             if esp:
-                esphome_support.append(
-                    {"brand": brand, "matched": er.get("total_matched") or len(esp),
-                     "examples": esp[:3]}
-                )
-        except Exception:  # noqa: BLE001 - best-effort cross-check
+                result["esphome"] = {
+                    "matched": er.get("total_matched") or len(esp),
+                    "examples": esp[:3],
+                }
+        except Exception:  # noqa: BLE001
             pass
-    if native_support:
-        out["native_integration_support"] = native_support
-    if zigbee_support:
-        out["zigbee_support"] = zigbee_support
-    if tasmota_support:
-        out["tasmota_support"] = tasmota_support
-    if esphome_support:
-        out["esphome_support"] = esphome_support
+        return result
+
+    if brands:
+        crosschecks = await asyncio.gather(
+            *[_brand_crosscheck(b) for b in brands],
+            return_exceptions=True,
+        )
+        hw_support = [
+            r for r in crosschecks
+            if isinstance(r, dict) and len(r) > 1
+        ]
+        if hw_support:
+            out["hardware_support"] = hw_support
 
     return out
 
