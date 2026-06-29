@@ -231,22 +231,3 @@ recommend_blueprints:
           min: 1
           max: 30
 
-resolve_user_intent:
-  name: Resolve user intent
-  description: >-
-    Translate a natural-language need into matched intents with step-by-step
-    tool chains and recommended searches. Say WHAT you want, get HOW to do it.
-  fields:
-    need:
-      name: Need
-      description: What you want (e.g. "turn on lights when motion detected").
-      required: true
-      selector:
-        text:
-    limit:
-      name: Limit
-      default: 3
-      selector:
-        number:
-          min: 1
-          max: 10
