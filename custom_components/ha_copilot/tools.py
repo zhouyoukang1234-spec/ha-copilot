@@ -21103,6 +21103,49 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _addon_get_info(hass, args.get("slug", ""))
         if name == "ha_os_get_info":
             return await _ha_os_get_info(hass)
+        # --- Wave 77 dispatch ---
+        if name == "esphome_list_devices":
+            return await _esphome_list_devices(hass)
+        if name == "esphome_get_device_info":
+            return await _esphome_get_device_info(hass, args.get("device_name", ""))
+        if name == "event_list_recent":
+            return await _event_list_recent(hass, args.get("hours", 24))
+        if name == "config_get_core_state":
+            return await _config_get_core_state(hass)
+        if name == "state_get_history_changes":
+            return await _state_get_history_changes(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "state_compare_time_periods":
+            return await _state_compare_time_periods(hass, args.get("entity_id", ""), args.get("hours_a", 24), args.get("hours_b", 48))
+        if name == "webhook_list_registered":
+            return await _webhook_list_registered(hass)
+        if name == "user_list_all":
+            return await _user_list_all(hass)
+        if name == "entity_registry_list_all":
+            return await _entity_registry_list_all(hass, args.get("domain", ""))
+        if name == "device_registry_list_all":
+            return await _device_registry_list_all(hass)
+        if name == "automation_describe":
+            return await _automation_describe(hass, args.get("entity_id", ""))
+        if name == "automation_get_yaml":
+            return await _automation_get_yaml(hass, args.get("entity_id", ""))
+        if name == "script_get_fields":
+            return await _script_get_fields(hass, args.get("entity_id", ""))
+        if name == "script_list_running":
+            return await _script_list_running(hass)
+        if name == "label_list_all":
+            return await _label_list_all(hass)
+        if name == "floor_list_all":
+            return await _floor_list_all(hass)
+        if name == "entity_count_by_domain":
+            return await _entity_count_by_domain(hass)
+        if name == "state_age_oldest":
+            return await _state_age_oldest(hass, args.get("limit", 20))
+        if name == "entity_search_by_name":
+            return await _entity_search_by_name(hass, args.get("query", ""))
+        if name == "domain_list_all":
+            return await _domain_list_all(hass)
+        if name == "entity_unavailable_list":
+            return await _entity_unavailable_list(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -28029,6 +28072,391 @@ async def _ha_os_get_info(hass: HomeAssistant) -> dict[str, Any]:
         return {"ok": True, "note": "HA OS info not available (not running HAOS)"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"HA OS info failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 77 — ESPHome, events, config state, state history/compare, webhook,
+# users, registry listing, automation describe/yaml, script fields, labels,
+# floors, entity count/search/unavailable, domain list, state age
+# ---------------------------------------------------------------------------
+
+
+async def _esphome_list_devices(hass: HomeAssistant) -> dict[str, Any]:
+    """List ESPHome devices."""
+    esphome_entries = hass.config_entries.async_entries("esphome")
+    results = []
+    for entry in esphome_entries:
+        results.append({
+            "entry_id": entry.entry_id,
+            "title": entry.title,
+            "state": str(entry.state),
+        })
+    esphome_entities = [s for s in hass.states.async_all() if "esphome" in s.entity_id.lower()]
+    return {"ok": True, "config_entries": len(results), "entries": results,
+            "entity_count": len(esphome_entities)}
+
+
+async def _esphome_get_device_info(
+    hass: HomeAssistant, device_name: str,
+) -> dict[str, Any]:
+    """Get ESPHome device info by name."""
+    entities = []
+    for state in hass.states.async_all():
+        if device_name.lower() in state.entity_id.lower() or device_name.lower() in (state.attributes.get("friendly_name") or "").lower():
+            entities.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "device_name": device_name, "count": len(entities),
+            "entities": entities[:50]}
+
+
+async def _event_list_recent(
+    hass: HomeAssistant, hours: int = 24,
+) -> dict[str, Any]:
+    """List recent event-type entities."""
+    results = []
+    for state in hass.states.async_all("event"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "event_type": attrs.get("event_type"),
+            "friendly_name": attrs.get("friendly_name"),
+            "last_changed": str(state.last_changed),
+        })
+    return {"ok": True, "count": len(results), "events": results}
+
+
+async def _config_get_core_state(hass: HomeAssistant) -> dict[str, Any]:
+    """Get HA core configuration state."""
+    config = hass.config
+    return {
+        "ok": True,
+        "version": config.version,
+        "config_dir": config.config_dir,
+        "latitude": getattr(config, "latitude", None),
+        "longitude": getattr(config, "longitude", None),
+        "elevation": getattr(config, "elevation", None),
+        "unit_system": str(getattr(config, "unit_system", "")),
+        "location_name": getattr(config, "location_name", None),
+        "time_zone": str(getattr(config, "time_zone", "")),
+        "currency": getattr(config, "currency", None),
+        "language": getattr(config, "language", None),
+    }
+
+
+async def _state_get_history_changes(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get state change history for an entity."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        results = []
+        for s in items[:100]:
+            results.append({
+                "state": s.state,
+                "last_changed": str(s.last_changed),
+            })
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "total_changes": len(items), "changes": results}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"State history changes failed: {exc}"}
+
+
+async def _state_compare_time_periods(
+    hass: HomeAssistant, entity_id: str, hours_a: int = 24, hours_b: int = 48,
+) -> dict[str, Any]:
+    """Compare entity state between two time periods."""
+    try:
+        now = datetime.now(timezone.utc)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        period_a = await hass.async_add_executor_job(
+            state_changes_during_period, hass, now - timedelta(hours=hours_a), now, entity_id,
+        )
+        period_b = await hass.async_add_executor_job(
+            state_changes_during_period, hass, now - timedelta(hours=hours_b), now - timedelta(hours=hours_a), entity_id,
+        )
+        items_a = period_a.get(entity_id, [])
+        items_b = period_b.get(entity_id, [])
+        return {"ok": True, "entity_id": entity_id,
+                "period_a_hours": hours_a, "period_a_changes": len(items_a),
+                "period_b_hours": f"{hours_a}-{hours_b}", "period_b_changes": len(items_b)}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"State compare failed: {exc}"}
+
+
+async def _webhook_list_registered(hass: HomeAssistant) -> dict[str, Any]:
+    """List registered webhooks."""
+    webhooks = hass.data.get("webhook", {})
+    results = []
+    if isinstance(webhooks, dict):
+        for wh_id, wh_data in webhooks.items():
+            if isinstance(wh_data, dict):
+                results.append({
+                    "webhook_id": wh_id,
+                    "domain": wh_data.get("domain"),
+                    "name": wh_data.get("name"),
+                })
+            else:
+                results.append({"webhook_id": wh_id})
+    return {"ok": True, "count": len(results), "webhooks": results}
+
+
+async def _user_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all HA users."""
+    try:
+        users = await hass.auth.async_get_users()
+        results = []
+        for user in users:
+            results.append({
+                "id": user.id,
+                "name": user.name,
+                "is_owner": user.is_owner,
+                "is_active": user.is_active,
+                "system_generated": user.system_generated,
+                "group_ids": [g.id for g in user.groups] if hasattr(user, "groups") else [],
+            })
+        return {"ok": True, "count": len(results), "users": results}
+    except AttributeError:
+        return {"ok": True, "note": "User listing not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"User list failed: {exc}"}
+
+
+async def _entity_registry_list_all(
+    hass: HomeAssistant, domain: str = "",
+) -> dict[str, Any]:
+    """List all entities in the entity registry."""
+    reg = er.async_get(hass)
+    results = []
+    for entry in reg.entities.values():
+        if domain and not entry.entity_id.startswith(f"{domain}."):
+            continue
+        results.append({
+            "entity_id": entry.entity_id,
+            "platform": entry.platform,
+            "disabled": entry.disabled,
+            "hidden_by": str(entry.hidden_by) if entry.hidden_by else None,
+            "device_id": entry.device_id,
+            "area_id": entry.area_id,
+        })
+    return {"ok": True, "domain_filter": domain or "all",
+            "count": len(results), "entities": results[:200]}
+
+
+async def _device_registry_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all devices in the device registry."""
+    reg = dr.async_get(hass)
+    results = []
+    for device in reg.devices.values():
+        results.append({
+            "id": device.id,
+            "name": device.name,
+            "manufacturer": device.manufacturer,
+            "model": device.model,
+            "area_id": device.area_id,
+            "disabled_by": str(device.disabled_by) if device.disabled_by else None,
+            "config_entries": list(device.config_entries),
+        })
+    return {"ok": True, "count": len(results), "devices": results[:200]}
+
+
+async def _automation_describe(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Describe an automation with trigger/condition/action summary."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Automation '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    triggers = attrs.get("trigger", [])
+    conditions = attrs.get("condition", [])
+    actions = attrs.get("action", [])
+    trigger_summary = []
+    if isinstance(triggers, list):
+        for tr in triggers:
+            if isinstance(tr, dict):
+                trigger_summary.append(tr.get("platform", tr.get("trigger", "unknown")))
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "friendly_name": attrs.get("friendly_name"),
+        "state": state.state,
+        "mode": attrs.get("mode"),
+        "last_triggered": str(attrs.get("last_triggered", "")),
+        "trigger_count": len(triggers) if isinstance(triggers, list) else 0,
+        "trigger_types": trigger_summary,
+        "condition_count": len(conditions) if isinstance(conditions, list) else 0,
+        "action_count": len(actions) if isinstance(actions, list) else 0,
+    }
+
+
+async def _automation_get_yaml(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get automation YAML representation."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Automation '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    import yaml
+    yaml_data = {
+        "alias": attrs.get("friendly_name", entity_id),
+        "trigger": attrs.get("trigger", []),
+        "condition": attrs.get("condition", []),
+        "action": attrs.get("action", []),
+        "mode": attrs.get("mode", "single"),
+    }
+    try:
+        yaml_str = yaml.safe_dump(yaml_data, default_flow_style=False, allow_unicode=True)
+    except Exception:  # noqa: BLE001
+        yaml_str = str(yaml_data)
+    return {"ok": True, "entity_id": entity_id, "yaml": yaml_str}
+
+
+async def _script_get_fields(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get script fields/parameters."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Script '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "friendly_name": attrs.get("friendly_name"),
+        "mode": attrs.get("mode"),
+        "fields": attrs.get("fields", {}),
+    }
+
+
+async def _script_list_running(hass: HomeAssistant) -> dict[str, Any]:
+    """List currently running scripts."""
+    running = []
+    for state in hass.states.async_all("script"):
+        if state.state == "on":
+            running.append({
+                "entity_id": state.entity_id,
+                "friendly_name": state.attributes.get("friendly_name"),
+                "current": state.attributes.get("current", 0),
+            })
+    return {"ok": True, "count": len(running), "running_scripts": running}
+
+
+async def _label_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all labels (HA 2024.4+)."""
+    try:
+        from homeassistant.helpers import label_registry as lr
+        reg = lr.async_get(hass)
+        results = []
+        for label in reg.async_list_labels():
+            results.append({
+                "label_id": label.label_id,
+                "name": label.name,
+                "color": label.color,
+                "icon": label.icon,
+                "description": label.description,
+            })
+        return {"ok": True, "count": len(results), "labels": results}
+    except (ImportError, AttributeError):
+        return {"ok": True, "note": "Label registry not available (requires HA 2024.4+)", "labels": []}
+
+
+async def _floor_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all floors (HA 2024.2+)."""
+    try:
+        from homeassistant.helpers import floor_registry as fr
+        reg = fr.async_get(hass)
+        results = []
+        for floor in reg.async_list_floors():
+            results.append({
+                "floor_id": floor.floor_id,
+                "name": floor.name,
+                "level": floor.level,
+                "icon": floor.icon,
+            })
+        return {"ok": True, "count": len(results), "floors": results}
+    except (ImportError, AttributeError):
+        return {"ok": True, "note": "Floor registry not available (requires HA 2024.2+)", "floors": []}
+
+
+async def _entity_count_by_domain(hass: HomeAssistant) -> dict[str, Any]:
+    """Count entities grouped by domain."""
+    counts: dict[str, int] = {}
+    for state in hass.states.async_all():
+        domain = state.entity_id.split(".")[0]
+        counts[domain] = counts.get(domain, 0) + 1
+    sorted_counts = dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))
+    return {"ok": True, "total": sum(counts.values()),
+            "domain_count": len(counts), "domains": sorted_counts}
+
+
+async def _state_age_oldest(
+    hass: HomeAssistant, limit: int = 20,
+) -> dict[str, Any]:
+    """Find entities with the oldest (least recently changed) states."""
+    entities = []
+    for state in hass.states.async_all():
+        entities.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "last_changed": str(state.last_changed),
+        })
+    entities.sort(key=lambda x: x["last_changed"])
+    return {"ok": True, "count": len(entities), "oldest": entities[:limit]}
+
+
+async def _entity_search_by_name(
+    hass: HomeAssistant, query: str,
+) -> dict[str, Any]:
+    """Search entities by friendly name."""
+    query_lower = query.lower()
+    results = []
+    for state in hass.states.async_all():
+        name = (state.attributes.get("friendly_name") or state.entity_id).lower()
+        if query_lower in name:
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "query": query, "count": len(results),
+            "results": results[:50]}
+
+
+async def _domain_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all active entity domains."""
+    domains: set[str] = set()
+    for state in hass.states.async_all():
+        domains.add(state.entity_id.split(".")[0])
+    return {"ok": True, "count": len(domains), "domains": sorted(domains)}
+
+
+async def _entity_unavailable_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all unavailable entities."""
+    results = []
+    for state in hass.states.async_all():
+        if state.state in ("unavailable", "unknown"):
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+                "last_changed": str(state.last_changed),
+            })
+    return {"ok": True, "count": len(results), "entities": results}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -39829,4 +40257,26 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "backup_list_with_details", "description": "List backups with detailed info.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "addon_get_info", "description": "Get info about a specific HA add-on.", "parameters": {"type": "object", "properties": {"slug": {"type": "string"}}, "required": ["slug"]}}},
     {"type": "function", "function": {"name": "ha_os_get_info", "description": "Get Home Assistant OS info.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 77 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "esphome_list_devices", "description": "List ESPHome devices and config entries.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "esphome_get_device_info", "description": "Get ESPHome device info by name.", "parameters": {"type": "object", "properties": {"device_name": {"type": "string"}}, "required": ["device_name"]}}},
+    {"type": "function", "function": {"name": "event_list_recent", "description": "List recent event-type entities.", "parameters": {"type": "object", "properties": {"hours": {"type": "integer", "default": 24}}}}},
+    {"type": "function", "function": {"name": "config_get_core_state", "description": "Get HA core config state (location, timezone, units).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "state_get_history_changes", "description": "Get state change history for an entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "state_compare_time_periods", "description": "Compare entity state changes between two time periods.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours_a": {"type": "integer", "default": 24}, "hours_b": {"type": "integer", "default": 48}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "webhook_list_registered", "description": "List registered webhooks.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "user_list_all", "description": "List all HA users.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_registry_list_all", "description": "List entities in the entity registry, optionally filtered by domain.", "parameters": {"type": "object", "properties": {"domain": {"type": "string", "description": "Optional domain filter"}}}}},
+    {"type": "function", "function": {"name": "device_registry_list_all", "description": "List all devices in the device registry.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_describe", "description": "Describe automation with trigger/condition/action summary.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_get_yaml", "description": "Get automation YAML representation.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "script_get_fields", "description": "Get script fields/parameters.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "script_list_running", "description": "List currently running scripts.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "label_list_all", "description": "List all labels (HA 2024.4+).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "floor_list_all", "description": "List all floors (HA 2024.2+).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_count_by_domain", "description": "Count entities grouped by domain.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "state_age_oldest", "description": "Find entities with the oldest (least recently changed) states.", "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "default": 20}}}}},
+    {"type": "function", "function": {"name": "entity_search_by_name", "description": "Search entities by friendly name.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "domain_list_all", "description": "List all active entity domains.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_unavailable_list", "description": "List all unavailable/unknown entities.", "parameters": {"type": "object", "properties": {}}}},
 ]
