@@ -380,7 +380,7 @@ async def discover_resources(
                 "'low battery notification')"
             )
         }
-    hacs, github, blueprints, zigbee, tasmota, esphome, native = await asyncio.gather(
+    hacs, github, blueprints, zigbee, tasmota, esphome, native, addons = await asyncio.gather(
         search_community_resources(hass, q, "all", limit),
         search_github(hass, q, "stars", limit),
         search_blueprints(hass, q, limit),
@@ -388,6 +388,7 @@ async def discover_resources(
         search_tasmota_devices(hass, q, limit),
         search_esphome_devices(hass, q, min(limit, 4)),
         search_ha_integrations(hass, q, limit),
+        search_ha_addons(hass, q, limit),
         return_exceptions=True,
     )
     errors: list[str] = []
@@ -408,6 +409,7 @@ async def discover_resources(
     tasmota_r = _section("tasmota", tasmota)
     esphome_r = _section("esphome", esphome)
     native_r = _section("ha_integrations", native)
+    addons_r = _section("addons", addons)
 
     # Fused top list: dedupe by repo full_name, keep the highest-starred, tag
     # each with which source(s) surfaced it.
@@ -442,6 +444,7 @@ async def discover_resources(
         "github": github_r,
         "blueprints": blueprint_r,
         "ha_integrations": native_r,
+        "addons": addons_r,
         "zigbee": zigbee_r,
         "tasmota": tasmota_r,
         "esphome": esphome_r,
@@ -892,6 +895,133 @@ async def search_ha_integrations(
             "These are built into Home Assistant (add via Settings > Devices & "
             "Services > Add Integration; no HACS needed). iot_class shows "
             "local vs cloud. For custom add-ons use search_community_resources."
+        ),
+    }
+
+
+# Home Assistant add-on stores: the official + the best-known community
+# repositories. After matching hardware (zigbee/tasmota/esphome/matter) a
+# non-expert often needs a supporting add-on — an MQTT broker, the Zigbee2MQTT
+# or ESPHome add-on, the Matter server, deCONZ, etc. Free, no auth.
+_ADDON_REPOS: tuple[tuple[str, str], ...] = (
+    ("home-assistant/addons", "official"),
+    ("hassio-addons/repository", "community"),
+    ("esphome/home-assistant-addon", "esphome"),
+    ("zigbee2mqtt/hassio-zigbee2mqtt", "zigbee2mqtt"),
+)
+_ADDONS_TTL = 6 * 3600
+_addons_cache: dict[str, Any] = {"catalog": None, "ts": 0.0}
+
+
+async def _fetch_addons_catalog(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Build+cache a catalog of add-ons across the known stores, with a TTL.
+
+    Resolves each repo's add-on directories from its git tree, then reads each
+    add-on's ``config.yaml``/``config.json`` (bounded concurrency) for the
+    slug/name/description. Each repo degrades independently."""
+    now = time.time()
+    cached = _addons_cache.get("catalog")
+    if cached is not None and (now - _addons_cache.get("ts", 0.0)) < _ADDONS_TTL:
+        return cached
+
+    # (repo, source, branch, config_path) for every add-on config we can find.
+    targets: list[tuple[str, str, str, str]] = []
+    for repo, source in _ADDON_REPOS:
+        try:
+            meta = await _fetch_json(hass, f"{_GITHUB_API}/repos/{repo}")
+            branch = meta.get("default_branch") or "master"
+            tree = await _fetch_json(
+                hass, f"{_GITHUB_API}/repos/{repo}/git/trees/{branch}?recursive=1"
+            )
+            for node in (tree or {}).get("tree", []):
+                path = node.get("path", "")
+                if node.get("type") == "blob" and path.endswith(
+                    ("config.yaml", "config.json")
+                ):
+                    targets.append((repo, source, branch, path))
+        except Exception:  # noqa: BLE001 - a single store may be unavailable
+            continue
+
+    sem = asyncio.Semaphore(10)
+
+    async def _one(repo: str, source: str, branch: str, path: str) -> dict[str, Any] | None:
+        async with sem:
+            try:
+                text = await _fetch_text(hass, f"{_RAW_BASE}/{repo}/{branch}/{path}")
+            except Exception:  # noqa: BLE001 - skip an unreadable add-on
+                return None
+        try:
+            cfg = json.loads(text) if path.endswith(".json") else yaml.safe_load(text)
+        except Exception:  # noqa: BLE001 - skip a malformed config
+            return None
+        if not isinstance(cfg, dict):
+            return None
+        slug = cfg.get("slug") or path.rsplit("/", 2)[-2]
+        name = cfg.get("name")
+        if not name:
+            return None
+        return {
+            "slug": slug,
+            "name": name,
+            "description": cfg.get("description") or "",
+            "repo": repo,
+            "source": source,
+            "url": cfg.get("url") or f"https://github.com/{repo}/tree/{branch}/{path.rsplit('/', 1)[0]}",
+        }
+
+    results = await asyncio.gather(*(_one(*t) for t in targets), return_exceptions=True)
+    catalog = [r for r in results if isinstance(r, dict)]
+    if catalog:
+        _addons_cache.update({"catalog": catalog, "ts": now})
+    return catalog
+
+
+async def search_ha_addons(
+    hass: HomeAssistant,
+    query: str,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Search Home Assistant add-on stores (official + well-known community).
+
+    After matching hardware, a non-expert often needs a supporting add-on:
+    an MQTT broker (Mosquitto), the Zigbee2MQTT or ESPHome add-on, the Matter
+    server, deCONZ, etc. Types a need ("mqtt", "zigbee2mqtt", "matter",
+    "backup") and gets matching installable add-ons with their store, slug and
+    page. Read-only.
+    """
+    q = (query or "").strip()
+    if not q:
+        return {"error": "provide a need (e.g. 'mqtt', 'zigbee2mqtt', 'matter')"}
+    try:
+        catalog = await _fetch_addons_catalog(hass)
+    except Exception as err:  # noqa: BLE001 - surface fetch errors cleanly
+        return {"error": f"{type(err).__name__}: {err}"}
+    if not catalog:
+        return {"error": "add-on stores unavailable"}
+
+    words = [w for w in q.lower().split() if w]
+    scored: list[tuple[int, dict[str, Any]]] = []
+    for a in catalog:
+        strong_hay = f"{a['slug']} {a['name']}".lower()
+        hay = f"{strong_hay} {a['description']} {a['repo']}".lower()
+        if all(w in hay for w in words):
+            strong = sum(1 for w in words if w in strong_hay)
+            scored.append((strong, a))
+    scored.sort(key=lambda t: (t[0], t[1]["source"] == "official"), reverse=True)
+
+    results = [a for _, a in scored[: max(1, limit)]]
+    return {
+        "ok": True,
+        "query": q,
+        "count": len(results),
+        "total_matched": len(scored),
+        "catalog_size": len(catalog),
+        "results": results,
+        "source": "home assistant add-on stores",
+        "note": (
+            "Install by adding the add-on's repo URL under Settings > Add-ons > "
+            "Add-on Store > (top-right) Repositories, then install the add-on. "
+            "'official' add-ons are built in and need no repo."
         ),
     }
 
