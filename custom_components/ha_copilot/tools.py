@@ -8339,6 +8339,167 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 34: conversation, water heater, event, persistent notification custom,
+#           image processing, device automation
+# ---------------------------------------------------------------------------
+
+
+async def _conversation_list_agents(hass: HomeAssistant) -> dict[str, Any]:
+    """List available conversation agents."""
+    try:
+        from homeassistant.components.conversation import async_get_agent_info
+        agents = async_get_agent_info(hass)
+        result = [{"id": a.id, "name": a.name} for a in agents] if agents else []
+        return {"ok": True, "agents": result}
+    except ImportError:
+        return {"error": "conversation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Conversation list agents failed: {exc}"}
+
+
+async def _conversation_set_agent(
+    hass: HomeAssistant, agent_id: str,
+) -> dict[str, Any]:
+    """Set the default conversation agent."""
+    try:
+        from homeassistant.components.conversation import async_set_agent
+        async_set_agent(hass, hass.config, agent_id)
+        return {"ok": True, "agent_id": agent_id, "action": "set"}
+    except ImportError:
+        return {"error": "conversation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Conversation set agent failed: {exc}"}
+
+
+async def _water_heater_turn_on(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Turn on a water heater."""
+    try:
+        await hass.services.async_call(
+            "water_heater", "turn_on",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Water heater turn on failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turned_on"}
+
+
+async def _water_heater_turn_off(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Turn off a water heater."""
+    try:
+        await hass.services.async_call(
+            "water_heater", "turn_off",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Water heater turn off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turned_off"}
+
+
+async def _event_fire(
+    hass: HomeAssistant, event_type: str,
+    event_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fire a custom event."""
+    try:
+        hass.bus.async_fire(event_type, event_data or {})
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Event fire failed: {exc}"}
+    return {"ok": True, "event_type": event_type, "action": "fired"}
+
+
+async def _persistent_notification_create_custom(
+    hass: HomeAssistant, message: str,
+    title: str | None = None,
+    notification_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a persistent notification with custom options."""
+    data: dict[str, Any] = {"message": message}
+    if title:
+        data["title"] = title
+    if notification_id:
+        data["notification_id"] = notification_id
+    try:
+        await hass.services.async_call(
+            "persistent_notification", "create", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Persistent notification create failed: {exc}"}
+    return {"ok": True, "message": message, "action": "created"}
+
+
+async def _image_processing_scan(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Trigger an image processing scan."""
+    try:
+        await hass.services.async_call(
+            "image_processing", "scan",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Image processing scan failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "scanned"}
+
+
+async def _device_automation_list_triggers(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List device automation triggers."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        triggers = await async_get_device_automations(
+            hass, "trigger", [device_id],
+        )
+        return {"ok": True, "device_id": device_id, "triggers": triggers}
+    except ImportError:
+        return {"error": "device_automation not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device automation list triggers failed: {exc}"}
+
+
+async def _device_automation_list_conditions(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List device automation conditions."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        conditions = await async_get_device_automations(
+            hass, "condition", [device_id],
+        )
+        return {"ok": True, "device_id": device_id, "conditions": conditions}
+    except ImportError:
+        return {"error": "device_automation not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device automation list conditions failed: {exc}"}
+
+
+async def _device_automation_list_actions(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List device automation actions."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        actions = await async_get_device_automations(
+            hass, "action", [device_id],
+        )
+        return {"ok": True, "device_id": device_id, "actions": actions}
+    except ImportError:
+        return {"error": "device_automation not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device automation list actions failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 33: input_datetime extras, alarm extras, media source browse, STT,
 #           script reload, check config, statistics adjust, utility meter,
 #           select extras
@@ -12513,6 +12674,52 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 34 dispatch ---
+        if name == "conversation_list_agents":
+            return await _conversation_list_agents(hass)
+        if name == "conversation_set_agent":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _conversation_set_agent(
+                hass, args.get("agent_id", ""),
+            )
+        if name == "water_heater_turn_on":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _water_heater_turn_on(hass, args.get("entity_id", ""))
+        if name == "water_heater_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _water_heater_turn_off(hass, args.get("entity_id", ""))
+        if name == "event_fire":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _event_fire(
+                hass, args.get("event_type", ""), args.get("event_data"),
+            )
+        if name == "persistent_notification_create_custom":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _persistent_notification_create_custom(
+                hass, args.get("message", ""),
+                args.get("title"), args.get("notification_id"),
+            )
+        if name == "image_processing_scan":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _image_processing_scan(hass, args.get("entity_id", ""))
+        if name == "device_automation_list_triggers":
+            return await _device_automation_list_triggers(
+                hass, args.get("device_id", ""),
+            )
+        if name == "device_automation_list_conditions":
+            return await _device_automation_list_conditions(
+                hass, args.get("device_id", ""),
+            )
+        if name == "device_automation_list_actions":
+            return await _device_automation_list_actions(
+                hass, args.get("device_id", ""),
+            )
         # --- Wave 33 dispatch ---
         if name == "input_datetime_set_date":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -17785,6 +17992,130 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 34 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "conversation_list_agents",
+            "description": "List available conversation agents.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "conversation_set_agent",
+            "description": "Set the default conversation agent.",
+            "parameters": {
+                "type": "object",
+                "properties": {"agent_id": {"type": "string"}},
+                "required": ["agent_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "water_heater_turn_on",
+            "description": "Turn on a water heater.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "water_heater_turn_off",
+            "description": "Turn off a water heater.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "event_fire",
+            "description": "Fire a custom event.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_type": {"type": "string"},
+                    "event_data": {"type": "object"},
+                },
+                "required": ["event_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "persistent_notification_create_custom",
+            "description": "Create a persistent notification with custom options.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "title": {"type": "string"},
+                    "notification_id": {"type": "string"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "image_processing_scan",
+            "description": "Trigger an image processing scan.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_automation_list_triggers",
+            "description": "List device automation triggers.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_automation_list_conditions",
+            "description": "List device automation conditions.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_automation_list_actions",
+            "description": "List device automation actions.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
             },
         },
     },
