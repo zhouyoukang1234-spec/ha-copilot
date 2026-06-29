@@ -452,10 +452,28 @@ async def discover_resources(
         reverse=True,
     )[: max(1, limit)]
 
+    # Cross-protocol device coverage: tells user which protocol has most support
+    device_sources = {
+        "zigbee": zigbee_r,
+        "zwave": zwave_r,
+        "tasmota": tasmota_r,
+        "esphome": esphome_r,
+    }
+    device_coverage: dict[str, int] = {}
+    for proto, items in device_sources.items():
+        if items:
+            # Use total_matched from the raw result if available, else len
+            raw = {"zigbee": zigbee, "zwave": zwave, "tasmota": tasmota, "esphome": esphome}[proto]
+            if isinstance(raw, dict) and raw.get("total_matched"):
+                device_coverage[proto] = raw["total_matched"]
+            else:
+                device_coverage[proto] = len(items)
+
     out: dict[str, Any] = {
         "ok": True,
         "query": q,
         "top": top,
+        "device_coverage": device_coverage,
         "hacs": hacs_r,
         "github": github_r,
         "blueprints": blueprint_r,
@@ -466,10 +484,12 @@ async def discover_resources(
         "tasmota": tasmota_r,
         "esphome": esphome_r,
         "note": (
-            "ha_integrations are built into Home Assistant (no HACS needed); "
-            "install HACS items as a custom repository by url; for a blueprint "
-            "call list_repo_blueprints then import_blueprint. zigbee/zwave "
-            "entries show whether the hardware is supported; "
+            "top = cross-source installable repos ranked by source overlap + stars; "
+            "device_coverage = total matching devices per protocol (choose the "
+            "protocol with most coverage); "
+            "ha_integrations are built into HA (no HACS needed); "
+            "for blueprints call list_repo_blueprints then import_blueprint; "
+            "zigbee/zwave entries show hardware support; "
             "tasmota/esphome entries carry a ready firmware config/page."
         ),
     }
