@@ -836,6 +836,13 @@ _ZWAVE_DEVICES_PREFIX = "packages/config/config/devices/"
 _ZWAVE_MFR_PATH = "packages/config/config/manufacturers.json"
 _ZWAVE_TTL = 6 * 3600
 _zwave_cache: dict[str, Any] = {"index": None, "ts": 0.0}
+# Well-known Z-Wave brand renames/acquisitions — users still search the old name.
+_ZWAVE_BRAND_ALIASES: dict[str, list[str]] = {
+    "nice polska": ["fibaro"],
+    "aeotec ltd.": ["aeon labs"],
+    "goap": ["qubino"],
+    "ring": ["ring llc"],
+}
 
 _JSONC_COMMENT_RE = re.compile(
     r'("(?:[^"\\]|\\.)*")|//[^\n]*|/\*.*?\*/',
@@ -894,15 +901,22 @@ async def _fetch_zwave_index(hass: HomeAssistant) -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001
         mfr_map = {}
 
-    # Build index
+    # Build index — include brand aliases in search_text for renamed companies
     index: list[dict[str, Any]] = []
     for hex_id, model, path in device_files:
         brand = mfr_map.get(hex_id, hex_id)
+        brand_lower = brand.lower()
+        aliases = []
+        for canon, alts in _ZWAVE_BRAND_ALIASES.items():
+            if canon in brand_lower:
+                aliases.extend(alts)
+        search_text = f"{brand} {' '.join(aliases)} {model}"
         index.append({
             "manufacturer": brand,
             "manufacturer_id": hex_id,
             "model": model,
             "path": path,
+            "search_text": search_text,
         })
 
     if index:
@@ -934,10 +948,10 @@ async def search_zwave_devices(
 
     words = [w for w in q.lower().split() if w]
 
-    # Strict AND match
+    # Strict AND match (search_text includes brand aliases for renamed companies)
     matched: list[dict[str, Any]] = []
     for dev in index:
-        text = f"{dev['manufacturer']} {dev['model']}".lower().replace("-", " ").replace("_", " ")
+        text = dev.get("search_text", f"{dev['manufacturer']} {dev['model']}").lower().replace("-", " ").replace("_", " ")
         if all(w in text for w in words):
             matched.append(dev)
 
@@ -946,7 +960,7 @@ async def search_zwave_devices(
         # Relaxed OR fallback (require >=1 word in manufacturer or model)
         scored: list[tuple[int, dict[str, Any]]] = []
         for dev in index:
-            text = f"{dev['manufacturer']} {dev['model']}".lower().replace("-", " ").replace("_", " ")
+            text = dev.get("search_text", f"{dev['manufacturer']} {dev['model']}").lower().replace("-", " ").replace("_", " ")
             hits = sum(1 for w in words if w in text)
             if hits > 0:
                 scored.append((hits, dev))
