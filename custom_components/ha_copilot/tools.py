@@ -20399,6 +20399,62 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             )
         if name == "conversation_agent_info":
             return await _conversation_agent_info(hass)
+        # --- Wave 64 dispatch ---
+        if name == "config_flow_finish":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _config_flow_finish(
+                hass, args.get("flow_id", ""),
+                args.get("user_input"),
+            )
+        if name == "render_template_with_variables":
+            return await _render_template_with_variables(
+                hass, args.get("template", ""),
+                args.get("variables"),
+            )
+        if name == "automation_export_yaml":
+            return await _automation_export_yaml(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "script_export_yaml":
+            return await _script_export_yaml(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "notify_all_devices":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _notify_all_devices(
+                hass, args.get("message", ""),
+                args.get("title"),
+            )
+        if name == "entity_rename":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_rename(
+                hass, args.get("entity_id", ""),
+                args.get("new_name", ""),
+            )
+        if name == "integration_reload_all":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _integration_reload_all(hass)
+        if name == "ha_stop":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            if not store.get(CONF_ALLOW_RESTART, False):
+                return {"error": "HA stop/restart is disabled (allow_restart: false)"}
+            return await _ha_stop(hass)
+        if name == "service_list_by_domain":
+            return await _service_list_by_domain(
+                hass, args.get("domain", ""),
+            )
+        if name == "timer_change_duration":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _timer_change_duration(
+                hass, args.get("entity_id", ""),
+                args.get("duration", ""),
+            )
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -21633,6 +21689,197 @@ async def _conversation_agent_info(
         return {"error": "conversation component not available"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Conversation agent info failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 64 — config flow finish, template with variables, automation/script
+# YAML export, notify all, entity rename, integration reload all, ha stop,
+# service list by domain, timer change duration
+# ---------------------------------------------------------------------------
+
+
+async def _config_flow_finish(
+    hass: HomeAssistant, flow_id: str,
+    user_input: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Complete/advance a config flow step with user input."""
+    try:
+        result = await hass.config_entries.flow.async_configure(
+            flow_id, user_input=user_input or {},
+        )
+        return {
+            "ok": True,
+            "flow_id": flow_id,
+            "type": result.get("type"),
+            "step_id": result.get("step_id"),
+            "title": result.get("title"),
+            "result": str(result.get("result", "")),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config flow finish failed: {exc}"}
+
+
+async def _render_template_with_variables(
+    hass: HomeAssistant, template_str: str,
+    variables: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Render a Jinja2 template with custom variables."""
+    try:
+        tpl = Template(template_str, hass)
+        tpl.hass = hass
+        result = tpl.async_render(variables=variables or {})
+        return {"ok": True, "result": str(result)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Template render failed: {exc}"}
+
+
+async def _automation_export_yaml(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Export an automation's YAML definition."""
+    try:
+        config_dir = hass.config.config_dir
+        auto_id = entity_id.replace("automation.", "")
+        automations_path = os.path.join(config_dir, "automations.yaml")
+
+        def _do_export():
+            with open(automations_path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, list):
+                return None
+            for item in raw:
+                if isinstance(item, dict) and (
+                    item.get("id") == auto_id
+                    or item.get("alias", "").lower().replace(" ", "_") == auto_id
+                ):
+                    return yaml.safe_dump(item, allow_unicode=True, sort_keys=False)
+            return None
+
+        result = await hass.async_add_executor_job(_do_export)
+        if result is None:
+            return {"error": f"Automation '{entity_id}' not found"}
+        return {"ok": True, "entity_id": entity_id, "yaml": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation export failed: {exc}"}
+
+
+async def _script_export_yaml(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Export a script's YAML definition."""
+    try:
+        config_dir = hass.config.config_dir
+        script_id = entity_id.replace("script.", "")
+        scripts_path = os.path.join(config_dir, "scripts.yaml")
+
+        def _do_export():
+            with open(scripts_path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, dict):
+                return None
+            if script_id not in raw:
+                return None
+            return yaml.safe_dump(
+                {script_id: raw[script_id]},
+                allow_unicode=True, sort_keys=False,
+            )
+
+        result = await hass.async_add_executor_job(_do_export)
+        if result is None:
+            return {"error": f"Script '{entity_id}' not found"}
+        return {"ok": True, "entity_id": entity_id, "yaml": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script export failed: {exc}"}
+
+
+async def _notify_all_devices(
+    hass: HomeAssistant, message: str, title: str | None = None,
+) -> dict[str, Any]:
+    """Send a notification to all notify services."""
+    services = hass.services.async_services()
+    notify_svcs = services.get("notify", {})
+    results = []
+    for svc_name in notify_svcs:
+        svc_data: dict[str, Any] = {"message": message}
+        if title:
+            svc_data["title"] = title
+        try:
+            await hass.services.async_call("notify", svc_name, svc_data)
+            results.append({"service": svc_name, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"service": svc_name, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _entity_rename(
+    hass: HomeAssistant, entity_id: str, new_name: str,
+) -> dict[str, Any]:
+    """Rename an entity in the entity registry."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not found in registry"}
+    try:
+        reg.async_update_entity(entity_id, name=new_name)
+        return {"ok": True, "entity_id": entity_id, "new_name": new_name}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity rename failed: {exc}"}
+
+
+async def _integration_reload_all(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload all integrations that support reload."""
+    results = []
+    services = hass.services.async_services()
+    for domain, svcs in services.items():
+        if "reload" in svcs:
+            try:
+                await hass.services.async_call(domain, "reload", {})
+                results.append({"domain": domain, "ok": True})
+            except Exception as exc:  # noqa: BLE001
+                results.append({"domain": domain, "error": str(exc)})
+    return {"ok": True, "reloaded_count": len(results), "results": results}
+
+
+async def _ha_stop(hass: HomeAssistant) -> dict[str, Any]:
+    """Stop Home Assistant."""
+    try:
+        await hass.services.async_call("homeassistant", "stop", {})
+        return {"ok": True, "action": "stop"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"HA stop failed: {exc}"}
+
+
+async def _service_list_by_domain(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """List all services for a specific domain with descriptions."""
+    services = hass.services.async_services()
+    domain_svcs = services.get(domain, {})
+    if not domain_svcs:
+        return {"error": f"No services found for domain '{domain}'"}
+    items = []
+    for name, schema in domain_svcs.items():
+        items.append({
+            "service": f"{domain}.{name}",
+            "name": name,
+            "description": str(schema.get("description", "")) if isinstance(schema, dict) else "",
+        })
+    return {"ok": True, "domain": domain, "count": len(items),
+            "services": items}
+
+
+async def _timer_change_duration(
+    hass: HomeAssistant, entity_id: str, duration: str,
+) -> dict[str, Any]:
+    """Change the duration of a running or paused timer."""
+    try:
+        await hass.services.async_call(
+            "timer", "change",
+            {"entity_id": entity_id, "duration": duration},
+        )
+        return {"ok": True, "entity_id": entity_id, "duration": duration}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Timer change duration failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -32772,6 +33019,108 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "conversation_agent_info",
             "description": "Get info about available conversation agents.",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    # --- Wave 64 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "config_flow_finish",
+            "description": "Complete/advance a config flow step with user input. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "flow_id": {"type": "string", "description": "Flow ID to advance"},
+                "user_input": {"type": "object", "description": "User input for the step"},
+            }, "required": ["flow_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "render_template_with_variables",
+            "description": "Render a Jinja2 template with custom variables injected into the context.",
+            "parameters": {"type": "object", "properties": {
+                "template": {"type": "string", "description": "Jinja2 template string"},
+                "variables": {"type": "object", "description": "Variables to inject into template context"},
+            }, "required": ["template"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_export_yaml",
+            "description": "Export an automation's full YAML definition from automations.yaml.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Automation entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_export_yaml",
+            "description": "Export a script's full YAML definition from scripts.yaml.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Script entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "notify_all_devices",
+            "description": "Send a notification to all available notify services. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "message": {"type": "string", "description": "Notification message"},
+                "title": {"type": "string", "description": "Optional title"},
+            }, "required": ["message"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_rename",
+            "description": "Rename an entity in the entity registry. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity ID to rename"},
+                "new_name": {"type": "string", "description": "New friendly name"},
+            }, "required": ["entity_id", "new_name"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_reload_all",
+            "description": "Reload all integrations that support the reload service. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ha_stop",
+            "description": "Stop Home Assistant. Requires both allow_write AND allow_restart.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "service_list_by_domain",
+            "description": "List all services available for a specific domain with descriptions.",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "Service domain (e.g. light, switch, automation)"},
+            }, "required": ["domain"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "timer_change_duration",
+            "description": "Change the duration of a running or paused timer. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Timer entity ID"},
+                "duration": {"type": "string", "description": "New duration (e.g. '00:05:00')"},
+            }, "required": ["entity_id", "duration"]},
         },
     },
 ]
