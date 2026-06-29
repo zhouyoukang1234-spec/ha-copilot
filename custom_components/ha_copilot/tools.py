@@ -8339,6 +8339,162 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 48: image proxy, media source, intent, template, MQTT subscribe,
+#           HomeKit, ESPHome, application credentials
+# ---------------------------------------------------------------------------
+
+
+async def _image_proxy_url(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get image proxy URL for a camera/image entity."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        url = f"/api/image_proxy/{entity_id}"
+        return {"ok": True, "entity_id": entity_id, "proxy_url": url}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Image proxy URL failed: {exc}"}
+
+
+async def _media_source_resolve(
+    hass: HomeAssistant, media_content_id: str,
+) -> dict[str, Any]:
+    """Resolve a media source URI to a playable URL."""
+    try:
+        from homeassistant.components.media_source import async_resolve_media
+        result = await async_resolve_media(hass, media_content_id, None)
+        return {
+            "ok": True,
+            "url": result.url,
+            "mime_type": result.mime_type,
+        }
+    except ImportError:
+        return {"error": "media_source component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media source resolve failed: {exc}"}
+
+
+async def _intent_handle(
+    hass: HomeAssistant, intent_type: str,
+    slots: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Handle an intent programmatically."""
+    try:
+        from homeassistant.helpers.intent import async_handle
+        result = await async_handle(
+            hass, "ha_copilot", intent_type,
+            slots or {},
+        )
+        return {
+            "ok": True,
+            "intent_type": intent_type,
+            "response_type": str(result.response_type),
+            "speech": result.speech.get("plain", {}).get("speech", "")
+            if result.speech else "",
+        }
+    except ImportError:
+        return {"error": "intent handler not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Intent handle failed: {exc}"}
+
+
+async def _template_render(
+    hass: HomeAssistant, template_str: str,
+) -> dict[str, Any]:
+    """Render a Jinja2 template."""
+    try:
+        from homeassistant.helpers.template import Template
+        tpl = Template(template_str, hass)
+        result = tpl.async_render()
+        return {"ok": True, "template": template_str, "result": str(result)}
+    except ImportError:
+        return {"error": "template engine not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Template render failed: {exc}"}
+
+
+async def _mqtt_subscribe_once(
+    hass: HomeAssistant, topic: str,
+    timeout_sec: int = 5,
+) -> dict[str, Any]:
+    """Subscribe to MQTT topic and get one message."""
+    try:
+        from homeassistant.components.mqtt import async_subscribe
+        result: dict[str, Any] = {"received": False}
+
+        def msg_cb(msg: Any) -> None:
+            result["received"] = True
+            result["topic"] = msg.topic
+            result["payload"] = str(msg.payload)
+            result["qos"] = msg.qos
+
+        unsub = await async_subscribe(hass, topic, msg_cb)
+        import asyncio
+        await asyncio.sleep(min(timeout_sec, 10))
+        unsub()
+        if result["received"]:
+            return {"ok": True, **result}
+        return {"ok": True, "received": False, "topic": topic,
+                "note": f"No message in {timeout_sec}s"}
+    except ImportError:
+        return {"error": "mqtt component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"MQTT subscribe once failed: {exc}"}
+
+
+async def _homekit_list_pairings(hass: HomeAssistant) -> dict[str, Any]:
+    """List HomeKit pairings."""
+    try:
+        entries = hass.config_entries.async_entries("homekit_controller")
+        result = [
+            {"entry_id": e.entry_id, "title": e.title,
+             "state": str(e.state)}
+            for e in entries
+        ]
+        return {"ok": True, "pairings": result}
+    except ImportError:
+        return {"error": "homekit_controller component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"HomeKit list pairings failed: {exc}"}
+
+
+async def _esphome_device_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List ESPHome devices."""
+    try:
+        entries = hass.config_entries.async_entries("esphome")
+        result = [
+            {"entry_id": e.entry_id, "title": e.title,
+             "state": str(e.state)}
+            for e in entries
+        ]
+        return {"ok": True, "devices": result}
+    except AttributeError:
+        return {"error": "esphome not configured"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"ESPHome device list failed: {exc}"}
+
+
+async def _application_credentials_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List application credentials."""
+    try:
+        from homeassistant.components.application_credentials import (
+            async_get_credentials,
+        )
+        creds = await async_get_credentials(hass)
+        result = [
+            {"id": c.id, "domain": c.domain, "name": c.name}
+            for c in creds
+        ]
+        return {"ok": True, "credentials": result[:20]}
+    except ImportError:
+        return {"error": "application_credentials component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Application credentials list failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 47: weather, person, history, config flow, options flow, network
 # ---------------------------------------------------------------------------
 
@@ -15556,6 +15712,33 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 48 dispatch ---
+        if name == "image_proxy_url":
+            return await _image_proxy_url(hass, args.get("entity_id", ""))
+        if name == "media_source_resolve":
+            return await _media_source_resolve(
+                hass, args.get("media_content_id", ""),
+            )
+        if name == "intent_handle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _intent_handle(
+                hass, args.get("intent_type", ""),
+                args.get("slots"),
+            )
+        if name == "template_render":
+            return await _template_render(hass, args.get("template", ""))
+        if name == "mqtt_subscribe_once":
+            return await _mqtt_subscribe_once(
+                hass, args.get("topic", ""),
+                int(args.get("timeout", 5)),
+            )
+        if name == "homekit_list_pairings":
+            return await _homekit_list_pairings(hass)
+        if name == "esphome_device_list":
+            return await _esphome_device_list(hass)
+        if name == "application_credentials_list":
+            return await _application_credentials_list(hass)
         # --- Wave 47 dispatch ---
         if name == "weather_list":
             return await _weather_list(hass)
@@ -21531,6 +21714,97 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 48 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "image_proxy_url",
+            "description": "Get image proxy URL for a camera/image entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_source_resolve",
+            "description": "Resolve a media source URI to a playable URL.",
+            "parameters": {
+                "type": "object",
+                "properties": {"media_content_id": {"type": "string"}},
+                "required": ["media_content_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "intent_handle",
+            "description": "Handle an intent programmatically.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "intent_type": {"type": "string"},
+                    "slots": {"type": "object"},
+                },
+                "required": ["intent_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "template_render",
+            "description": "Render a Jinja2 template.",
+            "parameters": {
+                "type": "object",
+                "properties": {"template": {"type": "string"}},
+                "required": ["template"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mqtt_subscribe_once",
+            "description": "Subscribe to MQTT topic and get one message.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string"},
+                    "timeout": {"type": "integer", "description": "Seconds to wait (default 5)"},
+                },
+                "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "homekit_list_pairings",
+            "description": "List HomeKit pairings.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "esphome_device_list",
+            "description": "List ESPHome devices.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "application_credentials_list",
+            "description": "List application credentials.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 47 TOOL_SPECS ---
