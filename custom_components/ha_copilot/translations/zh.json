@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA-Copilot",
+        "description": "设置 HA-Copilot — Home Assistant 的确定性能力层。无需模型，无需 API Key。",
+        "data": {
+          "allow_write": "允许写入配置文件",
+          "allow_restart": "允许重启 Home Assistant"
+        },
+        "data_description": {
+          "allow_write": "启用后，工具可创建/修改自动化、场景、脚本及配置文件（写入前自动备份）。",
+          "allow_restart": "启用后，工具可重启 HA。默认关闭以保安全。"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "HA-Copilot 已配置。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HA-Copilot 选项",
+        "description": "调整能力层的安全开关。",
+        "data": {
+          "allow_write": "允许写入配置文件",
+          "allow_restart": "允许重启 Home Assistant"
+        },
+        "data_description": {
+          "allow_write": "启用后，工具可创建/修改自动化、场景、脚本及配置文件（写入前自动备份）。",
+          "allow_restart": "启用后，工具可重启 HA。默认关闭以保安全。"
+        }
+      }
+    }
+  }
+}
