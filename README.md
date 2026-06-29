@@ -4,11 +4,11 @@
 
 本仓库的本源是：**让操作者本身（强 AI / 外部 agent）全链路操作 Home Assistant 的底层**。这里的"智能体"是操作者自己，**不是**一个被塞进聊天框、寄生在外接模型上的弱模型。基础设施只是适配于操作者的"工具层"，操作者直接驱动它，在不断实践中操作到底、验证到底。
 
-因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（159 个工具），并经**五条本源底层**暴露给外部操作者：
+因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（210 个工具），并经**五条本源底层**暴露给外部操作者：
 
 - **底层一 · 原生 HA 服务**：`ha_copilot.run_tool` 通用服务 + 12 个原生资源服务（`ha_copilot.discover_resources` / `ha_copilot.search_zwave_devices` 等），自动化/脚本/开发者工具可直调。每次调用自动发射 `ha_copilot_tool_called` 事件。
 - **底层二 · MCP**：鉴权的 MCP 服务器端点 `/api/ha_copilot/mcp`（JSON-RPC 2.0），任意 MCP 客户端即可发现并操作整台 HA。
-- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 148 个确定性工具。
+- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 210 个确定性工具。
 - **底层四 · HTTP**：鉴权 HTTP 端点 `/api/ha_copilot/tools`（列目录）、`/api/ha_copilot/run_tool`（执行工具）。
 - **底层五 · WebSocket**：HA 原生 WebSocket 命令 `ha_copilot/tools`（列目录）、`ha_copilot/run_tool`（执行工具）、`ha_copilot/info`（集成状态）——前端面板和 WS 客户端的实时通道。
 
@@ -20,7 +20,7 @@
         ├── MCP 客户端 ──▶ /api/ha_copilot/mcp ────────┐
         ├── 原生 LLM API ──▶ HA 对话代理框架 ────────────┤
         ├── HA 服务 ──▶ 13 个原生服务（自动化可直调）──────┤
-        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（159 确定性工具）──▶ 运行中的 HA
+        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（210 确定性工具）──▶ 运行中的 HA
         └── HTTP ──▶ /api/ha_copilot/run_tool ────────────┘
 ```
 
@@ -96,6 +96,24 @@ response_variable: zwave_results
 | `validate_blueprint_inputs` / `create_automation_from_blueprint` | 校验/实例化蓝图为真实 automation 或 script（**域自动识别**，script 域蓝图正确落入 `scripts.yaml`；接受 `blueprint_path` 别名，与导入输出无缝衔接） |
 | `remember_memory` / `recall_memory` / `list_memory` / `forget_memory` | **跨会话持久记忆**：记住用户偏好/设备备注/历史决策（按 `category` 分类、带时间戳，落盘 `.storage`） |
 | `snapshot_device_profile` | 把当前真实设备信号（厂商/集成域/实体域计数）快照进记忆 `devices` 分类，供后续会话直接调用、并据此发现变化 |
+| `toggle_automation` / `trigger_automation` / `duplicate_automation` | 自动化高级操作：启用/禁用、手动触发（支持 skip_condition）、克隆为新自动化 |
+| `remove_device` / `list_device_entities` | 设备注册表高级操作：移除孤儿设备、查询设备下所有实体 |
+| `compare_history` | 多实体历史状态并排对比（时序分析） |
+| `send_tts` / `play_media` | 媒体播放器操作：TTS 语音播报、播放指定媒体 |
+| `activate_scene` / `snapshot_scene` | 场景高级操作：激活（含过渡时间）、快照当前状态为新场景 |
+| `publish_mqtt` / `subscribe_mqtt` / `list_mqtt_devices` | **MQTT 协议深度集成**：发布/订阅/设备列表 |
+| `permit_zigbee_join` / `rename_zigbee_device` | **Zigbee 协议操作**：开启配对模式（ZHA/Z2M 自适应）、重命名设备 |
+| `heal_zwave_network` / `get_zwave_node_info` | **Z-Wave 协议操作**：网络修复、节点详细信息 |
+| `wake_on_lan` / `ping_device` | **网络操作**：WoL 唤醒、ICMP 连通性检查 |
+| `list_notification_services` / `dismiss_notification` / `create_persistent_notification` | **通知系统**：列出通知目标、创建/清除持久通知 |
+| `list_entity_domains` | 列出所有活跃实体域及计数 |
+| `start_addon` / `stop_addon` / `restart_addon` / `get_addon_logs` | **加载项生命周期管理**：启动/停止/重启/日志读取 |
+| `list_area_devices` / `list_area_entities` | **区域深度查询**：某区域下所有设备、所有实体（含设备间接关联） |
+| `delete_blueprint` | 删除蓝图 YAML 文件 |
+| `delete_config_entry` / `disable_config_entry` / `reload_integration` | **集成管理**：删除/禁用启用/按域重载 |
+| `get_hardware_info` / `get_os_info` | **系统信息**：CPU/内存/磁盘/运行时间、HA OS/Supervisor 版本 |
+| `list_template_entities` | 列出所有模板集成创建的实体 |
+| `list_credentials` | 列出认证提供者 |
 
 ### Resource Hub · 把全网资源收敛为可调用的底层
 
