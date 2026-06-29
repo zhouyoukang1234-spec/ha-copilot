@@ -8339,6 +8339,45 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 31: persistent_notification_dismiss_all, assist_pipeline_run
+# ---------------------------------------------------------------------------
+
+
+async def _persistent_notification_dismiss_all(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """Dismiss all persistent notifications."""
+    try:
+        await hass.services.async_call(
+            "persistent_notification", "dismiss_all", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dismiss all notifications failed: {exc}"}
+    return {"ok": True, "action": "all_dismissed"}
+
+
+async def _assist_pipeline_run(
+    hass: HomeAssistant, text: str,
+    pipeline_id: str | None = None,
+    conversation_id: str | None = None,
+) -> dict[str, Any]:
+    """Run text through the assist pipeline."""
+    data: dict[str, Any] = {"text": text}
+    if pipeline_id:
+        data["pipeline_id"] = pipeline_id
+    if conversation_id:
+        data["conversation_id"] = conversation_id
+    try:
+        result = await hass.services.async_call(
+            "conversation", "process", data,
+            blocking=True, return_response=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Assist pipeline run failed: {exc}"}
+    return {"ok": True, "result": result}
+
+
+# ---------------------------------------------------------------------------
 # Wave 30: tag scan, reload extras, timer change, counter ops, scene apply,
 #           automation trigger, script turn_off
 # ---------------------------------------------------------------------------
@@ -11809,6 +11848,18 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 31 dispatch ---
+        if name == "persistent_notification_dismiss_all":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _persistent_notification_dismiss_all(hass)
+        if name == "assist_pipeline_run":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _assist_pipeline_run(
+                hass, args.get("text", ""),
+                args.get("pipeline_id"), args.get("conversation_id"),
+            )
         # --- Wave 30 dispatch ---
         if name == "tag_scan":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -16865,6 +16916,31 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 31 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "persistent_notification_dismiss_all",
+            "description": "Dismiss all persistent notifications.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assist_pipeline_run",
+            "description": "Run text through the assist pipeline (conversation.process).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "pipeline_id": {"type": "string"},
+                    "conversation_id": {"type": "string"},
+                },
+                "required": ["text"],
             },
         },
     },
