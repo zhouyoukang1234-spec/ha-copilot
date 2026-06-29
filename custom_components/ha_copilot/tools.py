@@ -8339,6 +8339,174 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 59: energy preferences, config diagnostics, statistics last,
+#           device/area registry get, recorder stats list, websocket commands
+# ---------------------------------------------------------------------------
+
+
+async def _energy_get_preferences(hass: HomeAssistant) -> dict[str, Any]:
+    """Get energy preferences."""
+    try:
+        from homeassistant.components.energy import async_get_manager
+        manager = await async_get_manager(hass)
+        prefs = manager.data
+        return {"ok": True, "preferences": {
+            "energy_sources": len(prefs.get("energy_sources", [])),
+            "device_consumption": len(prefs.get("device_consumption", [])),
+        }}
+    except ImportError:
+        return {"error": "energy component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Energy get preferences failed: {exc}"}
+
+
+async def _config_entry_get_diagnostics(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Get diagnostics info for a config entry."""
+    try:
+        entry = None
+        for e in hass.config_entries.async_entries():
+            if e.entry_id == entry_id:
+                entry = e
+                break
+        if entry is None:
+            return {"error": f"Config entry {entry_id} not found"}
+        return {
+            "ok": True, "entry_id": entry_id,
+            "domain": entry.domain,
+            "title": entry.title,
+            "state": str(entry.state),
+            "version": entry.version,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config entry get diagnostics failed: {exc}"}
+
+
+async def _statistics_get_last(
+    hass: HomeAssistant, statistic_id: str,
+) -> dict[str, Any]:
+    """Get last statistics value for a statistic ID."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+        from datetime import datetime, timedelta, timezone
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=1)
+        stats = await hass.async_add_executor_job(
+            statistics_during_period, hass, start, end,
+            {statistic_id}, "hour", None, {"mean", "sum"},
+        )
+        data = stats.get(statistic_id, [])
+        if data:
+            last = data[-1]
+            return {"ok": True, "statistic_id": statistic_id,
+                    "mean": last.get("mean"), "sum": last.get("sum"),
+                    "start": str(last.get("start", ""))}
+        return {"ok": True, "statistic_id": statistic_id, "data": "no data"}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Statistics get last failed: {exc}"}
+
+
+async def _device_registry_get(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get detailed device registry info."""
+    try:
+        from homeassistant.helpers.device_registry import (
+            async_get as async_get_device_registry,
+        )
+        dr = async_get_device_registry(hass)
+        device = dr.async_get(device_id)
+        if device is None:
+            return {"error": f"Device {device_id} not found"}
+        return {
+            "ok": True, "device_id": device.id,
+            "name": device.name or "",
+            "name_by_user": device.name_by_user or "",
+            "manufacturer": device.manufacturer or "",
+            "model": device.model or "",
+            "sw_version": device.sw_version or "",
+            "hw_version": device.hw_version or "",
+            "area_id": device.area_id or "",
+            "disabled_by": str(device.disabled_by) if device.disabled_by else None,
+            "config_entries": list(device.config_entries),
+            "connections": [list(c) for c in device.connections],
+            "identifiers": [list(i) for i in device.identifiers],
+        }
+    except ImportError:
+        return {"error": "device_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device registry get failed: {exc}"}
+
+
+async def _area_registry_get(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Get detailed area registry info."""
+    try:
+        from homeassistant.helpers.area_registry import (
+            async_get as async_get_area_registry,
+        )
+        ar = async_get_area_registry(hass)
+        area = ar.async_get_area(area_id)
+        if area is None:
+            return {"error": f"Area {area_id} not found"}
+        return {
+            "ok": True, "area_id": area.id,
+            "name": area.name,
+            "aliases": list(area.aliases) if area.aliases else [],
+            "floor_id": getattr(area, "floor_id", None),
+            "icon": getattr(area, "icon", None),
+            "picture": getattr(area, "picture", None),
+        }
+    except ImportError:
+        return {"error": "area_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area registry get failed: {exc}"}
+
+
+async def _recorder_statistics_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all available statistic IDs."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            list_statistic_ids,
+        )
+        stats = await hass.async_add_executor_job(
+            list_statistic_ids, hass, None, None,
+        )
+        result = [
+            {"statistic_id": s.get("statistic_id", ""),
+             "name": s.get("name", ""),
+             "unit_of_measurement": s.get("unit_of_measurement", "")}
+            for s in (stats or [])[:50]
+        ]
+        return {"ok": True, "statistics": result}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder statistics list failed: {exc}"}
+
+
+async def _websocket_list_commands(hass: HomeAssistant) -> dict[str, Any]:
+    """List available WebSocket API commands."""
+    try:
+        from homeassistant.components.websocket_api import commands
+        ws_cmds = []
+        for name in dir(commands):
+            if name.startswith("handle_"):
+                ws_cmds.append(name.replace("handle_", ""))
+        return {"ok": True, "commands": sorted(ws_cmds)}
+    except ImportError:
+        return {"error": "websocket_api not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Websocket list commands failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 58: automation/script last triggered & config, scene config/entities,
 #           entity history batch, template helpers, input boolean batch,
 #           light effects, media player queue, climate schedule, device actions
@@ -17251,6 +17419,27 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 59 dispatch ---
+        if name == "energy_get_preferences":
+            return await _energy_get_preferences(hass)
+        if name == "config_entry_get_diagnostics":
+            return await _config_entry_get_diagnostics(
+                hass, args.get("entry_id", ""),
+            )
+        if name == "statistics_get_last":
+            return await _statistics_get_last(
+                hass, args.get("statistic_id", ""),
+            )
+        if name == "device_registry_get":
+            return await _device_registry_get(
+                hass, args.get("device_id", ""),
+            )
+        if name == "area_registry_get":
+            return await _area_registry_get(hass, args.get("area_id", ""))
+        if name == "recorder_statistics_list":
+            return await _recorder_statistics_list(hass)
+        if name == "websocket_list_commands":
+            return await _websocket_list_commands(hass)
         # --- Wave 58 dispatch ---
         if name == "automation_last_triggered":
             return await _automation_last_triggered(
@@ -23560,6 +23749,79 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 59 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "energy_get_preferences",
+            "description": "Get energy preferences.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_get_diagnostics",
+            "description": "Get diagnostics info for a config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "statistics_get_last",
+            "description": "Get last statistics value for a statistic ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {"statistic_id": {"type": "string"}},
+                "required": ["statistic_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_registry_get",
+            "description": "Get detailed device registry info.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_registry_get",
+            "description": "Get detailed area registry info.",
+            "parameters": {
+                "type": "object",
+                "properties": {"area_id": {"type": "string"}},
+                "required": ["area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_statistics_list",
+            "description": "List all available statistic IDs.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "websocket_list_commands",
+            "description": "List available WebSocket API commands.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 58 TOOL_SPECS ---
