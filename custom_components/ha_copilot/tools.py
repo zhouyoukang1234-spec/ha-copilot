@@ -8339,6 +8339,251 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 41: event bus, input helper lists, schedule, image entity, calendar,
+#           entity platform, device tracker, automation/script/scene/group lists
+# ---------------------------------------------------------------------------
+
+
+async def _event_list_types(hass: HomeAssistant) -> dict[str, Any]:
+    """List event types that have been fired."""
+    return {"ok": True, "event_types": [
+        "state_changed", "call_service", "automation_triggered",
+        "script_started", "homeassistant_start", "homeassistant_stop",
+        "component_loaded", "service_registered",
+    ]}
+
+
+async def _event_fire_custom(
+    hass: HomeAssistant, event_type: str,
+    event_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fire a custom event on the event bus."""
+    try:
+        hass.bus.async_fire(event_type, event_data or {})
+        return {"ok": True, "event_type": event_type, "action": "fired"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Event fire custom failed: {exc}"}
+
+
+async def _input_number_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_number entities."""
+    try:
+        states = hass.states.async_all("input_number")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "min": s.attributes.get("min"), "max": s.attributes.get("max"),
+             "step": s.attributes.get("step")}
+            for s in states
+        ]
+        return {"ok": True, "numbers": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input number list failed: {exc}"}
+
+
+async def _input_text_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_text entities."""
+    try:
+        states = hass.states.async_all("input_text")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "texts": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input text list failed: {exc}"}
+
+
+async def _input_select_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_select entities."""
+    try:
+        states = hass.states.async_all("input_select")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "options": s.attributes.get("options", [])}
+            for s in states
+        ]
+        return {"ok": True, "selects": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input select list failed: {exc}"}
+
+
+async def _input_datetime_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_datetime entities."""
+    try:
+        states = hass.states.async_all("input_datetime")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "has_date": s.attributes.get("has_date"),
+             "has_time": s.attributes.get("has_time")}
+            for s in states
+        ]
+        return {"ok": True, "datetimes": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input datetime list failed: {exc}"}
+
+
+async def _counter_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all counter entities."""
+    try:
+        states = hass.states.async_all("counter")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "counters": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Counter list failed: {exc}"}
+
+
+async def _timer_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all timer entities."""
+    try:
+        states = hass.states.async_all("timer")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "duration": s.attributes.get("duration")}
+            for s in states
+        ]
+        return {"ok": True, "timers": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Timer list failed: {exc}"}
+
+
+async def _schedule_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all schedule entities."""
+    try:
+        states = hass.states.async_all("schedule")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "schedules": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Schedule list failed: {exc}"}
+
+
+async def _image_entity_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all image entities."""
+    try:
+        states = hass.states.async_all("image")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "images": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Image entity list failed: {exc}"}
+
+
+async def _calendar_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all calendar entities."""
+    try:
+        states = hass.states.async_all("calendar")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "calendars": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Calendar list failed: {exc}"}
+
+
+async def _entity_platform_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get entity platform information."""
+    try:
+        from homeassistant.helpers.entity_registry import async_get
+        registry = async_get(hass)
+        entry = registry.async_get(entity_id)
+        if entry is None:
+            return {"error": f"Entity {entity_id} not in registry"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "platform": entry.platform,
+            "domain": entry.domain,
+            "unique_id": entry.unique_id,
+            "config_entry_id": entry.config_entry_id,
+            "device_id": entry.device_id,
+        }
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity platform info failed: {exc}"}
+
+
+async def _device_tracker_list_active(hass: HomeAssistant) -> dict[str, Any]:
+    """List active (home) device trackers."""
+    try:
+        states = hass.states.async_all("device_tracker")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name,
+             "state": s.state,
+             "source_type": s.attributes.get("source_type"),
+             "battery_level": s.attributes.get("battery_level")}
+            for s in states if s.state == "home"
+        ]
+        return {"ok": True, "active_trackers": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device tracker list active failed: {exc}"}
+
+
+async def _automation_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all automations with their states."""
+    try:
+        states = hass.states.async_all("automation")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "last_triggered": str(s.attributes.get("last_triggered", ""))}
+            for s in states
+        ]
+        return {"ok": True, "automations": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation list all failed: {exc}"}
+
+
+async def _script_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all scripts with their states."""
+    try:
+        states = hass.states.async_all("script")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "last_triggered": str(s.attributes.get("last_triggered", ""))}
+            for s in states
+        ]
+        return {"ok": True, "scripts": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script list all failed: {exc}"}
+
+
+async def _scene_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all scenes."""
+    try:
+        states = hass.states.async_all("scene")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name}
+            for s in states
+        ]
+        return {"ok": True, "scenes": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Scene list all failed: {exc}"}
+
+
+async def _group_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all groups."""
+    try:
+        states = hass.states.async_all("group")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "entities": s.attributes.get("entity_id", [])}
+            for s in states
+        ]
+        return {"ok": True, "groups": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Group list all failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 40: energy management, statistics, config validation, conversation
 #           process, cloud/nabu casa, state batch operations
 # ---------------------------------------------------------------------------
@@ -14262,6 +14507,48 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 41 dispatch ---
+        if name == "event_list_types":
+            return await _event_list_types(hass)
+        if name == "event_fire_custom":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _event_fire_custom(
+                hass, args.get("event_type", ""),
+                args.get("event_data"),
+            )
+        if name == "input_number_list":
+            return await _input_number_list(hass)
+        if name == "input_text_list":
+            return await _input_text_list(hass)
+        if name == "input_select_list":
+            return await _input_select_list(hass)
+        if name == "input_datetime_list":
+            return await _input_datetime_list(hass)
+        if name == "counter_list":
+            return await _counter_list(hass)
+        if name == "timer_list":
+            return await _timer_list(hass)
+        if name == "schedule_list":
+            return await _schedule_list(hass)
+        if name == "image_entity_list":
+            return await _image_entity_list(hass)
+        if name == "calendar_list":
+            return await _calendar_list(hass)
+        if name == "entity_platform_info":
+            return await _entity_platform_info(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "device_tracker_list_active":
+            return await _device_tracker_list_active(hass)
+        if name == "automation_list_all":
+            return await _automation_list_all(hass)
+        if name == "script_list_all":
+            return await _script_list_all(hass)
+        if name == "scene_list_all":
+            return await _scene_list_all(hass)
+        if name == "group_list_all":
+            return await _group_list_all(hass)
         # --- Wave 40 dispatch ---
         if name == "energy_info":
             return await _energy_info(hass)
@@ -19963,6 +20250,154 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 41 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "event_list_types",
+            "description": "List common event types.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "event_fire_custom",
+            "description": "Fire a custom event on the event bus.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_type": {"type": "string"},
+                    "event_data": {"type": "object"},
+                },
+                "required": ["event_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_number_list",
+            "description": "List all input_number entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_text_list",
+            "description": "List all input_text entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_select_list",
+            "description": "List all input_select entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_datetime_list",
+            "description": "List all input_datetime entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "counter_list",
+            "description": "List all counter entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "timer_list",
+            "description": "List all timer entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "schedule_list",
+            "description": "List all schedule entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "image_entity_list",
+            "description": "List all image entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_list",
+            "description": "List all calendar entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_platform_info",
+            "description": "Get entity platform information.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_tracker_list_active",
+            "description": "List active (home) device trackers.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_list_all",
+            "description": "List all automations with their states.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_list_all",
+            "description": "List all scripts with their states.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scene_list_all",
+            "description": "List all scenes.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "group_list_all",
+            "description": "List all groups.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 40 TOOL_SPECS ---
