@@ -8339,6 +8339,73 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 49: humidifier list, light brightness/color_temp/rgb
+# ---------------------------------------------------------------------------
+
+
+async def _humidifier_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all humidifier entities."""
+    try:
+        states = hass.states.async_all("humidifier")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "humidity": s.attributes.get("humidity"),
+             "mode": s.attributes.get("mode"),
+             "available_modes": s.attributes.get("available_modes", [])}
+            for s in states
+        ]
+        return {"ok": True, "humidifiers": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Humidifier list failed: {exc}"}
+
+
+async def _light_set_brightness(
+    hass: HomeAssistant, entity_id: str, brightness: int,
+) -> dict[str, Any]:
+    """Set light brightness (0-255)."""
+    try:
+        await hass.services.async_call(
+            "light", "turn_on",
+            {"entity_id": entity_id, "brightness": min(max(brightness, 0), 255)},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light set brightness failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "brightness": brightness}
+
+
+async def _light_set_color_temp(
+    hass: HomeAssistant, entity_id: str, color_temp: int,
+) -> dict[str, Any]:
+    """Set light color temperature (mireds)."""
+    try:
+        await hass.services.async_call(
+            "light", "turn_on",
+            {"entity_id": entity_id, "color_temp": color_temp},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light set color temp failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "color_temp": color_temp}
+
+
+async def _light_set_rgb_color(
+    hass: HomeAssistant, entity_id: str,
+    r: int, g: int, b: int,
+) -> dict[str, Any]:
+    """Set light RGB color."""
+    try:
+        await hass.services.async_call(
+            "light", "turn_on",
+            {"entity_id": entity_id, "rgb_color": [r, g, b]},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light set RGB color failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "rgb_color": [r, g, b]}
+
+
+# ---------------------------------------------------------------------------
 # Wave 48: image proxy, media source, intent, template, MQTT subscribe,
 #           HomeKit, ESPHome, application credentials
 # ---------------------------------------------------------------------------
@@ -15712,6 +15779,32 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 49 dispatch ---
+        if name == "humidifier_list":
+            return await _humidifier_list(hass)
+        if name == "light_set_brightness":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _light_set_brightness(
+                hass, args.get("entity_id", ""),
+                int(args.get("brightness", 255)),
+            )
+        if name == "light_set_color_temp":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _light_set_color_temp(
+                hass, args.get("entity_id", ""),
+                int(args.get("color_temp", 370)),
+            )
+        if name == "light_set_rgb_color":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _light_set_rgb_color(
+                hass, args.get("entity_id", ""),
+                int(args.get("r", 255)),
+                int(args.get("g", 255)),
+                int(args.get("b", 255)),
+            )
         # --- Wave 48 dispatch ---
         if name == "image_proxy_url":
             return await _image_proxy_url(hass, args.get("entity_id", ""))
@@ -21713,6 +21806,62 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 49 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "humidifier_list",
+            "description": "List all humidifier entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "light_set_brightness",
+            "description": "Set light brightness (0-255).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "brightness": {"type": "integer", "minimum": 0, "maximum": 255},
+                },
+                "required": ["entity_id", "brightness"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "light_set_color_temp",
+            "description": "Set light color temperature (mireds).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "color_temp": {"type": "integer"},
+                },
+                "required": ["entity_id", "color_temp"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "light_set_rgb_color",
+            "description": "Set light RGB color.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "r": {"type": "integer", "minimum": 0, "maximum": 255},
+                    "g": {"type": "integer", "minimum": 0, "maximum": 255},
+                    "b": {"type": "integer", "minimum": 0, "maximum": 255},
+                },
+                "required": ["entity_id", "r", "g", "b"],
             },
         },
     },
