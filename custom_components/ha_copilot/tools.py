@@ -8339,6 +8339,108 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 51: notify persistent, group create/set entities, zone remove,
+#           frontend reload themes, system log list
+# ---------------------------------------------------------------------------
+
+
+async def _notify_persistent(
+    hass: HomeAssistant, message: str,
+    title: str | None = None,
+    notification_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a persistent notification."""
+    try:
+        data: dict[str, Any] = {"message": message}
+        if title:
+            data["title"] = title
+        if notification_id:
+            data["notification_id"] = notification_id
+        await hass.services.async_call(
+            "persistent_notification", "create", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Notify persistent failed: {exc}"}
+    return {"ok": True, "message": message}
+
+
+async def _group_create(
+    hass: HomeAssistant, name: str, entities: list[str],
+    object_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a group."""
+    try:
+        data: dict[str, Any] = {"name": name, "entities": entities}
+        if object_id:
+            data["object_id"] = object_id
+        await hass.services.async_call(
+            "group", "set", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Group create failed: {exc}"}
+    return {"ok": True, "name": name, "entities": entities}
+
+
+async def _group_set_entities(
+    hass: HomeAssistant, object_id: str, entities: list[str],
+) -> dict[str, Any]:
+    """Set entities for an existing group."""
+    try:
+        await hass.services.async_call(
+            "group", "set",
+            {"object_id": object_id, "entities": entities},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Group set entities failed: {exc}"}
+    return {"ok": True, "object_id": object_id, "entities": entities}
+
+
+async def _zone_remove(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Remove a zone."""
+    try:
+        await hass.services.async_call(
+            "zone", "remove", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Zone remove failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "removed"}
+
+
+async def _frontend_reload_themes(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload frontend themes."""
+    try:
+        await hass.services.async_call(
+            "frontend", "reload_themes", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Frontend reload themes failed: {exc}"}
+    return {"ok": True, "action": "themes_reloaded"}
+
+
+async def _system_log_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List system log entries."""
+    try:
+        from homeassistant.components.system_log import DOMAIN as SL_DOMAIN
+        handler = hass.data.get(SL_DOMAIN)
+        if handler is None:
+            return {"error": "system_log not available"}
+        entries = list(handler.records)[-20:]
+        result = [
+            {"level": r.levelname, "message": str(r.message)[:200],
+             "source": getattr(r, "source", ("",))}
+            for r in entries
+        ]
+        return {"ok": True, "entries": result}
+    except ImportError:
+        return {"error": "system_log component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System log list failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 50: climate preset mode, vacuum pause, remote list, media player seek
 # ---------------------------------------------------------------------------
 
@@ -15843,6 +15945,40 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 51 dispatch ---
+        if name == "notify_persistent":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _notify_persistent(
+                hass, args.get("message", ""),
+                args.get("title"),
+                args.get("notification_id"),
+            )
+        if name == "group_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _group_create(
+                hass, args.get("name", ""),
+                args.get("entities", []),
+                args.get("object_id"),
+            )
+        if name == "group_set_entities":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _group_set_entities(
+                hass, args.get("object_id", ""),
+                args.get("entities", []),
+            )
+        if name == "zone_remove":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _zone_remove(hass, args.get("entity_id", ""))
+        if name == "frontend_reload_themes":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _frontend_reload_themes(hass)
+        if name == "system_log_list":
+            return await _system_log_list(hass)
         # --- Wave 50 dispatch ---
         if name == "climate_set_preset_mode":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -21892,6 +22028,82 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 51 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "notify_persistent",
+            "description": "Create a persistent notification.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "title": {"type": "string"},
+                    "notification_id": {"type": "string"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "group_create",
+            "description": "Create a group.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "entities": {"type": "array", "items": {"type": "string"}},
+                    "object_id": {"type": "string"},
+                },
+                "required": ["name", "entities"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "group_set_entities",
+            "description": "Set entities for an existing group.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_id": {"type": "string"},
+                    "entities": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["object_id", "entities"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zone_remove",
+            "description": "Remove a zone.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "frontend_reload_themes",
+            "description": "Reload frontend themes.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_log_list",
+            "description": "List system log entries.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 50 TOOL_SPECS ---
