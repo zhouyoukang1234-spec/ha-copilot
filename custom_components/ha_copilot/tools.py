@@ -7475,6 +7475,140 @@ async def _press_input_button(
 
 
 # ---------------------------------------------------------------------------
+# Wave 15: media player controls, date/time/datetime entities
+# ---------------------------------------------------------------------------
+
+
+async def _media_player_play_media(
+    hass: HomeAssistant, entity_id: str, media_content_id: str,
+    media_content_type: str = "music",
+    enqueue: str | None = None,
+) -> dict[str, Any]:
+    """Play media on a media player."""
+    data: dict[str, Any] = {
+        "entity_id": entity_id,
+        "media_content_id": media_content_id,
+        "media_content_type": media_content_type,
+    }
+    if enqueue:
+        data["enqueue"] = enqueue
+    try:
+        await hass.services.async_call("media_player", "play_media", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Play media failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "media_content_id": media_content_id}
+
+
+async def _media_player_set_volume(
+    hass: HomeAssistant, entity_id: str, volume_level: float,
+) -> dict[str, Any]:
+    """Set media player volume (0.0 to 1.0)."""
+    try:
+        await hass.services.async_call(
+            "media_player", "volume_set",
+            {"entity_id": entity_id, "volume_level": float(volume_level)},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set volume failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "volume_level": volume_level}
+
+
+async def _media_player_media_pause(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Pause media playback."""
+    try:
+        await hass.services.async_call(
+            "media_player", "media_pause", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media pause failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "paused"}
+
+
+async def _media_player_media_play(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Resume media playback."""
+    try:
+        await hass.services.async_call(
+            "media_player", "media_play", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media play failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "playing"}
+
+
+async def _media_player_media_next(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Skip to next media track."""
+    try:
+        await hass.services.async_call(
+            "media_player", "media_next_track", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media next track failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "next_track"}
+
+
+async def _media_player_media_previous(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Skip to previous media track."""
+    try:
+        await hass.services.async_call(
+            "media_player", "media_previous_track", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media previous track failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "previous_track"}
+
+
+async def _date_set_value(
+    hass: HomeAssistant, entity_id: str, date: str,
+) -> dict[str, Any]:
+    """Set a date entity value (YYYY-MM-DD)."""
+    try:
+        await hass.services.async_call(
+            "date", "set_value",
+            {"entity_id": entity_id, "date": date}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Date set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "date": date}
+
+
+async def _time_set_value(
+    hass: HomeAssistant, entity_id: str, time: str,
+) -> dict[str, Any]:
+    """Set a time entity value (HH:MM:SS)."""
+    try:
+        await hass.services.async_call(
+            "time", "set_value",
+            {"entity_id": entity_id, "time": time}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Time set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "time": time}
+
+
+async def _datetime_set_value(
+    hass: HomeAssistant, entity_id: str, datetime_val: str,
+) -> dict[str, Any]:
+    """Set a datetime entity value (YYYY-MM-DD HH:MM:SS)."""
+    try:
+        await hass.services.async_call(
+            "datetime", "set_value",
+            {"entity_id": entity_id, "datetime": datetime_val}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Datetime set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "datetime": datetime_val}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -9561,6 +9695,57 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 15 dispatch ---
+        if name == "media_player_play_media":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_play_media(
+                hass, args.get("entity_id", ""),
+                args.get("media_content_id", ""),
+                args.get("media_content_type", "music"),
+                args.get("enqueue"),
+            )
+        if name == "media_player_set_volume":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_set_volume(
+                hass, args.get("entity_id", ""),
+                float(args.get("volume_level", 0.5)),
+            )
+        if name == "media_player_media_pause":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_media_pause(hass, args.get("entity_id", ""))
+        if name == "media_player_media_play":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_media_play(hass, args.get("entity_id", ""))
+        if name == "media_player_media_next":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_media_next(hass, args.get("entity_id", ""))
+        if name == "media_player_media_previous":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_media_previous(hass, args.get("entity_id", ""))
+        if name == "date_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _date_set_value(
+                hass, args.get("entity_id", ""), args.get("date", ""),
+            )
+        if name == "time_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _time_set_value(
+                hass, args.get("entity_id", ""), args.get("time", ""),
+            )
+        if name == "datetime_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _datetime_set_value(
+                hass, args.get("entity_id", ""), args.get("datetime", ""),
+            )
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -13188,6 +13373,132 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 15 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_play_media",
+            "description": "Play media on a media player.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "media_content_id": {"type": "string", "description": "Media URL or ID"},
+                    "media_content_type": {"type": "string", "description": "music|video|image|playlist|channel"},
+                    "enqueue": {"type": "string", "description": "add|next|play|replace"},
+                },
+                "required": ["entity_id", "media_content_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_set_volume",
+            "description": "Set media player volume (0.0 to 1.0).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "volume_level": {"type": "number", "description": "0.0 to 1.0"},
+                },
+                "required": ["entity_id", "volume_level"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_media_pause",
+            "description": "Pause media playback.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_media_play",
+            "description": "Resume media playback.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_media_next",
+            "description": "Skip to next media track.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_media_previous",
+            "description": "Skip to previous media track.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "date_set_value",
+            "description": "Set a date entity value (YYYY-MM-DD).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "date": {"type": "string", "description": "YYYY-MM-DD"},
+                },
+                "required": ["entity_id", "date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "time_set_value",
+            "description": "Set a time entity value (HH:MM:SS).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "time": {"type": "string", "description": "HH:MM:SS"},
+                },
+                "required": ["entity_id", "time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "datetime_set_value",
+            "description": "Set a datetime entity value (YYYY-MM-DD HH:MM:SS).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "datetime": {"type": "string", "description": "YYYY-MM-DD HH:MM:SS"},
+                },
+                "required": ["entity_id", "datetime"],
             },
         },
     },
