@@ -3442,6 +3442,971 @@ async def _assist(
 
 
 # ---------------------------------------------------------------------------
+# Deep HA integration — Phase 1+2: statistics, logbook, zones, persons,
+# input helpers, backup, labels, floors, counters/timers, updates,
+# system health, calendar, todo lists, tags, media, recorder
+# ---------------------------------------------------------------------------
+
+
+async def _get_statistics(
+    hass: HomeAssistant,
+    entity_id: str,
+    period: str = "hour",
+    hours: int = 24,
+) -> dict[str, Any]:
+    """Get long-term statistics for an entity (mean/min/max/sum/change).
+
+    Period: '5minute', 'hour', 'day', 'week', 'month'. Goes back ``hours``
+    hours. Works with recorder-tracked entities (energy, temperature, etc.).
+    """
+    from homeassistant.components.recorder.statistics import (
+        async_get_last_statistics,
+        statistics_during_period,
+    )
+
+    start = datetime.now(timezone.utc) - timedelta(hours=hours)
+    try:
+        stats = await hass.async_add_executor_job(
+            lambda: statistics_during_period(
+                hass, start, None, {entity_id}, period, None, {"mean", "min", "max", "sum", "change"},
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        try:
+            last = await hass.async_add_executor_job(
+                lambda: async_get_last_statistics(hass, 1, entity_id, True, {"mean", "min", "max", "sum"})
+            )
+            if last and entity_id in last:
+                return {"ok": True, "entity_id": entity_id, "last": last[entity_id]}
+        except Exception:  # noqa: BLE001
+            pass
+        return {"error": f"Statistics not available for {entity_id}: {exc}"}
+
+    if entity_id not in stats or not stats[entity_id]:
+        return {"ok": True, "entity_id": entity_id, "period": period,
+                "data": [], "hint": "No statistics found. Entity may not be tracked by recorder."}
+
+    rows = stats[entity_id]
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "period": period,
+        "hours": hours,
+        "count": len(rows),
+        "data": rows[:100],
+    }
+
+
+async def _get_logbook(
+    hass: HomeAssistant,
+    entity_id: str | None = None,
+    hours: int = 24,
+) -> dict[str, Any]:
+    """Get logbook entries — human-readable event log (not raw log file).
+
+    Returns state changes, automation triggers, service calls, etc. in
+    chronological order. Filter by entity_id or get everything.
+    """
+    from homeassistant.components.logbook import async_log_entries
+
+    start = datetime.now(timezone.utc) - timedelta(hours=hours)
+    end = datetime.now(timezone.utc)
+
+    try:
+        entries = await async_log_entries(hass, start, end, entity_id, None, None, None)
+    except Exception as exc:  # noqa: BLE001
+        entries_list: list[dict[str, Any]] = []
+        for state in hass.states.async_all():
+            if entity_id and state.entity_id != entity_id:
+                continue
+            entries_list.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "when": state.last_changed.isoformat() if state.last_changed else None,
+                "domain": state.entity_id.split(".")[0],
+            })
+        if entries_list:
+            entries_list.sort(key=lambda x: x.get("when") or "", reverse=True)
+            return {"ok": True, "count": len(entries_list), "entries": entries_list[:50],
+                    "note": f"Logbook API unavailable ({exc}), showing state changes"}
+        return {"error": f"Logbook unavailable: {exc}"}
+
+    rows = []
+    for entry in (entries or []):
+        row = {}
+        if hasattr(entry, "as_dict"):
+            row = entry.as_dict()
+        elif isinstance(entry, dict):
+            row = entry
+        else:
+            row = {"entry": str(entry)}
+        rows.append(row)
+
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "hours": hours,
+        "count": len(rows),
+        "entries": rows[:100],
+    }
+
+
+async def _list_zones(hass: HomeAssistant) -> dict[str, Any]:
+    """List all zones (geofencing areas used for presence detection)."""
+    zones = []
+    for state in hass.states.async_all("zone"):
+        attrs = state.attributes
+        zones.append({
+            "entity_id": state.entity_id,
+            "name": attrs.get("friendly_name", state.entity_id),
+            "latitude": attrs.get("latitude"),
+            "longitude": attrs.get("longitude"),
+            "radius": attrs.get("radius"),
+            "icon": attrs.get("icon"),
+            "passive": attrs.get("passive", False),
+            "persons_in_zone": attrs.get("persons", []),
+        })
+    return {"ok": True, "count": len(zones), "zones": zones}
+
+
+async def _create_zone(
+    hass: HomeAssistant,
+    name: str,
+    latitude: float,
+    longitude: float,
+    radius: float = 100,
+    icon: str = "mdi:map-marker",
+    passive: bool = False,
+) -> dict[str, Any]:
+    """Create a new zone for geofencing."""
+    try:
+        await hass.services.async_call(
+            "zone", "create", {
+                "name": name,
+                "latitude": latitude,
+                "longitude": longitude,
+                "radius": radius,
+                "icon": icon,
+                "passive": passive,
+            }, blocking=True,
+        )
+    except Exception:  # noqa: BLE001
+        zone_data = {
+            "name": name,
+            "latitude": latitude,
+            "longitude": longitude,
+            "radius": radius,
+            "icon": icon,
+            "passive": passive,
+        }
+        path = hass.config.path("zones.yaml")
+        try:
+            with open(path) as fh:
+                existing = yaml.safe_load(fh.read()) or []
+        except FileNotFoundError:
+            existing = []
+        if not isinstance(existing, list):
+            existing = [existing]
+        existing.append(zone_data)
+        with open(path, "w") as fh:
+            yaml.dump(existing, fh, default_flow_style=False, allow_unicode=True)
+        return {"ok": True, "zone": zone_data, "path": path,
+                "hint": "Run reload(target='zone') to apply."}
+
+    return {"ok": True, "name": name}
+
+
+async def _list_persons(hass: HomeAssistant) -> dict[str, Any]:
+    """List all person entities with their tracking state."""
+    persons = []
+    for state in hass.states.async_all("person"):
+        attrs = state.attributes
+        persons.append({
+            "entity_id": state.entity_id,
+            "name": attrs.get("friendly_name", ""),
+            "state": state.state,
+            "latitude": attrs.get("latitude"),
+            "longitude": attrs.get("longitude"),
+            "gps_accuracy": attrs.get("gps_accuracy"),
+            "source": attrs.get("source"),
+            "user_id": attrs.get("user_id"),
+            "device_trackers": attrs.get("device_trackers", []),
+        })
+    return {"ok": True, "count": len(persons), "persons": persons}
+
+
+async def _manage_input_helper(
+    hass: HomeAssistant,
+    action: str,
+    helper_type: str,
+    entity_id: str | None = None,
+    name: str | None = None,
+    value: Any = None,
+    options: list[str] | None = None,
+    min_val: float | None = None,
+    max_val: float | None = None,
+    step: float | None = None,
+    unit: str | None = None,
+    icon: str | None = None,
+    initial: Any = None,
+    mode: str | None = None,
+) -> dict[str, Any]:
+    """Manage input helpers (input_boolean, input_number, input_select, etc.).
+
+    Actions: 'list', 'create', 'set', 'delete'.
+    Helper types: 'boolean', 'number', 'select', 'text', 'datetime', 'button'.
+    """
+    domain = f"input_{helper_type}" if not helper_type.startswith("input_") else helper_type
+
+    if action == "list":
+        helpers = []
+        for state in hass.states.async_all(domain):
+            helpers.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "name": state.attributes.get("friendly_name", ""),
+                "attributes": {k: v for k, v in state.attributes.items()
+                               if k != "friendly_name"},
+            })
+        return {"ok": True, "domain": domain, "count": len(helpers), "helpers": helpers}
+
+    if action == "set":
+        if not entity_id:
+            return {"error": "entity_id required for 'set' action"}
+        svc_map = {
+            "input_boolean": "turn_on" if value else "turn_off",
+            "input_number": "set_value",
+            "input_select": "select_option",
+            "input_text": "set_value",
+            "input_datetime": "set_datetime",
+            "input_button": "press",
+        }
+        svc = svc_map.get(domain, "set_value")
+        svc_data: dict[str, Any] = {"entity_id": entity_id}
+        if domain == "input_number" and value is not None:
+            svc_data["value"] = float(value)
+        elif domain == "input_select" and value is not None:
+            svc_data["option"] = str(value)
+        elif domain == "input_text" and value is not None:
+            svc_data["value"] = str(value)
+        elif domain == "input_datetime" and value is not None:
+            if isinstance(value, str) and ":" in value and "-" not in value:
+                svc_data["time"] = value
+            elif isinstance(value, str) and "-" in value and ":" not in value:
+                svc_data["date"] = value
+            else:
+                svc_data["datetime"] = str(value)
+        try:
+            await hass.services.async_call(domain, svc, svc_data, blocking=True)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Failed to set {entity_id}: {exc}"}
+        return {"ok": True, "entity_id": entity_id, "value": value}
+
+    if action == "create":
+        if not name:
+            return {"error": "name required for 'create' action"}
+        cfg: dict[str, Any] = {"name": name}
+        if icon:
+            cfg["icon"] = icon
+        if domain == "input_number":
+            cfg["min"] = min_val if min_val is not None else 0
+            cfg["max"] = max_val if max_val is not None else 100
+            if step is not None:
+                cfg["step"] = step
+            if unit:
+                cfg["unit_of_measurement"] = unit
+            if initial is not None:
+                cfg["initial"] = initial
+            if mode:
+                cfg["mode"] = mode
+        elif domain == "input_select":
+            cfg["options"] = options or ["Option 1", "Option 2"]
+            if initial:
+                cfg["initial"] = initial
+        elif domain == "input_text":
+            if min_val is not None:
+                cfg["min"] = int(min_val)
+            if max_val is not None:
+                cfg["max"] = int(max_val)
+            if initial:
+                cfg["initial"] = initial
+            if mode:
+                cfg["mode"] = mode
+        elif domain == "input_boolean":
+            if initial is not None:
+                cfg["initial"] = initial
+        elif domain == "input_datetime":
+            cfg["has_date"] = True
+            cfg["has_time"] = True
+
+        path = hass.config.path(f"{domain}s.yaml")
+        slug = name.lower().replace(" ", "_")
+        try:
+            with open(path) as fh:
+                existing = yaml.safe_load(fh.read()) or {}
+        except FileNotFoundError:
+            existing = {}
+        if not isinstance(existing, dict):
+            existing = {}
+        existing[slug] = cfg
+        with open(path, "w") as fh:
+            yaml.dump(existing, fh, default_flow_style=False, allow_unicode=True)
+        return {"ok": True, "domain": domain, "slug": slug, "config": cfg,
+                "path": path, "hint": f"Run reload(target='{domain}') to apply."}
+
+    if action == "delete":
+        if not entity_id:
+            return {"error": "entity_id required for 'delete' action"}
+        slug = entity_id.split(".")[-1] if "." in entity_id else entity_id
+        path = hass.config.path(f"{domain}s.yaml")
+        try:
+            with open(path) as fh:
+                existing = yaml.safe_load(fh.read()) or {}
+        except FileNotFoundError:
+            return {"error": f"File not found: {path}"}
+        if slug in existing:
+            del existing[slug]
+            with open(path, "w") as fh:
+                yaml.dump(existing, fh, default_flow_style=False, allow_unicode=True)
+            return {"ok": True, "deleted": slug, "path": path,
+                    "hint": f"Run reload(target='{domain}') to apply."}
+        return {"error": f"Helper '{slug}' not found in {path}"}
+
+    return {"error": f"Unknown action: {action}. Use: list, create, set, delete"}
+
+
+async def _manage_counter(
+    hass: HomeAssistant,
+    action: str,
+    entity_id: str | None = None,
+    name: str | None = None,
+    initial: int | None = None,
+    step: int | None = None,
+    minimum: int | None = None,
+    maximum: int | None = None,
+    icon: str | None = None,
+) -> dict[str, Any]:
+    """Manage counter helpers: list, create, increment, decrement, reset."""
+    if action == "list":
+        counters = []
+        for state in hass.states.async_all("counter"):
+            counters.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "name": state.attributes.get("friendly_name", ""),
+            })
+        return {"ok": True, "count": len(counters), "counters": counters}
+
+    if action in ("increment", "decrement", "reset"):
+        if not entity_id:
+            return {"error": "entity_id required"}
+        try:
+            await hass.services.async_call("counter", action, {"entity_id": entity_id}, blocking=True)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
+        return {"ok": True, "entity_id": entity_id, "action": action}
+
+    if action == "create":
+        if not name:
+            return {"error": "name required for 'create'"}
+        cfg: dict[str, Any] = {"name": name}
+        if initial is not None:
+            cfg["initial"] = initial
+        if step is not None:
+            cfg["step"] = step
+        if minimum is not None:
+            cfg["minimum"] = minimum
+        if maximum is not None:
+            cfg["maximum"] = maximum
+        if icon:
+            cfg["icon"] = icon
+        slug = name.lower().replace(" ", "_")
+        path = hass.config.path("counters.yaml")
+        try:
+            with open(path) as fh:
+                existing = yaml.safe_load(fh.read()) or {}
+        except FileNotFoundError:
+            existing = {}
+        existing[slug] = cfg
+        with open(path, "w") as fh:
+            yaml.dump(existing, fh, default_flow_style=False, allow_unicode=True)
+        return {"ok": True, "slug": slug, "path": path,
+                "hint": "Run reload(target='counter') to apply."}
+
+    return {"error": f"Unknown action: {action}. Use: list, create, increment, decrement, reset"}
+
+
+async def _manage_timer(
+    hass: HomeAssistant,
+    action: str,
+    entity_id: str | None = None,
+    name: str | None = None,
+    duration: str | None = None,
+    icon: str | None = None,
+) -> dict[str, Any]:
+    """Manage timer helpers: list, create, start, pause, cancel, finish."""
+    if action == "list":
+        timers = []
+        for state in hass.states.async_all("timer"):
+            attrs = state.attributes
+            timers.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "duration": attrs.get("duration"),
+                "remaining": attrs.get("remaining"),
+                "name": attrs.get("friendly_name", ""),
+            })
+        return {"ok": True, "count": len(timers), "timers": timers}
+
+    if action in ("start", "pause", "cancel", "finish"):
+        if not entity_id:
+            return {"error": "entity_id required"}
+        svc_data: dict[str, Any] = {"entity_id": entity_id}
+        if action == "start" and duration:
+            svc_data["duration"] = duration
+        try:
+            await hass.services.async_call("timer", action, svc_data, blocking=True)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
+        return {"ok": True, "entity_id": entity_id, "action": action}
+
+    if action == "create":
+        if not name:
+            return {"error": "name required for 'create'"}
+        cfg: dict[str, Any] = {"name": name}
+        if duration:
+            cfg["duration"] = duration
+        if icon:
+            cfg["icon"] = icon
+        slug = name.lower().replace(" ", "_")
+        path = hass.config.path("timers.yaml")
+        try:
+            with open(path) as fh:
+                existing = yaml.safe_load(fh.read()) or {}
+        except FileNotFoundError:
+            existing = {}
+        existing[slug] = cfg
+        with open(path, "w") as fh:
+            yaml.dump(existing, fh, default_flow_style=False, allow_unicode=True)
+        return {"ok": True, "slug": slug, "path": path,
+                "hint": "Run reload(target='timer') to apply."}
+
+    return {"error": f"Unknown action: {action}. Use: list, create, start, pause, cancel, finish"}
+
+
+async def _manage_backup(
+    hass: HomeAssistant, action: str, slug: str | None = None,
+) -> dict[str, Any]:
+    """Manage HA backups: list, create, info, remove.
+
+    Uses the built-in backup integration (Supervisor or Core backup).
+    """
+    if action == "list":
+        try:
+            backups = await hass.services.async_call(
+                "backup", "list", {}, blocking=True, return_response=True,
+            )
+        except Exception:  # noqa: BLE001
+            try:
+                resp = await hass.async_add_executor_job(
+                    lambda: hass.data.get("backup_manager")
+                )
+                if resp and hasattr(resp, "async_get_backups"):
+                    bkps = await resp.async_get_backups()
+                    return {"ok": True, "backups": [
+                        {"slug": b.slug, "name": b.name, "date": b.date,
+                         "size": getattr(b, "size", None)}
+                        for b in (bkps.values() if isinstance(bkps, dict) else bkps)
+                    ]}
+            except Exception:  # noqa: BLE001
+                pass
+            return {"ok": True, "backups": [],
+                    "hint": "Backup integration not loaded. Add 'backup' to configuration.yaml."}
+        return {"ok": True, "backups": backups if isinstance(backups, list) else []}
+
+    if action == "create":
+        try:
+            result = await hass.services.async_call(
+                "backup", "create", {}, blocking=True, return_response=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Backup creation failed: {exc}"}
+        return {"ok": True, "backup": result}
+
+    if action == "info":
+        if not slug:
+            return {"error": "slug required for 'info'"}
+        return {"ok": True, "hint": "Use list to find backups, then download via Supervisor API."}
+
+    if action == "remove":
+        if not slug:
+            return {"error": "slug required for 'remove'"}
+        try:
+            await hass.services.async_call(
+                "backup", "remove", {"slug": slug}, blocking=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Remove failed: {exc}"}
+        return {"ok": True, "removed": slug}
+
+    return {"error": f"Unknown action: {action}. Use: list, create, info, remove"}
+
+
+async def _manage_label(
+    hass: HomeAssistant, action: str, name: str | None = None,
+    label_id: str | None = None, color: str | None = None,
+    icon: str | None = None, description: str | None = None,
+) -> dict[str, Any]:
+    """Manage HA labels (2024.1+): list, create, delete.
+
+    Labels can be applied to entities, devices, areas, and automations
+    for organizational purposes.
+    """
+    from homeassistant.helpers import label_registry as lr
+
+    try:
+        reg = lr.async_get(hass)
+    except Exception:  # noqa: BLE001
+        return {"error": "Label registry not available (requires HA 2024.1+)"}
+
+    if action == "list":
+        labels = []
+        for label in reg.async_list_labels():
+            labels.append({
+                "label_id": label.label_id,
+                "name": label.name,
+                "color": getattr(label, "color", None),
+                "icon": getattr(label, "icon", None),
+                "description": getattr(label, "description", None),
+            })
+        return {"ok": True, "count": len(labels), "labels": labels}
+
+    if action == "create":
+        if not name:
+            return {"error": "name required for 'create'"}
+        try:
+            label = reg.async_create(
+                name, color=color, icon=icon, description=description,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Create label failed: {exc}"}
+        return {"ok": True, "label_id": label.label_id, "name": label.name}
+
+    if action == "delete":
+        lid = label_id or name
+        if not lid:
+            return {"error": "label_id or name required for 'delete'"}
+        try:
+            reg.async_delete(lid)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Delete label failed: {exc}"}
+        return {"ok": True, "deleted": lid}
+
+    return {"error": f"Unknown action: {action}. Use: list, create, delete"}
+
+
+async def _manage_floor(
+    hass: HomeAssistant, action: str, name: str | None = None,
+    floor_id: str | None = None, icon: str | None = None,
+    level: int | None = None,
+) -> dict[str, Any]:
+    """Manage floors (2024.2+): list, create, delete.
+
+    Floors sit above areas in the spatial hierarchy: Floor → Areas → Devices.
+    """
+    from homeassistant.helpers import floor_registry as fr
+
+    try:
+        reg = fr.async_get(hass)
+    except Exception:  # noqa: BLE001
+        return {"error": "Floor registry not available (requires HA 2024.2+)"}
+
+    if action == "list":
+        floors = []
+        for floor in reg.async_list_floors():
+            floors.append({
+                "floor_id": floor.floor_id,
+                "name": floor.name,
+                "icon": getattr(floor, "icon", None),
+                "level": getattr(floor, "level", None),
+                "aliases": list(getattr(floor, "aliases", set())),
+            })
+        return {"ok": True, "count": len(floors), "floors": floors}
+
+    if action == "create":
+        if not name:
+            return {"error": "name required for 'create'"}
+        try:
+            floor = reg.async_create(name, icon=icon, level=level)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Create floor failed: {exc}"}
+        return {"ok": True, "floor_id": floor.floor_id, "name": floor.name}
+
+    if action == "delete":
+        fid = floor_id
+        if not fid:
+            return {"error": "floor_id required for 'delete'"}
+        try:
+            reg.async_delete(fid)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Delete floor failed: {exc}"}
+        return {"ok": True, "deleted": fid}
+
+    return {"error": f"Unknown action: {action}. Use: list, create, delete"}
+
+
+async def _check_updates(hass: HomeAssistant) -> dict[str, Any]:
+    """List all available updates (HA core, HACS, add-ons, devices)."""
+    updates = []
+    for state in hass.states.async_all("update"):
+        attrs = state.attributes
+        updates.append({
+            "entity_id": state.entity_id,
+            "name": attrs.get("friendly_name", ""),
+            "installed_version": attrs.get("installed_version"),
+            "latest_version": attrs.get("latest_version"),
+            "update_available": state.state == "on",
+            "release_summary": attrs.get("release_summary"),
+            "release_url": attrs.get("release_url"),
+            "skipped_version": attrs.get("skipped_version"),
+            "in_progress": attrs.get("in_progress", False),
+        })
+    available = [u for u in updates if u["update_available"]]
+    return {
+        "ok": True,
+        "total_update_entities": len(updates),
+        "updates_available": len(available),
+        "updates": available,
+        "up_to_date": [u for u in updates if not u["update_available"]][:10],
+    }
+
+
+async def _get_system_health(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system health information (HA version, OS, arch, DB size, etc.)."""
+    info: dict[str, Any] = {
+        "version": hass.config.version if hasattr(hass.config, "version") else "unknown",
+        "location_name": getattr(hass.config, "location_name", ""),
+        "time_zone": str(getattr(hass.config, "time_zone", "")),
+        "elevation": getattr(hass.config, "elevation", None),
+        "unit_system": str(getattr(hass.config, "units", "")),
+        "config_dir": hass.config.config_dir,
+        "allowlist_external_dirs": list(getattr(hass.config, "allowlist_external_dirs", [])),
+        "allowlist_external_urls": list(getattr(hass.config, "allowlist_external_urls", [])),
+        "components_loaded": len(getattr(hass, "config", {}).get("components", set()) if isinstance(getattr(hass, "config", None), dict) else getattr(getattr(hass, "config", None), "components", set())),
+    }
+
+    entity_count = len(hass.states.async_all())
+    domain_counts: dict[str, int] = {}
+    for state in hass.states.async_all():
+        d = state.entity_id.split(".")[0]
+        domain_counts[d] = domain_counts.get(d, 0) + 1
+
+    info["entity_count"] = entity_count
+    info["domain_counts"] = dict(sorted(domain_counts.items(), key=lambda x: -x[1])[:20])
+
+    import os
+    db_path = os.path.join(hass.config.config_dir, "home-assistant_v2.db")
+    try:
+        db_size = os.path.getsize(db_path)
+        info["database_size_mb"] = round(db_size / (1024 * 1024), 1)
+    except OSError:
+        info["database_size_mb"] = None
+
+    return {"ok": True, "system": info}
+
+
+async def _manage_calendar(
+    hass: HomeAssistant,
+    action: str,
+    entity_id: str | None = None,
+    summary: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Manage calendar entities: list, get_events, create_event."""
+    if action == "list":
+        calendars = []
+        for state in hass.states.async_all("calendar"):
+            attrs = state.attributes
+            calendars.append({
+                "entity_id": state.entity_id,
+                "name": attrs.get("friendly_name", ""),
+                "state": state.state,
+                "message": attrs.get("message"),
+                "start_time": attrs.get("start_time"),
+                "end_time": attrs.get("end_time"),
+            })
+        return {"ok": True, "count": len(calendars), "calendars": calendars}
+
+    if action == "get_events":
+        if not entity_id:
+            return {"error": "entity_id required for 'get_events'"}
+        try:
+            now = datetime.now(timezone.utc)
+            result = await hass.services.async_call(
+                "calendar", "get_events", {
+                    "entity_id": entity_id,
+                    "start_date_time": (now - timedelta(days=1)).isoformat(),
+                    "end_date_time": (now + timedelta(days=7)).isoformat(),
+                }, blocking=True, return_response=True,
+            )
+            return {"ok": True, "entity_id": entity_id, "events": result}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Get events failed: {exc}"}
+
+    if action == "create_event":
+        if not entity_id or not summary or not start or not end:
+            return {"error": "entity_id, summary, start, end required for 'create_event'"}
+        svc_data: dict[str, Any] = {
+            "entity_id": entity_id,
+            "summary": summary,
+            "start_date_time": start,
+            "end_date_time": end,
+        }
+        if description:
+            svc_data["description"] = description
+        try:
+            await hass.services.async_call(
+                "calendar", "create_event", svc_data, blocking=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Create event failed: {exc}"}
+        return {"ok": True, "summary": summary, "start": start, "end": end}
+
+    return {"error": f"Unknown action: {action}. Use: list, get_events, create_event"}
+
+
+async def _manage_todo(
+    hass: HomeAssistant,
+    action: str,
+    entity_id: str | None = None,
+    item: str | None = None,
+    status: str | None = None,
+    uid: str | None = None,
+) -> dict[str, Any]:
+    """Manage to-do list entities (HA 2023.11+): list, get_items, add, update, remove."""
+    if action == "list":
+        todos = []
+        for state in hass.states.async_all("todo"):
+            attrs = state.attributes
+            todos.append({
+                "entity_id": state.entity_id,
+                "name": attrs.get("friendly_name", ""),
+                "state": state.state,
+            })
+        return {"ok": True, "count": len(todos), "todo_lists": todos}
+
+    if action == "get_items":
+        if not entity_id:
+            return {"error": "entity_id required"}
+        try:
+            result = await hass.services.async_call(
+                "todo", "get_items", {"entity_id": entity_id},
+                blocking=True, return_response=True,
+            )
+            return {"ok": True, "entity_id": entity_id, "items": result}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Get items failed: {exc}"}
+
+    if action == "add":
+        if not entity_id or not item:
+            return {"error": "entity_id and item required"}
+        try:
+            await hass.services.async_call(
+                "todo", "add_item", {"entity_id": entity_id, "item": item},
+                blocking=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Add item failed: {exc}"}
+        return {"ok": True, "entity_id": entity_id, "item": item}
+
+    if action == "update":
+        if not entity_id or not uid:
+            return {"error": "entity_id and uid required"}
+        svc_data: dict[str, Any] = {"entity_id": entity_id, "item": uid}
+        if item:
+            svc_data["rename"] = item
+        if status:
+            svc_data["status"] = status
+        try:
+            await hass.services.async_call(
+                "todo", "update_item", svc_data, blocking=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Update failed: {exc}"}
+        return {"ok": True, "entity_id": entity_id, "uid": uid}
+
+    if action == "remove":
+        if not entity_id or not uid:
+            return {"error": "entity_id and uid required"}
+        try:
+            await hass.services.async_call(
+                "todo", "remove_item", {"entity_id": entity_id, "item": uid},
+                blocking=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Remove failed: {exc}"}
+        return {"ok": True, "entity_id": entity_id, "removed": uid}
+
+    return {"error": f"Unknown action: {action}. Use: list, get_items, add, update, remove"}
+
+
+async def _manage_tag(
+    hass: HomeAssistant, action: str, tag_id: str | None = None,
+    name: str | None = None,
+) -> dict[str, Any]:
+    """Manage NFC/RFID tags: list, create, remove."""
+    from homeassistant.helpers import tag as tag_helper
+
+    if action == "list":
+        try:
+            tags = tag_helper.async_get_tags(hass) if hasattr(tag_helper, "async_get_tags") else {}
+        except Exception:  # noqa: BLE001
+            tags = hass.data.get("tag", {})
+        if not tags:
+            return {"ok": True, "count": 0, "tags": [],
+                    "hint": "No tags registered. Scan a tag with your phone to register it."}
+        tag_list = []
+        if isinstance(tags, dict):
+            for tid, info in tags.items():
+                tag_list.append({
+                    "tag_id": tid,
+                    "name": info.get("name", "") if isinstance(info, dict) else str(info),
+                })
+        return {"ok": True, "count": len(tag_list), "tags": tag_list}
+
+    if action == "create":
+        try:
+            result = await tag_helper.async_create_tag(hass, name or "New Tag", tag_id)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Create tag failed: {exc}"}
+        return {"ok": True, "tag_id": result if isinstance(result, str) else str(result)}
+
+    if action == "remove":
+        if not tag_id:
+            return {"error": "tag_id required for 'remove'"}
+        try:
+            await tag_helper.async_remove_tag(hass, tag_id)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Remove tag failed: {exc}"}
+        return {"ok": True, "removed": tag_id}
+
+    return {"error": f"Unknown action: {action}. Use: list, create, remove"}
+
+
+async def _browse_media(
+    hass: HomeAssistant,
+    media_content_id: str | None = None,
+    media_content_type: str | None = None,
+    entity_id: str | None = None,
+) -> dict[str, Any]:
+    """Browse media library (local media, TTS, Spotify, etc.)."""
+    try:
+        from homeassistant.components.media_source import async_browse_media
+        result = await async_browse_media(
+            hass, media_content_id, media_content_type,
+        )
+        children = []
+        for child in (result.children or []):
+            children.append({
+                "title": child.title,
+                "media_content_id": child.media_content_id,
+                "media_content_type": child.media_content_type,
+                "media_class": child.media_class,
+                "can_play": child.can_play,
+                "can_expand": child.can_expand,
+            })
+        return {
+            "ok": True,
+            "title": result.title,
+            "media_content_id": result.media_content_id,
+            "children_count": len(children),
+            "children": children[:50],
+        }
+    except Exception as exc:  # noqa: BLE001
+        media_players = []
+        for state in hass.states.async_all("media_player"):
+            attrs = state.attributes
+            media_players.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "name": attrs.get("friendly_name", ""),
+                "media_title": attrs.get("media_title"),
+                "source_list": attrs.get("source_list", [])[:10],
+            })
+        return {"ok": True, "media_players": media_players,
+                "note": f"Media browse unavailable ({exc}), showing players"}
+
+
+async def _get_camera_snapshot(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get camera entity info (proxy URL for snapshot access)."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Camera {entity_id} not found"}
+    attrs = state.attributes
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "name": attrs.get("friendly_name", ""),
+        "access_token": attrs.get("access_token"),
+        "entity_picture": attrs.get("entity_picture"),
+        "frontend_stream_type": attrs.get("frontend_stream_type"),
+        "proxy_url": f"/api/camera_proxy/{entity_id}",
+        "stream_url": f"/api/camera_proxy_stream/{entity_id}",
+    }
+
+
+async def _purge_recorder(
+    hass: HomeAssistant,
+    keep_days: int = 10,
+    repack: bool = False,
+) -> dict[str, Any]:
+    """Purge old recorder data to free database space."""
+    try:
+        await hass.services.async_call(
+            "recorder", "purge", {
+                "keep_days": keep_days,
+                "repack": repack,
+            }, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Purge failed: {exc}"}
+    return {"ok": True, "keep_days": keep_days, "repack": repack,
+            "hint": "Purge started. Large databases may take several minutes."}
+
+
+async def _manage_schedule(
+    hass: HomeAssistant,
+    action: str,
+    entity_id: str | None = None,
+) -> dict[str, Any]:
+    """List schedule helper entities and their current state."""
+    if action == "list":
+        schedules = []
+        for state in hass.states.async_all("schedule"):
+            schedules.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "name": state.attributes.get("friendly_name", ""),
+                "next_event": state.attributes.get("next_event"),
+            })
+        return {"ok": True, "count": len(schedules), "schedules": schedules}
+
+    if action == "get" and entity_id:
+        state = hass.states.get(entity_id)
+        if not state:
+            return {"error": f"Schedule {entity_id} not found"}
+        return {"ok": True, "entity_id": entity_id, "state": state.state,
+                "attributes": dict(state.attributes)}
+
+    return {"error": f"Unknown action: {action}. Use: list, get"}
+
+
+# ---------------------------------------------------------------------------
 # Workflow orchestration — batch & config operations (Stage 4 evolution)
 # ---------------------------------------------------------------------------
 
@@ -4309,6 +5274,95 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "compare_states":
             eids = args.get("entity_ids") or args.get("entities") or []
             return await _compare_states(hass, eids)
+        if name == "create_zone":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _create_zone(
+                hass, args.get("name", ""), float(args.get("latitude", 0)),
+                float(args.get("longitude", 0)), float(args.get("radius", 100)),
+                args.get("icon", "mdi:map-marker"), bool(args.get("passive", False)),
+            )
+        if name == "manage_input_helper":
+            act = args.get("action", "list")
+            if act in ("create", "set", "delete") and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_input_helper(
+                hass, act, args.get("helper_type", "boolean"),
+                args.get("entity_id"), args.get("name"), args.get("value"),
+                args.get("options"), args.get("min"), args.get("max"),
+                args.get("step"), args.get("unit"), args.get("icon"),
+                args.get("initial"), args.get("mode"),
+            )
+        if name == "manage_counter":
+            act = args.get("action", "list")
+            if act in ("create", "increment", "decrement", "reset") and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_counter(
+                hass, act, args.get("entity_id"), args.get("name"),
+                args.get("initial"), args.get("step"),
+                args.get("minimum"), args.get("maximum"), args.get("icon"),
+            )
+        if name == "manage_timer":
+            act = args.get("action", "list")
+            if act in ("create", "start", "pause", "cancel", "finish") and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_timer(
+                hass, act, args.get("entity_id"), args.get("name"),
+                args.get("duration"), args.get("icon"),
+            )
+        if name == "manage_backup":
+            act = args.get("action", "list")
+            if act in ("create", "remove") and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_backup(hass, act, args.get("slug"))
+        if name == "manage_label":
+            act = args.get("action", "list")
+            if act in ("create", "delete") and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_label(
+                hass, act, args.get("name"), args.get("label_id"),
+                args.get("color"), args.get("icon"), args.get("description"),
+            )
+        if name == "manage_floor":
+            act = args.get("action", "list")
+            if act in ("create", "delete") and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_floor(
+                hass, act, args.get("name"), args.get("floor_id"),
+                args.get("icon"), args.get("level"),
+            )
+        if name == "check_updates":
+            return await _check_updates(hass)
+        if name == "manage_calendar":
+            act = args.get("action", "list")
+            if act == "create_event" and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_calendar(
+                hass, act, args.get("entity_id"), args.get("summary"),
+                args.get("start"), args.get("end"), args.get("description"),
+            )
+        if name == "manage_todo":
+            act = args.get("action", "list")
+            if act in ("add", "update", "remove") and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_todo(
+                hass, act, args.get("entity_id"), args.get("item"),
+                args.get("status"), args.get("uid"),
+            )
+        if name == "manage_tag":
+            act = args.get("action", "list")
+            if act in ("create", "remove") and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_tag(hass, act, args.get("tag_id"), args.get("name"))
+        if name == "browse_media":
+            return await _browse_media(
+                hass, args.get("media_content_id"), args.get("media_content_type"),
+                args.get("entity_id"),
+            )
+        if name == "get_camera_snapshot":
+            return await _get_camera_snapshot(hass, args.get("entity_id", ""))
+        if name == "manage_schedule":
+            return await _manage_schedule(hass, args.get("action", "list"), args.get("entity_id"))
         if name == "read_logs":
             return await _read_logs(hass, args.get("lines", 60))
         if name == "create_area":
@@ -5350,6 +6404,237 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["entity_ids"],
+            },
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "create_zone",
+            "description": "Create a new geofencing zone for presence detection.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "latitude": {"type": "number"},
+                    "longitude": {"type": "number"},
+                    "radius": {"type": "number", "description": "Radius in meters (default 100)"},
+                    "icon": {"type": "string"},
+                    "passive": {"type": "boolean"},
+                },
+                "required": ["name", "latitude", "longitude"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_input_helper",
+            "description": (
+                "Manage input helpers (input_boolean/number/select/text/datetime/button). "
+                "Actions: list, create, set, delete."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "create", "set", "delete"]},
+                    "helper_type": {"type": "string", "enum": ["boolean", "number", "select", "text", "datetime", "button"]},
+                    "entity_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "value": {"description": "Value to set"},
+                    "options": {"type": "array", "items": {"type": "string"}, "description": "For input_select"},
+                    "min": {"type": "number"}, "max": {"type": "number"},
+                    "step": {"type": "number"}, "unit": {"type": "string"},
+                    "icon": {"type": "string"}, "initial": {}, "mode": {"type": "string"},
+                },
+                "required": ["action", "helper_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_counter",
+            "description": "Manage counter helpers: list, create, increment, decrement, reset.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "create", "increment", "decrement", "reset"]},
+                    "entity_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "initial": {"type": "integer"}, "step": {"type": "integer"},
+                    "minimum": {"type": "integer"}, "maximum": {"type": "integer"},
+                    "icon": {"type": "string"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_timer",
+            "description": "Manage timer helpers: list, create, start, pause, cancel, finish.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "create", "start", "pause", "cancel", "finish"]},
+                    "entity_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "duration": {"type": "string", "description": "e.g. '00:05:00'"},
+                    "icon": {"type": "string"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_backup",
+            "description": "Manage HA backups: list, create, info, remove.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "create", "info", "remove"]},
+                    "slug": {"type": "string", "description": "Backup slug (for info/remove)"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_label",
+            "description": "Manage HA labels (2024.1+): list, create, delete. For organizing entities/devices.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "create", "delete"]},
+                    "name": {"type": "string"}, "label_id": {"type": "string"},
+                    "color": {"type": "string"}, "icon": {"type": "string"},
+                    "description": {"type": "string"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_floor",
+            "description": "Manage floors (2024.2+): list, create, delete. Spatial hierarchy above areas.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "create", "delete"]},
+                    "name": {"type": "string"}, "floor_id": {"type": "string"},
+                    "icon": {"type": "string"}, "level": {"type": "integer"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_updates",
+            "description": "List all available updates (HA core, HACS, add-ons, devices).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_calendar",
+            "description": "Manage calendar entities: list, get_events, create_event.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "get_events", "create_event"]},
+                    "entity_id": {"type": "string"},
+                    "summary": {"type": "string"}, "start": {"type": "string"},
+                    "end": {"type": "string"}, "description": {"type": "string"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_todo",
+            "description": "Manage to-do list entities (HA 2023.11+): list, get_items, add, update, remove.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "get_items", "add", "update", "remove"]},
+                    "entity_id": {"type": "string"}, "item": {"type": "string"},
+                    "status": {"type": "string", "enum": ["needs_action", "completed"]},
+                    "uid": {"type": "string"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_tag",
+            "description": "Manage NFC/RFID tags: list, create, remove.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "create", "remove"]},
+                    "tag_id": {"type": "string"}, "name": {"type": "string"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browse_media",
+            "description": "Browse media library (local media, TTS, Spotify, etc.).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "media_content_id": {"type": "string"},
+                    "media_content_type": {"type": "string"},
+                    "entity_id": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_camera_snapshot",
+            "description": "Get camera entity info and proxy URL for snapshot/stream access.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_schedule",
+            "description": "List schedule helper entities and their state.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["list", "get"]},
+                    "entity_id": {"type": "string"},
+                },
+                "required": ["action"],
             },
         },
     },
