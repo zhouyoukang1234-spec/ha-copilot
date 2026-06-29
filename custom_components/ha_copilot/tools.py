@@ -21234,6 +21234,49 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _entity_find_related(hass, args.get("entity_id", ""))
         if name == "entity_group_by_device":
             return await _entity_group_by_device(hass)
+        # --- Wave 80 dispatch ---
+        if name == "anomaly_detect_numeric":
+            return await _anomaly_detect_numeric(hass, args.get("entity_id", ""), args.get("std_threshold", 2.0))
+        if name == "anomaly_detect_binary":
+            return await _anomaly_detect_binary(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "usage_pattern_lights":
+            return await _usage_pattern_lights(hass)
+        if name == "usage_pattern_climate":
+            return await _usage_pattern_climate(hass)
+        if name == "usage_pattern_media":
+            return await _usage_pattern_media(hass)
+        if name == "recommend_automations":
+            return await _recommend_automations(hass)
+        if name == "recommend_energy_savings":
+            return await _recommend_energy_savings(hass)
+        if name == "entity_recently_added":
+            return await _entity_recently_added(hass, args.get("hours", 48))
+        if name == "entity_recently_changed":
+            return await _entity_recently_changed(hass, args.get("limit", 20))
+        if name == "trend_numeric_direction":
+            return await _trend_numeric_direction(hass, args.get("entity_id", ""))
+        if name == "trend_binary_frequency":
+            return await _trend_binary_frequency(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "area_environment_summary":
+            return await _area_environment_summary(hass, args.get("area_id", ""))
+        if name == "time_of_day_entity_state":
+            return await _time_of_day_entity_state(hass, args.get("entity_id", ""))
+        if name == "sunrise_sunset_info":
+            return await _sunrise_sunset_info(hass)
+        if name == "integration_entity_count":
+            return await _integration_entity_count(hass)
+        if name == "entity_state_timeline":
+            return await _entity_state_timeline(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "entity_attribute_history":
+            return await _entity_attribute_history(hass, args.get("entity_id", ""), args.get("attribute", ""))
+        if name == "trigger_list_entity_automations":
+            return await _trigger_list_entity_automations(hass, args.get("entity_id", ""))
+        if name == "security_status_summary":
+            return await _security_status_summary(hass)
+        if name == "lock_status_all":
+            return await _lock_status_all(hass)
+        if name == "comfort_index_calculate":
+            return await _comfort_index_calculate(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -29307,6 +29350,455 @@ async def _entity_group_by_device(hass: HomeAssistant) -> dict[str, Any]:
             "entities": entities[:10],
         })
     return {"ok": True, "device_count": len(groups), "groups": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 80 — anomaly detection, usage patterns, recommendations, entity
+# lifecycle, trend analysis, area environment, time-of-day, integration
+# entity count, state timeline, security summary, comfort index
+# ---------------------------------------------------------------------------
+
+
+async def _anomaly_detect_numeric(
+    hass: HomeAssistant, entity_id: str, std_threshold: float = 2.0,
+) -> dict[str, Any]:
+    """Detect anomalies in numeric sensor by deviation from mean."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    try:
+        current = float(state.state)
+    except (ValueError, TypeError):
+        return {"error": f"Entity '{entity_id}' state is not numeric: {state.state}"}
+    similar = []
+    dc = state.attributes.get("device_class", "")
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == dc and s.entity_id != entity_id:
+            try:
+                similar.append(float(s.state))
+            except (ValueError, TypeError):
+                pass
+    if not similar:
+        return {"ok": True, "entity_id": entity_id, "current": current,
+                "note": "No similar sensors for comparison"}
+    mean = sum(similar) / len(similar)
+    std = (sum((x - mean) ** 2 for x in similar) / len(similar)) ** 0.5
+    deviation = abs(current - mean) / std if std > 0 else 0
+    is_anomaly = deviation > std_threshold
+    return {"ok": True, "entity_id": entity_id, "current": current,
+            "mean": round(mean, 2), "std": round(std, 2),
+            "deviation_sigma": round(deviation, 2),
+            "is_anomaly": is_anomaly, "threshold": std_threshold}
+
+
+async def _anomaly_detect_binary(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Detect anomalous binary sensor behavior."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    now = datetime.now(timezone.utc)
+    age_hours = (now - state.last_changed).total_seconds() / 3600
+    is_stuck = age_hours > hours
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "hours_since_change": round(age_hours, 1),
+            "threshold_hours": hours, "is_stuck": is_stuck,
+            "friendly_name": state.attributes.get("friendly_name")}
+
+
+async def _usage_pattern_lights(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze light usage patterns."""
+    lights = hass.states.async_all("light")
+    on_count = sum(1 for s in lights if s.state == "on")
+    off_count = len(lights) - on_count
+    brightest = None
+    max_br = 0
+    for s in lights:
+        br = s.attributes.get("brightness", 0) or 0
+        if br > max_br:
+            max_br = br
+            brightest = s.entity_id
+    return {"ok": True, "total_lights": len(lights), "on": on_count, "off": off_count,
+            "on_percentage": round(on_count / len(lights) * 100, 1) if lights else 0,
+            "brightest": brightest, "brightest_level": max_br}
+
+
+async def _usage_pattern_climate(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze climate usage patterns."""
+    climates = hass.states.async_all("climate")
+    modes: dict[str, int] = {}
+    temps = []
+    for s in climates:
+        modes[s.state] = modes.get(s.state, 0) + 1
+        target = s.attributes.get("temperature")
+        if target is not None:
+            try:
+                temps.append(float(target))
+            except (ValueError, TypeError):
+                pass
+    avg_target = round(sum(temps) / len(temps), 1) if temps else None
+    return {"ok": True, "total_climate": len(climates), "modes": modes,
+            "avg_target_temp": avg_target}
+
+
+async def _usage_pattern_media(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze media player usage patterns."""
+    players = hass.states.async_all("media_player")
+    states: dict[str, int] = {}
+    active = []
+    for s in players:
+        states[s.state] = states.get(s.state, 0) + 1
+        if s.state == "playing":
+            active.append({
+                "entity_id": s.entity_id,
+                "media_title": s.attributes.get("media_title"),
+                "source": s.attributes.get("source"),
+            })
+    return {"ok": True, "total_players": len(players), "states": states,
+            "playing": active}
+
+
+async def _recommend_automations(hass: HomeAssistant) -> dict[str, Any]:
+    """Recommend automation improvements."""
+    recommendations = []
+    automations = hass.states.async_all("automation")
+    disabled = [s for s in automations if s.state == "off"]
+    never_triggered = [s for s in automations
+                       if not s.attributes.get("last_triggered") or str(s.attributes.get("last_triggered")) == "None"]
+    if disabled:
+        recommendations.append({
+            "type": "cleanup",
+            "message": f"{len(disabled)} automations disabled — review and remove if no longer needed",
+            "entities": [s.entity_id for s in disabled[:5]],
+        })
+    if never_triggered:
+        recommendations.append({
+            "type": "review",
+            "message": f"{len(never_triggered)} automations never triggered — check triggers",
+            "entities": [s.entity_id for s in never_triggered[:5]],
+        })
+    motion = [s for s in hass.states.async_all("binary_sensor")
+              if s.attributes.get("device_class") == "motion"]
+    if motion and not any("motion" in str(s.attributes).lower() for s in automations):
+        recommendations.append({
+            "type": "suggestion",
+            "message": "Motion sensors found but no motion-based automations detected",
+        })
+    return {"ok": True, "count": len(recommendations), "recommendations": recommendations}
+
+
+async def _recommend_energy_savings(hass: HomeAssistant) -> dict[str, Any]:
+    """Recommend energy saving opportunities."""
+    recommendations = []
+    lights_on = [s for s in hass.states.async_all("light") if s.state == "on"]
+    if len(lights_on) > 5:
+        recommendations.append({
+            "type": "lights",
+            "message": f"{len(lights_on)} lights currently on — consider scheduling",
+            "entities": [s.entity_id for s in lights_on[:5]],
+        })
+    for s in hass.states.async_all("climate"):
+        if s.state in ("heat", "cool"):
+            target = s.attributes.get("temperature")
+            current = s.attributes.get("current_temperature")
+            if target and current:
+                try:
+                    diff = abs(float(target) - float(current))
+                    if diff > 5:
+                        recommendations.append({
+                            "type": "climate",
+                            "message": f"{s.entity_id}: large temp diff ({diff}°) — may be inefficient",
+                        })
+                except (ValueError, TypeError):
+                    pass
+    return {"ok": True, "count": len(recommendations), "recommendations": recommendations}
+
+
+async def _entity_recently_added(
+    hass: HomeAssistant, hours: int = 48,
+) -> dict[str, Any]:
+    """Find entities recently added (by last_changed proximity to now)."""
+    ent_reg = er.async_get(hass)
+    recent = []
+    for entry in ent_reg.entities.values():
+        state = hass.states.get(entry.entity_id)
+        if state:
+            age = (datetime.now(timezone.utc) - state.last_changed).total_seconds() / 3600
+            if age < hours:
+                recent.append({
+                    "entity_id": entry.entity_id,
+                    "platform": entry.platform,
+                    "hours_ago": round(age, 1),
+                })
+    recent.sort(key=lambda x: x["hours_ago"])
+    return {"ok": True, "threshold_hours": hours, "count": len(recent),
+            "entities": recent[:50]}
+
+
+async def _entity_recently_changed(
+    hass: HomeAssistant, limit: int = 20,
+) -> dict[str, Any]:
+    """Find most recently changed entities."""
+    entities = []
+    for state in hass.states.async_all():
+        entities.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "last_changed": str(state.last_changed),
+        })
+    entities.sort(key=lambda x: x["last_changed"], reverse=True)
+    return {"ok": True, "count": len(entities), "recent": entities[:limit]}
+
+
+async def _trend_numeric_direction(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Determine trend direction for a numeric entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    try:
+        current = float(state.state)
+    except (ValueError, TypeError):
+        return {"error": f"Entity state not numeric: {state.state}"}
+    similar = []
+    dc = state.attributes.get("device_class", "")
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == dc and s.entity_id != entity_id:
+            try:
+                similar.append(float(s.state))
+            except (ValueError, TypeError):
+                pass
+    avg = round(sum(similar) / len(similar), 2) if similar else current
+    if current > avg * 1.1:
+        direction = "above_average"
+    elif current < avg * 0.9:
+        direction = "below_average"
+    else:
+        direction = "normal"
+    return {"ok": True, "entity_id": entity_id, "current": current,
+            "comparison_avg": avg, "direction": direction}
+
+
+async def _trend_binary_frequency(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Analyze binary sensor trigger frequency."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    age_hours = (datetime.now(timezone.utc) - state.last_changed).total_seconds() / 3600
+    return {"ok": True, "entity_id": entity_id, "current_state": state.state,
+            "hours_in_state": round(age_hours, 1),
+            "analysis_hours": hours,
+            "friendly_name": state.attributes.get("friendly_name")}
+
+
+async def _area_environment_summary(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Get environment summary for an area."""
+    ent_reg = er.async_get(hass)
+    temp = humidity = illuminance = None
+    entities_in_area = []
+    for entry in ent_reg.entities.values():
+        if entry.area_id == area_id:
+            state = hass.states.get(entry.entity_id)
+            if state:
+                entities_in_area.append(entry.entity_id)
+                dc = state.attributes.get("device_class", "")
+                try:
+                    val = float(state.state)
+                except (ValueError, TypeError):
+                    continue
+                if dc == "temperature" and temp is None:
+                    temp = val
+                elif dc == "humidity" and humidity is None:
+                    humidity = val
+                elif dc == "illuminance" and illuminance is None:
+                    illuminance = val
+    return {"ok": True, "area_id": area_id,
+            "entity_count": len(entities_in_area),
+            "temperature": temp, "humidity": humidity, "illuminance": illuminance}
+
+
+async def _time_of_day_entity_state(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get entity state with time-of-day context."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    now = datetime.now(timezone.utc)
+    hour = now.hour
+    if 6 <= hour < 12:
+        period = "morning"
+    elif 12 <= hour < 18:
+        period = "afternoon"
+    elif 18 <= hour < 22:
+        period = "evening"
+    else:
+        period = "night"
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "time_period": period, "current_hour": hour,
+            "friendly_name": state.attributes.get("friendly_name")}
+
+
+async def _sunrise_sunset_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get sunrise/sunset info from sun entity."""
+    sun = hass.states.get("sun.sun")
+    if sun is None:
+        return {"ok": True, "note": "Sun entity not available"}
+    attrs = dict(sun.attributes)
+    return {"ok": True, "state": sun.state,
+            "next_dawn": str(attrs.get("next_dawn", "")),
+            "next_rising": str(attrs.get("next_rising", "")),
+            "next_noon": str(attrs.get("next_noon", "")),
+            "next_setting": str(attrs.get("next_setting", "")),
+            "next_dusk": str(attrs.get("next_dusk", "")),
+            "elevation": attrs.get("elevation")}
+
+
+async def _integration_entity_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Count entities per integration/platform."""
+    ent_reg = er.async_get(hass)
+    platforms: dict[str, int] = {}
+    for entry in ent_reg.entities.values():
+        platforms[entry.platform] = platforms.get(entry.platform, 0) + 1
+    sorted_platforms = dict(sorted(platforms.items(), key=lambda x: x[1], reverse=True))
+    return {"ok": True, "platform_count": len(platforms),
+            "total_entities": sum(platforms.values()),
+            "platforms": sorted_platforms}
+
+
+async def _entity_state_timeline(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get state change timeline for an entity."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        timeline = []
+        for idx, s in enumerate(items):
+            duration = None
+            if idx + 1 < len(items):
+                duration = round((items[idx + 1].last_changed - s.last_changed).total_seconds(), 1)
+            timeline.append({
+                "state": s.state, "started": str(s.last_changed),
+                "duration_seconds": duration,
+            })
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "change_count": len(timeline), "timeline": timeline[:50]}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Timeline failed: {exc}"}
+
+
+async def _entity_attribute_history(
+    hass: HomeAssistant, entity_id: str, attribute: str,
+) -> dict[str, Any]:
+    """Get history of a specific entity attribute."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    current_value = state.attributes.get(attribute)
+    return {"ok": True, "entity_id": entity_id, "attribute": attribute,
+            "current_value": current_value,
+            "note": "For full history, use recorder-based tools with hours parameter"}
+
+
+async def _trigger_list_entity_automations(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List automations that directly trigger on an entity."""
+    results = []
+    for state in hass.states.async_all("automation"):
+        triggers = state.attributes.get("trigger", [])
+        if isinstance(triggers, list):
+            for trig in triggers:
+                if isinstance(trig, dict):
+                    trig_eid = trig.get("entity_id", "")
+                    if entity_id == trig_eid or (isinstance(trig_eid, list) and entity_id in trig_eid):
+                        results.append({
+                            "automation_id": state.entity_id,
+                            "friendly_name": state.attributes.get("friendly_name"),
+                            "trigger_platform": trig.get("platform", trig.get("trigger")),
+                        })
+                        break
+    return {"ok": True, "entity_id": entity_id, "count": len(results),
+            "automations": results}
+
+
+async def _security_status_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Get comprehensive security status summary."""
+    locks = hass.states.async_all("lock")
+    locked = sum(1 for s in locks if s.state == "locked")
+    doors = [s for s in hass.states.async_all("binary_sensor")
+             if s.attributes.get("device_class") == "door"]
+    doors_open = sum(1 for s in doors if s.state == "on")
+    windows = [s for s in hass.states.async_all("binary_sensor")
+               if s.attributes.get("device_class") == "window"]
+    windows_open = sum(1 for s in windows if s.state == "on")
+    alarms = hass.states.async_all("alarm_control_panel")
+    alarm_states = {s.entity_id: s.state for s in alarms}
+    cameras = hass.states.async_all("camera")
+    secure = locked == len(locks) and doors_open == 0 and windows_open == 0
+    return {"ok": True, "secure": secure,
+            "locks": {"total": len(locks), "locked": locked, "unlocked": len(locks) - locked},
+            "doors": {"total": len(doors), "open": doors_open, "closed": len(doors) - doors_open},
+            "windows": {"total": len(windows), "open": windows_open, "closed": len(windows) - windows_open},
+            "alarms": alarm_states,
+            "cameras_total": len(cameras)}
+
+
+async def _lock_status_all(hass: HomeAssistant) -> dict[str, Any]:
+    """Get status of all locks."""
+    results = []
+    for state in hass.states.async_all("lock"):
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": state.attributes.get("friendly_name"),
+            "changed_by": state.attributes.get("changed_by"),
+            "last_changed": str(state.last_changed),
+        })
+    return {"ok": True, "count": len(results), "locks": results}
+
+
+async def _comfort_index_calculate(hass: HomeAssistant) -> dict[str, Any]:
+    """Calculate comfort index from temperature and humidity."""
+    temp_vals = []
+    humidity_vals = []
+    for state in hass.states.async_all("sensor"):
+        dc = state.attributes.get("device_class", "")
+        try:
+            val = float(state.state)
+        except (ValueError, TypeError):
+            continue
+        if dc == "temperature":
+            temp_vals.append(val)
+        elif dc == "humidity":
+            humidity_vals.append(val)
+    avg_temp = round(sum(temp_vals) / len(temp_vals), 1) if temp_vals else None
+    avg_humidity = round(sum(humidity_vals) / len(humidity_vals), 1) if humidity_vals else None
+    comfort = "unknown"
+    if avg_temp is not None and avg_humidity is not None:
+        if 20 <= avg_temp <= 25 and 30 <= avg_humidity <= 60:
+            comfort = "comfortable"
+        elif avg_temp < 18 or avg_temp > 28:
+            comfort = "uncomfortable"
+        else:
+            comfort = "moderate"
+    return {"ok": True, "avg_temperature": avg_temp,
+            "avg_humidity": avg_humidity, "comfort_level": comfort,
+            "temp_sensors": len(temp_vals), "humidity_sensors": len(humidity_vals)}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -41172,4 +41664,26 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "smart_home_health_check", "description": "Comprehensive health check with score and issues.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "entity_find_related", "description": "Find entities related by device or area.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
     {"type": "function", "function": {"name": "entity_group_by_device", "description": "Group entities by their parent device.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 80 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "anomaly_detect_numeric", "description": "Detect anomalies in numeric sensor by std deviation.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "std_threshold": {"type": "number", "default": 2.0}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "anomaly_detect_binary", "description": "Detect stuck/anomalous binary sensor.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "usage_pattern_lights", "description": "Analyze light usage patterns.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "usage_pattern_climate", "description": "Analyze climate usage patterns.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "usage_pattern_media", "description": "Analyze media player usage patterns.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "recommend_automations", "description": "Recommend automation improvements.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "recommend_energy_savings", "description": "Recommend energy saving opportunities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_recently_added", "description": "Find recently added entities.", "parameters": {"type": "object", "properties": {"hours": {"type": "integer", "default": 48}}}}},
+    {"type": "function", "function": {"name": "entity_recently_changed", "description": "Find most recently changed entities.", "parameters": {"type": "object", "properties": {"limit": {"type": "integer", "default": 20}}}}},
+    {"type": "function", "function": {"name": "trend_numeric_direction", "description": "Determine trend direction for a numeric entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "trend_binary_frequency", "description": "Analyze binary sensor trigger frequency.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "area_environment_summary", "description": "Get environment summary (temp/humidity/lux) for an area.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string"}}, "required": ["area_id"]}}},
+    {"type": "function", "function": {"name": "time_of_day_entity_state", "description": "Get entity state with time-of-day context.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "sunrise_sunset_info", "description": "Get sunrise/sunset times from sun entity.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_entity_count", "description": "Count entities per integration/platform.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_state_timeline", "description": "Get state change timeline with durations.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "entity_attribute_history", "description": "Get current value of a specific entity attribute.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "attribute": {"type": "string"}}, "required": ["entity_id", "attribute"]}}},
+    {"type": "function", "function": {"name": "trigger_list_entity_automations", "description": "List automations that trigger on an entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "security_status_summary", "description": "Comprehensive security status (locks, doors, windows, alarms).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "lock_status_all", "description": "Get status of all locks.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "comfort_index_calculate", "description": "Calculate comfort index from temperature and humidity.", "parameters": {"type": "object", "properties": {}}}},
 ]
