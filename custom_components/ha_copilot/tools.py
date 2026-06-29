@@ -8338,6 +8338,138 @@ async def _media_player_repeat_set(
     return {"ok": True, "entity_id": entity_id, "repeat": repeat}
 
 
+# ---------------------------------------------------------------------------
+# Wave 20: input_text, device_tracker, input_datetime, schedule,
+#           persistent_notification, network
+# ---------------------------------------------------------------------------
+
+
+async def _input_text_set_value(
+    hass: HomeAssistant, entity_id: str, value: str,
+) -> dict[str, Any]:
+    """Set an input_text value."""
+    try:
+        await hass.services.async_call(
+            "input_text", "set_value",
+            {"entity_id": entity_id, "value": value}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input text set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _set_device_tracker_location(
+    hass: HomeAssistant, entity_id: str,
+    location_name: str | None = None,
+    gps: list[float] | None = None,
+    gps_accuracy: int | None = None,
+    battery: int | None = None,
+) -> dict[str, Any]:
+    """Set a device tracker location."""
+    data: dict[str, Any] = {"dev_id": entity_id.replace("device_tracker.", "")}
+    if location_name:
+        data["location_name"] = location_name
+    if gps:
+        data["gps"] = gps
+    if gps_accuracy is not None:
+        data["gps_accuracy"] = gps_accuracy
+    if battery is not None:
+        data["battery"] = battery
+    try:
+        await hass.services.async_call(
+            "device_tracker", "see", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set device tracker location failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "location_name": location_name}
+
+
+async def _input_datetime_set_datetime(
+    hass: HomeAssistant, entity_id: str,
+    date: str | None = None, time: str | None = None,
+    datetime_val: str | None = None,
+) -> dict[str, Any]:
+    """Set an input_datetime value."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if datetime_val:
+        data["datetime"] = datetime_val
+    if date:
+        data["date"] = date
+    if time:
+        data["time"] = time
+    try:
+        await hass.services.async_call(
+            "input_datetime", "set_datetime", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input datetime set failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id}
+
+
+async def _schedule_get_schedule(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get schedule entity state and attributes."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Schedule entity {entity_id} not found"}
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "attributes": dict(state.attributes),
+    }
+
+
+async def _persistent_notification_create(
+    hass: HomeAssistant, message: str,
+    title: str | None = None, notification_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a persistent notification."""
+    data: dict[str, Any] = {"message": message}
+    if title:
+        data["title"] = title
+    if notification_id:
+        data["notification_id"] = notification_id
+    try:
+        await hass.services.async_call(
+            "persistent_notification", "create", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Persistent notification create failed: {exc}"}
+    return {"ok": True, "message": message, "action": "created"}
+
+
+async def _persistent_notification_dismiss(
+    hass: HomeAssistant, notification_id: str,
+) -> dict[str, Any]:
+    """Dismiss a persistent notification."""
+    try:
+        await hass.services.async_call(
+            "persistent_notification", "dismiss",
+            {"notification_id": notification_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Persistent notification dismiss failed: {exc}"}
+    return {"ok": True, "notification_id": notification_id, "action": "dismissed"}
+
+
+async def _get_network_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get network configuration info from HA."""
+    try:
+        import socket
+        hostname = socket.gethostname()
+        ip_addr = socket.gethostbyname(hostname)
+        return {
+            "ok": True,
+            "hostname": hostname,
+            "ip_address": ip_addr,
+            "ha_url": str(hass.config.config_dir),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Get network info failed: {exc}"}
+
+
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -10424,6 +10556,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 20 dispatch ---
+        if name == "input_text_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_text_set_value(
+                hass, args.get("entity_id", ""), args.get("value", ""),
+            )
+        if name == "set_device_tracker_location":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_device_tracker_location(
+                hass, args.get("entity_id", ""),
+                args.get("location_name"), args.get("gps"),
+                args.get("gps_accuracy"), args.get("battery"),
+            )
+        if name == "input_datetime_set_datetime":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_datetime_set_datetime(
+                hass, args.get("entity_id", ""),
+                args.get("date"), args.get("time"), args.get("datetime"),
+            )
+        if name == "schedule_get_schedule":
+            return await _schedule_get_schedule(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "persistent_notification_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _persistent_notification_create(
+                hass, args.get("message", ""),
+                args.get("title"), args.get("notification_id"),
+            )
+        if name == "persistent_notification_dismiss":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _persistent_notification_dismiss(
+                hass, args.get("notification_id", ""),
+            )
+        if name == "get_network_info":
+            return await _get_network_info(hass)
         # --- Wave 18 dispatch ---
         if name == "todo_add_item":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -14973,6 +15146,108 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 20 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "input_text_set_value",
+            "description": "Set an input_text value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "string"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_device_tracker_location",
+            "description": "Set a device tracker location via device_tracker.see.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "location_name": {"type": "string"},
+                    "gps": {"type": "array", "items": {"type": "number"}, "description": "[lat, lon]"},
+                    "gps_accuracy": {"type": "integer"},
+                    "battery": {"type": "integer", "description": "0-100"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_datetime_set_datetime",
+            "description": "Set an input_datetime value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "time": {"type": "string", "description": "HH:MM:SS"},
+                    "datetime": {"type": "string", "description": "YYYY-MM-DD HH:MM:SS"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "schedule_get_schedule",
+            "description": "Get schedule entity state and attributes.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "persistent_notification_create",
+            "description": "Create a persistent notification in HA.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "title": {"type": "string"},
+                    "notification_id": {"type": "string"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "persistent_notification_dismiss",
+            "description": "Dismiss a persistent notification.",
+            "parameters": {
+                "type": "object",
+                "properties": {"notification_id": {"type": "string"}},
+                "required": ["notification_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_network_info",
+            "description": "Get network/hostname info from the HA host.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
             },
         },
     },
