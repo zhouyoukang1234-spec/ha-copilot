@@ -4,11 +4,11 @@
 
 本仓库的本源是：**让操作者本身（强 AI / 外部 agent）全链路操作 Home Assistant 的底层**。这里的"智能体"是操作者自己，**不是**一个被塞进聊天框、寄生在外接模型上的弱模型。基础设施只是适配于操作者的"工具层"，操作者直接驱动它，在不断实践中操作到底、验证到底。
 
-因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（908 个工具），并经**五条本源底层**暴露给外部操作者：
+因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（1007 个工具），并经**五条本源底层**暴露给外部操作者：
 
 - **底层一 · 原生 HA 服务**：`ha_copilot.run_tool` 通用服务 + 12 个原生资源服务（`ha_copilot.discover_resources` / `ha_copilot.search_zwave_devices` 等），自动化/脚本/开发者工具可直调。每次调用自动发射 `ha_copilot_tool_called` 事件。
 - **底层二 · MCP**：鉴权的 MCP 服务器端点 `/api/ha_copilot/mcp`（JSON-RPC 2.0），任意 MCP 客户端即可发现并操作整台 HA。
-- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 908 个确定性工具。
+- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 1007 个确定性工具。
 - **底层四 · HTTP**：鉴权 HTTP 端点 `/api/ha_copilot/tools`（列目录）、`/api/ha_copilot/run_tool`（执行工具）。
 - **底层五 · WebSocket**：HA 原生 WebSocket 命令 `ha_copilot/tools`（列目录）、`ha_copilot/run_tool`（执行工具）、`ha_copilot/info`（集成状态）——前端面板和 WS 客户端的实时通道。
 
@@ -20,7 +20,7 @@
         ├── MCP 客户端 ──▶ /api/ha_copilot/mcp ────────┐
         ├── 原生 LLM API ──▶ HA 对话代理框架 ────────────┤
         ├── HA 服务 ──▶ 13 个原生服务（自动化可直调）──────┤
-        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（908 确定性工具）──▶ 运行中的 HA
+        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（1007 确定性工具）──▶ 运行中的 HA
         └── HTTP ──▶ /api/ha_copilot/run_tool ────────────┘
 ```
 

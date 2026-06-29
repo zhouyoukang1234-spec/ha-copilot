@@ -20668,6 +20668,35 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _area_turn_on_all(hass, args.get("area_id", ""))
+        # --- Wave 68 dispatch ---
+        if name == "humidifier_get_info":
+            return await _humidifier_get_info(hass, args.get("entity_id", ""))
+        if name == "water_heater_get_info":
+            return await _water_heater_get_info(hass, args.get("entity_id", ""))
+        if name == "siren_get_info":
+            return await _siren_get_info(hass, args.get("entity_id", ""))
+        if name == "button_list_all":
+            return await _button_list_all(hass)
+        if name == "number_get_info":
+            return await _number_get_info(hass, args.get("entity_id", ""))
+        if name == "select_get_options":
+            return await _select_get_options(hass, args.get("entity_id", ""))
+        if name == "select_choose_option":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _select_choose_option(hass, args.get("entity_id", ""), args.get("option", ""))
+        if name == "date_get_value":
+            return await _date_get_value(hass, args.get("entity_id", ""))
+        if name == "time_get_value":
+            return await _time_get_value(hass, args.get("entity_id", ""))
+        if name == "text_get_value":
+            return await _text_get_value(hass, args.get("entity_id", ""))
+        if name == "update_list_available":
+            return await _update_list_available(hass)
+        if name == "tag_list_all":
+            return await _tag_list_all(hass)
+        if name == "image_processing_list":
+            return await _image_processing_list(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -23798,6 +23827,247 @@ async def _area_turn_on_all(
             results.append({"entity_id": entry.entity_id, "error": str(exc)})
     return {"ok": True, "area_id": area_id, "count": len(results),
             "results": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 68 — humidifier, water_heater, siren, button, number, select, date,
+# time, text, update, tag, image_processing — cross 1000 tools
+# ---------------------------------------------------------------------------
+
+
+async def _humidifier_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get humidifier entity details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Humidifier '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "humidity": attrs.get("humidity"),
+        "current_humidity": attrs.get("current_humidity"),
+        "min_humidity": attrs.get("min_humidity"),
+        "max_humidity": attrs.get("max_humidity"),
+        "mode": attrs.get("mode"),
+        "available_modes": attrs.get("available_modes", []),
+        "supported_features": attrs.get("supported_features"),
+    }
+
+
+async def _water_heater_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get water heater entity details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Water heater '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "current_temperature": attrs.get("current_temperature"),
+        "target_temperature": attrs.get("temperature"),
+        "min_temp": attrs.get("min_temp"),
+        "max_temp": attrs.get("max_temp"),
+        "operation_mode": attrs.get("operation_mode"),
+        "operation_list": attrs.get("operation_list", []),
+        "away_mode": attrs.get("away_mode"),
+    }
+
+
+async def _siren_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get siren entity details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Siren '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "is_on": state.state == "on",
+        "available_tones": attrs.get("available_tones", []),
+        "supported_features": attrs.get("supported_features"),
+    }
+
+
+async def _button_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all button entities."""
+    buttons = hass.states.async_all("button")
+    results = []
+    for state in buttons:
+        results.append({
+            "entity_id": state.entity_id,
+            "friendly_name": state.attributes.get("friendly_name"),
+            "device_class": state.attributes.get("device_class"),
+            "last_pressed": state.state,
+        })
+    return {"ok": True, "count": len(results), "buttons": results}
+
+
+async def _number_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get number entity details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Number entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "value": float(state.state) if state.state not in ("unknown", "unavailable") else None,
+        "min": attrs.get("min"),
+        "max": attrs.get("max"),
+        "step": attrs.get("step"),
+        "mode": attrs.get("mode"),
+        "unit_of_measurement": attrs.get("unit_of_measurement"),
+    }
+
+
+async def _select_get_options(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get select entity options."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Select entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "current_option": state.state,
+        "options": attrs.get("options", []),
+    }
+
+
+async def _select_choose_option(
+    hass: HomeAssistant, entity_id: str, option: str,
+) -> dict[str, Any]:
+    """Choose an option for a select entity."""
+    try:
+        await hass.services.async_call(
+            "select", "select_option",
+            {"entity_id": entity_id, "option": option},
+        )
+        return {"ok": True, "entity_id": entity_id, "option": option}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Select choose option failed: {exc}"}
+
+
+async def _date_get_value(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get date entity value."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Date entity '{entity_id}' not found"}
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "date": state.state,
+        "friendly_name": state.attributes.get("friendly_name"),
+    }
+
+
+async def _time_get_value(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get time entity value."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Time entity '{entity_id}' not found"}
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "time": state.state,
+        "friendly_name": state.attributes.get("friendly_name"),
+    }
+
+
+async def _text_get_value(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get text entity value."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Text entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "value": state.state,
+        "min": attrs.get("min"),
+        "max": attrs.get("max"),
+        "pattern": attrs.get("pattern"),
+        "mode": attrs.get("mode"),
+    }
+
+
+async def _update_list_available(hass: HomeAssistant) -> dict[str, Any]:
+    """List all update entities with available updates."""
+    updates = hass.states.async_all("update")
+    results = []
+    for state in updates:
+        attrs = dict(state.attributes)
+        has_update = state.state == "on"
+        results.append({
+            "entity_id": state.entity_id,
+            "friendly_name": attrs.get("friendly_name"),
+            "installed_version": attrs.get("installed_version"),
+            "latest_version": attrs.get("latest_version"),
+            "has_update": has_update,
+            "release_summary": attrs.get("release_summary"),
+            "title": attrs.get("title"),
+        })
+    available = [r for r in results if r["has_update"]]
+    return {
+        "ok": True,
+        "total": len(results),
+        "available_count": len(available),
+        "updates": results,
+    }
+
+
+async def _tag_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all NFC/RFID tags."""
+    tags_data = hass.data.get("tag", {})
+    if hasattr(tags_data, "async_list_tags"):
+        tags = await tags_data.async_list_tags()
+        results = [
+            {"id": t.get("id"), "name": t.get("name", ""),
+             "last_scanned": t.get("last_scanned")}
+            for t in tags
+        ]
+        return {"ok": True, "count": len(results), "tags": results}
+    items = tags_data.get("tags", {}) if isinstance(tags_data, dict) else {}
+    results = [
+        {"id": tid, "name": tdata.get("name", "") if isinstance(tdata, dict) else ""}
+        for tid, tdata in items.items()
+    ]
+    return {"ok": True, "count": len(results), "tags": results}
+
+
+async def _image_processing_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all image processing entities."""
+    entities = hass.states.async_all("image_processing")
+    results = []
+    for state in entities:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "confidence": attrs.get("confidence"),
+        })
+    return {"ok": True, "count": len(results), "entities": results}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -35407,4 +35677,18 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "entity_set_icon", "description": "Set a custom icon for an entity in the registry. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "icon": {"type": "string", "description": "MDI icon (e.g. mdi:lightbulb)"}}, "required": ["entity_id", "icon"]}}},
     {"type": "function", "function": {"name": "area_turn_off_all", "description": "Turn off all controllable entities in an area. Write op.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string", "description": "Area ID"}}, "required": ["area_id"]}}},
     {"type": "function", "function": {"name": "area_turn_on_all", "description": "Turn on all controllable entities in an area. Write op.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string", "description": "Area ID"}}, "required": ["area_id"]}}},
+    # --- Wave 68 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "humidifier_get_info", "description": "Get humidifier entity details (humidity, modes, min/max).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Humidifier entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "water_heater_get_info", "description": "Get water heater details (temp, modes, operation list).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Water heater entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "siren_get_info", "description": "Get siren entity details (state, available tones).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Siren entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "button_list_all", "description": "List all button entities with last press time.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "number_get_info", "description": "Get number entity details (value, min, max, step, mode).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Number entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "select_get_options", "description": "Get select entity current option and available options.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Select entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "select_choose_option", "description": "Choose an option for a select entity. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Select entity ID"}, "option": {"type": "string", "description": "Option to select"}}, "required": ["entity_id", "option"]}}},
+    {"type": "function", "function": {"name": "date_get_value", "description": "Get date entity current value.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Date entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "time_get_value", "description": "Get time entity current value.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Time entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "text_get_value", "description": "Get text entity current value, min/max length, pattern.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Text entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "update_list_available", "description": "List all update entities with available updates, versions.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "tag_list_all", "description": "List all NFC/RFID tags.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "image_processing_list", "description": "List all image processing entities.", "parameters": {"type": "object", "properties": {}}}},
 ]
