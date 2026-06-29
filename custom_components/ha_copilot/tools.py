@@ -22090,6 +22090,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _dryer_cycle_status(hass)
         if name == "oven_preheat_check":
             return await _oven_preheat_check(hass)
+        # --- Wave 100 dispatch ---
+        if name == "home_cinema_power_status":
+            return await _home_cinema_power_status(hass)
+        if name == "home_cinema_input_check":
+            return await _home_cinema_input_check(hass)
+        if name == "garden_soil_moisture_check":
+            return await _garden_soil_moisture_check(hass)
+        if name == "garden_light_schedule":
+            return await _garden_light_schedule(hass)
+        if name == "package_delivery_detection":
+            return await _package_delivery_detection(hass)
+        if name == "smart_speaker_volume_check":
+            return await _smart_speaker_volume_check(hass)
+        if name == "smart_speaker_alarm_list":
+            return await _smart_speaker_alarm_list(hass)
+        if name == "humidifier_target_check":
+            return await _humidifier_target_check(hass)
+        if name == "humidifier_water_level":
+            return await _humidifier_water_level(hass)
+        if name == "garage_heater_status":
+            return await _garage_heater_status(hass)
+        if name == "bathroom_fan_run_time":
+            return await _bathroom_fan_run_time(hass)
+        if name == "bathroom_humidity_alert":
+            return await _bathroom_humidity_alert(hass)
+        if name == "doorbell_motion_frequency":
+            return await _doorbell_motion_frequency(hass)
+        if name == "bed_occupancy_check":
+            return await _bed_occupancy_check(hass)
+        if name == "vacuum_cleaning_area_check":
+            return await _vacuum_cleaning_area_check(hass)
+        if name == "integration_error_log":
+            return await _integration_error_log(hass)
+        if name == "scene_activation_ranking":
+            return await _scene_activation_ranking(hass)
+        if name == "entity_domain_distribution":
+            return await _entity_domain_distribution(hass)
+        if name == "automation_complexity_score":
+            return await _automation_complexity_score(hass)
+        if name == "config_entry_health_check":
+            return await _config_entry_health_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -37026,6 +37067,284 @@ async def _oven_preheat_check(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "devices": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 100 — HISTORIC MILESTONE — cinema, garden, package, speaker, humidifier,
+# garage heater, bathroom, doorbell motion, bed, vacuum map, integration error,
+# scene ranking, entity distribution, automation complexity, config health
+# ---------------------------------------------------------------------------
+
+
+async def _home_cinema_power_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check home cinema power status."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("projector", "receiver", "avr", "cinema", "theater",
+                                      "soundbar", "subwoofer")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "source": s.attributes.get("source"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _home_cinema_input_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check home cinema input sources."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("receiver", "avr", "cinema", "theater")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "source": s.attributes.get("source"),
+                            "source_list": s.attributes.get("source_list"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _garden_soil_moisture_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check garden soil moisture."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("garden" in name or "soil" in name) and \
+           (s.attributes.get("device_class") in ("moisture", "humidity") or "moisture" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _garden_light_schedule(hass: HomeAssistant) -> dict[str, Any]:
+    """Check garden light schedules."""
+    lights = []
+    for s in hass.states.async_all("light"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("garden", "patio", "pathway", "landscape", "deck")):
+            lights.append({"entity_id": s.entity_id, "state": s.state,
+                           "friendly_name": s.attributes.get("friendly_name")})
+    automations = []
+    for s in hass.states.async_all("automation"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("garden", "outdoor_light", "landscape", "patio_light")):
+            automations.append({"entity_id": s.entity_id, "state": s.state})
+    return {"ok": True, "lights": len(lights), "automations": len(automations),
+            "light_list": lights, "automation_list": automations}
+
+
+async def _package_delivery_detection(hass: HomeAssistant) -> dict[str, Any]:
+    """Check package delivery detection sensors."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("package", "delivery", "parcel", "mailbox")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "detected": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _smart_speaker_volume_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart speaker volumes."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("echo", "alexa", "google_home", "homepod", "sonos", "speaker")):
+            vol = s.attributes.get("volume_level")
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "volume": round(vol * 100) if isinstance(vol, (int, float)) else None,
+                            "muted": s.attributes.get("is_volume_muted"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "speakers": results}
+
+
+async def _smart_speaker_alarm_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List smart speaker alarms/timers."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("alexa_alarm", "google_alarm", "next_alarm")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "alarms": results}
+
+
+async def _humidifier_target_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check humidifier target humidity."""
+    results = []
+    for s in hass.states.async_all("humidifier"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "target_humidity": s.attributes.get("humidity"),
+                        "current_humidity": s.attributes.get("current_humidity"),
+                        "mode": s.attributes.get("mode"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "humidifiers": results}
+
+
+async def _humidifier_water_level(hass: HomeAssistant) -> dict[str, Any]:
+    """Check humidifier water level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "humidifier" in name and ("water" in name or "tank" in name or "level" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _garage_heater_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check garage heater status."""
+    results = []
+    for s in hass.states.async_all("climate"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "garage" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "temperature": s.attributes.get("temperature"),
+                            "current_temperature": s.attributes.get("current_temperature"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("switch"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "garage" in name and "heat" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _bathroom_fan_run_time(hass: HomeAssistant) -> dict[str, Any]:
+    """Check bathroom fan run time."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("fan"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "bathroom" in name or "bath" in name or "exhaust" in name:
+            if s.state == "on":
+                hours = (now - s.last_changed).total_seconds() / 3600
+                results.append({"entity_id": s.entity_id,
+                                "hours_running": round(hours, 1),
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "running_count": len(results), "fans": results}
+
+
+async def _bathroom_humidity_alert(hass: HomeAssistant) -> dict[str, Any]:
+    """Check bathroom humidity alerts."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("bathroom" in name or "bath" in name or "shower" in name) and \
+           s.attributes.get("device_class") == "humidity":
+            try:
+                val = float(s.state)
+                results.append({"entity_id": s.entity_id, "humidity": val,
+                                "high": val > 70,
+                                "unit": s.attributes.get("unit_of_measurement")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _doorbell_motion_frequency(hass: HomeAssistant) -> dict[str, Any]:
+    """Check doorbell motion detection frequency."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "doorbell" in name and s.attributes.get("device_class") == "motion":
+            hours = (now - s.last_changed).total_seconds() / 3600
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "hours_since_motion": round(hours, 1),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _bed_occupancy_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check bed occupancy sensors."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("bed", "sleep", "mattress")):
+            if s.attributes.get("device_class") in ("occupancy", "presence", "motion"):
+                results.append({"entity_id": s.entity_id, "occupied": s.state == "on",
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _vacuum_cleaning_area_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check vacuum cleaning area stats."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("vacuum", "roborock")) and \
+           any(kw in name for kw in ("area", "clean_area", "square")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _integration_error_log(hass: HomeAssistant) -> dict[str, Any]:
+    """Check integration error status."""
+    entries = hass.config_entries.async_entries()
+    errors = []
+    for e in entries:
+        state = getattr(e, "state", None)
+        if state and str(state) in ("setup_error", "setup_retry"):
+            errors.append({"domain": e.domain, "title": e.title, "state": str(state)})
+    return {"ok": True, "error_count": len(errors), "errors": errors}
+
+
+async def _scene_activation_ranking(hass: HomeAssistant) -> dict[str, Any]:
+    """Rank scenes by recent activation."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("scene"):
+        hours = (now - s.last_changed).total_seconds() / 3600
+        results.append({"entity_id": s.entity_id,
+                        "hours_since_activation": round(hours, 1),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    results.sort(key=lambda x: x["hours_since_activation"])
+    return {"ok": True, "count": len(results), "ranking": results}
+
+
+async def _entity_domain_distribution(hass: HomeAssistant) -> dict[str, Any]:
+    """Show entity distribution by domain."""
+    domains: dict[str, int] = {}
+    for s in hass.states.async_all():
+        d = s.entity_id.split(".")[0]
+        domains[d] = domains.get(d, 0) + 1
+    ranking = sorted(domains.items(), key=lambda x: x[1], reverse=True)
+    return {"ok": True, "domain_count": len(ranking), "total_entities": sum(domains.values()),
+            "distribution": [{"domain": d, "count": c} for d, c in ranking]}
+
+
+async def _automation_complexity_score(hass: HomeAssistant) -> dict[str, Any]:
+    """Score automation complexity."""
+    total = enabled = disabled = 0
+    for s in hass.states.async_all("automation"):
+        total += 1
+        if s.state == "on":
+            enabled += 1
+        else:
+            disabled += 1
+    score = round(total * 0.5 + enabled * 0.3 + disabled * 0.2, 1) if total else 0
+    return {"ok": True, "total": total, "enabled": enabled, "disabled": disabled,
+            "complexity_score": score}
+
+
+async def _config_entry_health_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check config entry health."""
+    entries = hass.config_entries.async_entries()
+    healthy = errored = 0
+    details = []
+    for e in entries:
+        state = str(getattr(e, "state", "loaded"))
+        if state in ("setup_error", "setup_retry"):
+            errored += 1
+        else:
+            healthy += 1
+        details.append({"domain": e.domain, "title": e.title, "state": state})
+    return {"ok": True, "total": len(entries), "healthy": healthy, "errored": errored,
+            "entries": details[:20]}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -49322,4 +49641,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "dishwasher_cycle_status", "description": "Check dishwasher cycle.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "dryer_cycle_status", "description": "Check dryer cycle.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "oven_preheat_check", "description": "Check oven preheat.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 100 TOOL_SPECS — HISTORIC MILESTONE ---
+    {"type": "function", "function": {"name": "home_cinema_power_status", "description": "Check cinema power.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_cinema_input_check", "description": "Check cinema inputs.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "garden_soil_moisture_check", "description": "Check soil moisture.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "garden_light_schedule", "description": "Check garden lights.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "package_delivery_detection", "description": "Check package delivery.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_speaker_volume_check", "description": "Check speaker volume.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_speaker_alarm_list", "description": "List speaker alarms.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "humidifier_target_check", "description": "Check humidifier target.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "humidifier_water_level", "description": "Check humidifier water.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "garage_heater_status", "description": "Check garage heater.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "bathroom_fan_run_time", "description": "Check bath fan time.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "bathroom_humidity_alert", "description": "Check bath humidity.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "doorbell_motion_frequency", "description": "Check doorbell motion.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "bed_occupancy_check", "description": "Check bed occupancy.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "vacuum_cleaning_area_check", "description": "Check vacuum area.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_error_log", "description": "Check integration errors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "scene_activation_ranking", "description": "Rank scene activation.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_domain_distribution", "description": "Entity domain stats.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_complexity_score", "description": "Score automation complexity.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "config_entry_health_check", "description": "Check config health.", "parameters": {"type": "object", "properties": {}}}},
 ]
