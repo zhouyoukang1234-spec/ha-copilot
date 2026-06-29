@@ -20697,6 +20697,51 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _tag_list_all(hass)
         if name == "image_processing_list":
             return await _image_processing_list(hass)
+        # --- Wave 69 dispatch ---
+        if name == "lawn_mower_get_info":
+            return await _lawn_mower_get_info(hass, args.get("entity_id", ""))
+        if name == "valve_get_info":
+            return await _valve_get_info(hass, args.get("entity_id", ""))
+        if name == "calendar_get_upcoming":
+            return await _calendar_get_upcoming(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "weather_get_hourly_forecast":
+            return await _weather_get_hourly_forecast(hass, args.get("entity_id", ""))
+        if name == "recorder_get_statistics_during":
+            return await _recorder_get_statistics_during(hass, args.get("statistic_id", ""), args.get("hours", 24))
+        if name == "person_list_all":
+            return await _person_list_all(hass)
+        if name == "blueprint_list_automations":
+            return await _blueprint_list_automations(hass)
+        if name == "blueprint_list_scripts":
+            return await _blueprint_list_scripts(hass)
+        if name == "entity_list_by_platform":
+            return await _entity_list_by_platform(hass, args.get("platform", ""))
+        if name == "supervisor_get_info":
+            return await _supervisor_get_info(hass)
+        if name == "hardware_get_info":
+            return await _hardware_get_info(hass)
+        if name == "storage_get_info":
+            return await _storage_get_info(hass)
+        if name == "lovelace_get_dashboards":
+            return await _lovelace_get_dashboards(hass)
+        if name == "lovelace_get_config":
+            return await _lovelace_get_config(hass, args.get("url_path"))
+        if name == "entity_attribute_diff":
+            return await _entity_attribute_diff(hass, args.get("entity_id_a", ""), args.get("entity_id_b", ""))
+        if name == "service_count_by_domain":
+            return await _service_count_by_domain(hass)
+        if name == "automation_list_using_blueprint":
+            return await _automation_list_using_blueprint(hass, args.get("blueprint_path", ""))
+        if name == "camera_list_all":
+            return await _camera_list_all(hass)
+        if name == "geo_location_list":
+            return await _geo_location_list(hass)
+        if name == "proximity_get_info":
+            return await _proximity_get_info(hass, args.get("entity_id", ""))
+        if name == "alert_list_all":
+            return await _alert_list_all(hass)
+        if name == "remote_list_all":
+            return await _remote_list_all(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -24068,6 +24113,478 @@ async def _image_processing_list(hass: HomeAssistant) -> dict[str, Any]:
             "confidence": attrs.get("confidence"),
         })
     return {"ok": True, "count": len(results), "entities": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 69 — lawn_mower, valve, calendar upcoming, weather hourly, recorder
+# statistics, person list, blueprints, entity by platform, supervisor,
+# hardware, storage, lovelace, entity diff, service counts, camera, geo,
+# proximity, alert, remote
+# ---------------------------------------------------------------------------
+
+
+async def _lawn_mower_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get lawn mower entity details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Lawn mower '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "activity": attrs.get("activity"),
+        "supported_features": attrs.get("supported_features"),
+    }
+
+
+async def _valve_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get valve entity details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Valve '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "current_position": attrs.get("current_position"),
+        "is_closing": attrs.get("is_closing"),
+        "is_opening": attrs.get("is_opening"),
+        "supported_features": attrs.get("supported_features"),
+    }
+
+
+async def _calendar_get_upcoming(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get upcoming calendar events within a time window."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Calendar '{entity_id}' not found"}
+    try:
+        start = datetime.now(timezone.utc)
+        end = start + timedelta(hours=hours)
+        from homeassistant.components.calendar import async_get_events
+        events = await async_get_events(hass, entity_id, start, end)
+        results = []
+        for ev in events:
+            results.append({
+                "summary": getattr(ev, "summary", ""),
+                "start": str(getattr(ev, "start", "")),
+                "end": str(getattr(ev, "end", "")),
+                "description": getattr(ev, "description", ""),
+                "location": getattr(ev, "location", ""),
+            })
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "count": len(results), "events": results[:100]}
+    except ImportError:
+        attrs = dict(state.attributes)
+        return {
+            "ok": True,
+            "entity_id": entity_id,
+            "message": attrs.get("message", state.state),
+            "start_time": attrs.get("start_time"),
+            "end_time": attrs.get("end_time"),
+            "all_day": attrs.get("all_day"),
+            "description": attrs.get("description"),
+            "location": attrs.get("location"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Calendar upcoming failed: {exc}"}
+
+
+async def _weather_get_hourly_forecast(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get hourly weather forecast."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Weather '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    forecast = attrs.get("forecast", [])
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "current": {
+            "condition": state.state,
+            "temperature": attrs.get("temperature"),
+            "humidity": attrs.get("humidity"),
+            "wind_speed": attrs.get("wind_speed"),
+            "wind_bearing": attrs.get("wind_bearing"),
+            "pressure": attrs.get("pressure"),
+        },
+        "hourly_count": len(forecast),
+        "forecast": forecast[:48],
+    }
+
+
+async def _recorder_get_statistics_during(
+    hass: HomeAssistant, statistic_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get recorder statistics for a statistic_id over a period."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+        start = datetime.now(timezone.utc) - timedelta(hours=hours)
+        end = datetime.now(timezone.utc)
+        stats = await hass.async_add_executor_job(
+            statistics_during_period, hass, start, end, {statistic_id}, "hour", None, {"mean", "min", "max", "sum"},
+        )
+        data = stats.get(statistic_id, [])
+        return {"ok": True, "statistic_id": statistic_id, "hours": hours,
+                "count": len(data), "statistics": data[:200]}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder statistics failed: {exc}"}
+
+
+async def _person_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all person entities with their state and trackers."""
+    persons = hass.states.async_all("person")
+    results = []
+    for state in persons:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "source": attrs.get("source"),
+            "user_id": attrs.get("user_id"),
+            "device_trackers": attrs.get("device_trackers", []),
+            "latitude": attrs.get("latitude"),
+            "longitude": attrs.get("longitude"),
+        })
+    return {"ok": True, "count": len(results), "persons": results}
+
+
+async def _blueprint_list_automations(hass: HomeAssistant) -> dict[str, Any]:
+    """List available automation blueprints."""
+    try:
+        config_dir = hass.config.config_dir
+        bp_dir = os.path.join(config_dir, "blueprints", "automation")
+
+        def _list():
+            results = []
+            if not os.path.isdir(bp_dir):
+                return results
+            for root, _dirs, files in os.walk(bp_dir):
+                for f in files:
+                    if f.endswith((".yaml", ".yml")):
+                        rel = os.path.relpath(os.path.join(root, f), bp_dir)
+                        results.append(rel)
+            return results
+
+        items = await hass.async_add_executor_job(_list)
+        return {"ok": True, "count": len(items), "blueprints": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Blueprint list failed: {exc}"}
+
+
+async def _blueprint_list_scripts(hass: HomeAssistant) -> dict[str, Any]:
+    """List available script blueprints."""
+    try:
+        config_dir = hass.config.config_dir
+        bp_dir = os.path.join(config_dir, "blueprints", "script")
+
+        def _list():
+            results = []
+            if not os.path.isdir(bp_dir):
+                return results
+            for root, _dirs, files in os.walk(bp_dir):
+                for f in files:
+                    if f.endswith((".yaml", ".yml")):
+                        rel = os.path.relpath(os.path.join(root, f), bp_dir)
+                        results.append(rel)
+            return results
+
+        items = await hass.async_add_executor_job(_list)
+        return {"ok": True, "count": len(items), "blueprints": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Blueprint list failed: {exc}"}
+
+
+async def _entity_list_by_platform(
+    hass: HomeAssistant, platform: str,
+) -> dict[str, Any]:
+    """List all entities from a specific integration platform."""
+    reg = er.async_get(hass)
+    results = []
+    for entry in reg.entities.values():
+        if entry.platform == platform:
+            state = hass.states.get(entry.entity_id)
+            results.append({
+                "entity_id": entry.entity_id,
+                "domain": entry.domain,
+                "name": entry.name or entry.original_name,
+                "state": state.state if state else None,
+            })
+    return {"ok": True, "platform": platform, "count": len(results),
+            "entities": results[:500]}
+
+
+async def _supervisor_get_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Supervisor info via Supervisor API."""
+    try:
+        supervisor_data = hass.data.get("hassio")
+        if not supervisor_data:
+            return {"error": "Supervisor not available"}
+        return {"ok": True, "data": str(supervisor_data)[:5000]}
+    except ImportError:
+        return {"error": "Supervisor component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Supervisor info failed: {exc}"}
+
+
+async def _hardware_get_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get hardware info (CPU, memory, architecture)."""
+    try:
+        import platform as plat
+        import psutil
+        return {
+            "ok": True,
+            "system": plat.system(),
+            "machine": plat.machine(),
+            "processor": plat.processor(),
+            "python_version": plat.python_version(),
+            "cpu_count": psutil.cpu_count(),
+            "cpu_freq": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None,
+            "total_memory_gb": round(psutil.virtual_memory().total / (1024**3), 2),
+        }
+    except ImportError:
+        import platform as plat
+        return {
+            "ok": True,
+            "system": plat.system(),
+            "machine": plat.machine(),
+            "processor": plat.processor(),
+            "python_version": plat.python_version(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Hardware info failed: {exc}"}
+
+
+async def _storage_get_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get storage/disk info for HA config directory."""
+    try:
+        import psutil
+        usage = psutil.disk_usage(hass.config.config_dir)
+        return {
+            "ok": True,
+            "path": hass.config.config_dir,
+            "total_gb": round(usage.total / (1024**3), 2),
+            "used_gb": round(usage.used / (1024**3), 2),
+            "free_gb": round(usage.free / (1024**3), 2),
+            "percent": usage.percent,
+        }
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Storage info failed: {exc}"}
+
+
+async def _lovelace_get_dashboards(hass: HomeAssistant) -> dict[str, Any]:
+    """List Lovelace dashboards."""
+    lovelace_data = hass.data.get("lovelace", {})
+    dashboards = []
+    if hasattr(lovelace_data, "dashboards"):
+        for url_path, dashboard in lovelace_data.dashboards.items():
+            dashboards.append({
+                "url_path": url_path,
+                "title": getattr(dashboard, "title", ""),
+                "mode": getattr(dashboard, "mode", ""),
+            })
+    elif isinstance(lovelace_data, dict):
+        for key, val in lovelace_data.items():
+            dashboards.append({"url_path": key, "data": str(val)[:200]})
+    return {"ok": True, "count": len(dashboards), "dashboards": dashboards}
+
+
+async def _lovelace_get_config(
+    hass: HomeAssistant, url_path: str | None = None,
+) -> dict[str, Any]:
+    """Get Lovelace dashboard config (default or specific)."""
+    try:
+        config_dir = hass.config.config_dir
+        if url_path:
+            path = os.path.join(config_dir, f"lovelace-{url_path}.yaml")
+        else:
+            path = os.path.join(config_dir, "ui-lovelace.yaml")
+
+        def _read():
+            with open(path, encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+        config = await hass.async_add_executor_job(_read)
+        return {"ok": True, "url_path": url_path or "default",
+                "views": len(config.get("views", [])) if isinstance(config, dict) else 0,
+                "config": config}
+    except FileNotFoundError:
+        return {"error": f"Lovelace config file not found for '{url_path or 'default'}'"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Lovelace config failed: {exc}"}
+
+
+async def _entity_attribute_diff(
+    hass: HomeAssistant, entity_id_a: str, entity_id_b: str,
+) -> dict[str, Any]:
+    """Compare attributes of two entities showing differences."""
+    state_a = hass.states.get(entity_id_a)
+    state_b = hass.states.get(entity_id_b)
+    if state_a is None:
+        return {"error": f"Entity '{entity_id_a}' not found"}
+    if state_b is None:
+        return {"error": f"Entity '{entity_id_b}' not found"}
+    attrs_a = dict(state_a.attributes)
+    attrs_b = dict(state_b.attributes)
+    all_keys = sorted(set(list(attrs_a.keys()) + list(attrs_b.keys())))
+    diffs = []
+    for key in all_keys:
+        val_a = attrs_a.get(key)
+        val_b = attrs_b.get(key)
+        if val_a != val_b:
+            diffs.append({"attribute": key, "a": val_a, "b": val_b})
+    return {
+        "ok": True,
+        "entity_a": entity_id_a,
+        "entity_b": entity_id_b,
+        "state_a": state_a.state,
+        "state_b": state_b.state,
+        "diff_count": len(diffs),
+        "diffs": diffs,
+    }
+
+
+async def _service_count_by_domain(hass: HomeAssistant) -> dict[str, Any]:
+    """Count available services grouped by domain."""
+    services = hass.services.async_services()
+    counts = {}
+    total = 0
+    for domain, svcs in services.items():
+        counts[domain] = len(svcs)
+        total += len(svcs)
+    return {"ok": True, "total": total,
+            "counts": dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))}
+
+
+async def _automation_list_using_blueprint(
+    hass: HomeAssistant, blueprint_path: str,
+) -> dict[str, Any]:
+    """List automations that use a specific blueprint."""
+    try:
+        config_dir = hass.config.config_dir
+        path = os.path.join(config_dir, "automations.yaml")
+
+        def _search():
+            with open(path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, list):
+                return []
+            results = []
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                use_bp = item.get("use_blueprint", {})
+                if isinstance(use_bp, dict) and use_bp.get("path") == blueprint_path:
+                    results.append({
+                        "id": item.get("id"),
+                        "alias": item.get("alias"),
+                        "blueprint_path": blueprint_path,
+                    })
+            return results
+
+        items = await hass.async_add_executor_job(_search)
+        return {"ok": True, "blueprint_path": blueprint_path,
+                "count": len(items), "automations": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation blueprint search failed: {exc}"}
+
+
+async def _camera_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all camera entities."""
+    cameras = hass.states.async_all("camera")
+    results = []
+    for state in cameras:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "brand": attrs.get("brand"),
+            "model": attrs.get("model_name"),
+            "is_streaming": state.state == "streaming",
+        })
+    return {"ok": True, "count": len(results), "cameras": results}
+
+
+async def _geo_location_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all geo_location entities."""
+    entities = hass.states.async_all("geo_location")
+    results = []
+    for state in entities:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "source": attrs.get("source"),
+            "latitude": attrs.get("latitude"),
+            "longitude": attrs.get("longitude"),
+            "distance": attrs.get("distance"),
+        })
+    return {"ok": True, "count": len(results), "locations": results}
+
+
+async def _proximity_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get proximity entity info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Proximity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "nearest": attrs.get("nearest"),
+        "dir_of_travel": attrs.get("dir_of_travel"),
+        "unit_of_measurement": attrs.get("unit_of_measurement"),
+    }
+
+
+async def _alert_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all alert entities."""
+    alerts = hass.states.async_all("alert")
+    results = []
+    for state in alerts:
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": state.attributes.get("friendly_name"),
+        })
+    return {"ok": True, "count": len(results), "alerts": results}
+
+
+async def _remote_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all remote entities."""
+    remotes = hass.states.async_all("remote")
+    results = []
+    for state in remotes:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "current_activity": attrs.get("current_activity"),
+            "activity_list": attrs.get("activity_list", []),
+        })
+    return {"ok": True, "count": len(results), "remotes": results}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -35691,4 +36208,27 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "update_list_available", "description": "List all update entities with available updates, versions.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "tag_list_all", "description": "List all NFC/RFID tags.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "image_processing_list", "description": "List all image processing entities.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 69 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "lawn_mower_get_info", "description": "Get lawn mower entity details (state, activity).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Lawn mower entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "valve_get_info", "description": "Get valve entity details (position, opening/closing state).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Valve entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "calendar_get_upcoming", "description": "Get upcoming calendar events within a time window.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Calendar entity ID"}, "hours": {"type": "integer", "description": "Hours ahead (default 24)", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "weather_get_hourly_forecast", "description": "Get hourly weather forecast with current conditions.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Weather entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "recorder_get_statistics_during", "description": "Get recorder statistics for a statistic over a period (mean, min, max, sum).", "parameters": {"type": "object", "properties": {"statistic_id": {"type": "string", "description": "Statistic ID"}, "hours": {"type": "integer", "description": "Hours to look back (default 24)", "default": 24}}, "required": ["statistic_id"]}}},
+    {"type": "function", "function": {"name": "person_list_all", "description": "List all person entities with location and trackers.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "blueprint_list_automations", "description": "List available automation blueprints.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "blueprint_list_scripts", "description": "List available script blueprints.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_list_by_platform", "description": "List all entities from a specific integration platform.", "parameters": {"type": "object", "properties": {"platform": {"type": "string", "description": "Platform name (e.g. mqtt, zha, hue)"}}, "required": ["platform"]}}},
+    {"type": "function", "function": {"name": "supervisor_get_info", "description": "Get HA Supervisor info (if running HA OS).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "hardware_get_info", "description": "Get hardware info (CPU, memory, architecture, Python version).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "storage_get_info", "description": "Get disk storage info for HA config directory.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "lovelace_get_dashboards", "description": "List Lovelace dashboards.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "lovelace_get_config", "description": "Get Lovelace dashboard config (default or specific).", "parameters": {"type": "object", "properties": {"url_path": {"type": "string", "description": "Dashboard URL path (omit for default)"}}}}},
+    {"type": "function", "function": {"name": "entity_attribute_diff", "description": "Compare attributes of two entities showing differences.", "parameters": {"type": "object", "properties": {"entity_id_a": {"type": "string", "description": "First entity ID"}, "entity_id_b": {"type": "string", "description": "Second entity ID"}}, "required": ["entity_id_a", "entity_id_b"]}}},
+    {"type": "function", "function": {"name": "service_count_by_domain", "description": "Count available services grouped by domain.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_list_using_blueprint", "description": "List automations that use a specific blueprint.", "parameters": {"type": "object", "properties": {"blueprint_path": {"type": "string", "description": "Blueprint path"}}, "required": ["blueprint_path"]}}},
+    {"type": "function", "function": {"name": "camera_list_all", "description": "List all camera entities with state and model info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "geo_location_list", "description": "List all geo_location entities with coordinates.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "proximity_get_info", "description": "Get proximity entity info (nearest person, direction).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Proximity entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "alert_list_all", "description": "List all alert entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "remote_list_all", "description": "List all remote entities with activities.", "parameters": {"type": "object", "properties": {}}}},
 ]
