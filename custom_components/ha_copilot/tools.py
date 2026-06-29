@@ -8339,6 +8339,118 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 55: vacuum clean spot, event entity, text, date/time entity,
+#           todo list lists
+# ---------------------------------------------------------------------------
+
+
+async def _vacuum_clean_spot(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Command vacuum to clean spot."""
+    try:
+        await hass.services.async_call(
+            "vacuum", "clean_spot",
+            {"entity_id": entity_id},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum clean spot failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "clean_spot"}
+
+
+async def _event_entity_get_last(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get the last event from an event entity."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "state": state.state,
+            "event_type": state.attributes.get("event_type"),
+            "event_types": state.attributes.get("event_types", []),
+            "last_changed": str(state.last_changed),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Event entity get last failed: {exc}"}
+
+
+async def _text_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all text entities."""
+    try:
+        states = hass.states.async_all("text")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "min": s.attributes.get("min", 0),
+             "max": s.attributes.get("max", 100),
+             "mode": s.attributes.get("mode", "text")}
+            for s in states
+        ]
+        return {"ok": True, "texts": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Text list failed: {exc}"}
+
+
+async def _date_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all date entities."""
+    try:
+        states = hass.states.async_all("date")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "dates": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Date list failed: {exc}"}
+
+
+async def _time_entity_set_value(
+    hass: HomeAssistant, entity_id: str, time: str,
+) -> dict[str, Any]:
+    """Set value for a time entity."""
+    try:
+        await hass.services.async_call(
+            "time", "set_value",
+            {"entity_id": entity_id, "time": time},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Time entity set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "time": time}
+
+
+async def _datetime_entity_set_value(
+    hass: HomeAssistant, entity_id: str, datetime_val: str,
+) -> dict[str, Any]:
+    """Set value for a datetime entity."""
+    try:
+        await hass.services.async_call(
+            "datetime", "set_value",
+            {"entity_id": entity_id, "datetime": datetime_val},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Datetime entity set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "datetime": datetime_val}
+
+
+async def _todo_list_lists(hass: HomeAssistant) -> dict[str, Any]:
+    """List all to-do list entities."""
+    try:
+        states = hass.states.async_all("todo")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "lists": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo list lists failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 54: state advanced, service call with response, webhook unregister,
 #           addon management, system metrics
 # ---------------------------------------------------------------------------
@@ -16553,6 +16665,31 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 55 dispatch ---
+        if name == "vacuum_clean_spot":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_clean_spot(hass, args.get("entity_id", ""))
+        if name == "event_entity_get_last":
+            return await _event_entity_get_last(hass, args.get("entity_id", ""))
+        if name == "text_list":
+            return await _text_list(hass)
+        if name == "date_list":
+            return await _date_list(hass)
+        if name == "time_entity_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _time_entity_set_value(
+                hass, args.get("entity_id", ""), args.get("time", ""),
+            )
+        if name == "datetime_entity_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _datetime_entity_set_value(
+                hass, args.get("entity_id", ""), args.get("datetime", ""),
+            )
+        if name == "todo_list_lists":
+            return await _todo_list_lists(hass)
         # --- Wave 54 dispatch ---
         if name == "state_changed_recent":
             return await _state_changed_recent(
@@ -22742,6 +22879,85 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 55 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_clean_spot",
+            "description": "Command vacuum to clean spot.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "event_entity_get_last",
+            "description": "Get the last event from an event entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "text_list",
+            "description": "List all text entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "date_list",
+            "description": "List all date entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "time_entity_set_value",
+            "description": "Set value for a time entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "time": {"type": "string", "description": "Time in HH:MM:SS format"},
+                },
+                "required": ["entity_id", "time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "datetime_entity_set_value",
+            "description": "Set value for a datetime entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "datetime": {"type": "string", "description": "ISO 8601 datetime string"},
+                },
+                "required": ["entity_id", "datetime"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_list_lists",
+            "description": "List all to-do list entities.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 54 TOOL_SPECS ---
