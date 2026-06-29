@@ -4,7 +4,7 @@ native LLM API (:mod:`homeassistant.helpers.llm`).
 Registering here means *any* conversation agent configured in Home Assistant
 (OpenAI, Anthropic, Google, Ollama / local models, the built-in Assist, ...)
 can select **HA-Copilot** as its "control" API and immediately gains the full
-catalog of 119 deterministic tools — without each provider needing our custom
+catalog of 142 deterministic tools — without each provider needing our custom
 HTTP / MCP endpoints. The same :data:`tools.TOOL_SPECS` remains the single
 source of truth shared by the ``run_tool`` service, the HTTP surface, the MCP
 server, and this native API, so the four routes never drift.

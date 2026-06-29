@@ -2,11 +2,14 @@
 
 HA-Copilot bundles **no model** and calls **no external inference endpoint**. It
 exposes the full Home Assistant operating surface as one deterministic tool layer
-(:mod:`tools`), reachable through two foundations:
+(:mod:`tools`, 142 tools), reachable through four foundations:
 
-* Direct — the ``ha_copilot.run_tool`` service and the authenticated HTTP
-  endpoints ``/api/ha_copilot/tools`` and ``/api/ha_copilot/run_tool``.
-* MCP — the authenticated MCP server endpoint ``/api/ha_copilot/mcp``.
+* HA Services — ``ha_copilot.run_tool`` (generic) + 12 native resource services.
+* MCP — the authenticated endpoint ``/api/ha_copilot/mcp`` (JSON-RPC 2.0).
+* Native LLM API — registered via ``homeassistant.helpers.llm``, any conversation
+  agent (OpenAI / Anthropic / Google / Ollama / local) selects HA-Copilot as its
+  control API and gains all 142 deterministic tools.
+* HTTP — ``/api/ha_copilot/tools`` and ``/api/ha_copilot/run_tool``.
 
 The agent is always external (any MCP client / operator). Setup via
 configuration.yaml is optional and only carries safety toggles:
