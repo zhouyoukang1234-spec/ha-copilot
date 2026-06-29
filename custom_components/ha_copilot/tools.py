@@ -20901,6 +20901,85 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _system_reload_core(hass)
+        # --- Wave 73 dispatch ---
+        if name == "input_datetime_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_datetime_set_value(hass, args.get("entity_id", ""), args.get("value", ""))
+        if name == "input_boolean_set_state":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_boolean_set_state(hass, args.get("entity_id", ""), args.get("state", "on"))
+        if name == "vacuum_get_info":
+            return await _vacuum_get_info(hass, args.get("entity_id", ""))
+        if name == "fan_set_speed":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _fan_set_speed(hass, args.get("entity_id", ""), args.get("percentage", 50))
+        if name == "media_player_pause":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_pause(hass, args.get("entity_id", ""))
+        if name == "media_player_resume":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_resume(hass, args.get("entity_id", ""))
+        if name == "media_player_next_track":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_next_track(hass, args.get("entity_id", ""))
+        if name == "media_player_volume_set":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_volume_set(hass, args.get("entity_id", ""), args.get("volume", 0.5))
+        if name == "scene_create_from_current":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _scene_create_from_current(hass, args.get("name", ""), args.get("entity_ids", []))
+        if name == "script_list_with_fields":
+            return await _script_list_with_fields(hass)
+        if name == "config_flow_start":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _config_flow_start(hass, args.get("domain", ""))
+        if name == "entity_list_by_area_domain":
+            return await _entity_list_by_area_domain(hass, args.get("area_id", ""), args.get("domain", ""))
+        if name == "entity_rename_friendly":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_rename_friendly(hass, args.get("entity_id", ""), args.get("name", ""))
+        if name == "entity_move_to_area":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_move_to_area(hass, args.get("entity_id", ""), args.get("area_id", ""))
+        if name == "device_list_by_area":
+            return await _device_list_by_area(hass, args.get("area_id", ""))
+        if name == "device_list_by_manufacturer":
+            return await _device_list_by_manufacturer(hass, args.get("manufacturer", ""))
+        if name == "device_get_diagnostics":
+            return await _device_get_diagnostics(hass, args.get("device_id", ""))
+        if name == "area_set_icon":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _area_set_icon(hass, args.get("area_id", ""), args.get("icon", ""))
+        if name == "automation_toggle_batch":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_toggle_batch(hass, args.get("entity_ids", []))
+        if name == "script_create_simple":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _script_create_simple(hass, args.get("alias", ""), args.get("sequence", []))
+        if name == "sensor_list_numeric":
+            return await _sensor_list_numeric(hass)
+        if name == "sensor_compare_values":
+            return await _sensor_compare_values(hass, args.get("entity_id_a", ""), args.get("entity_id_b", ""))
+        if name == "history_peak_detect":
+            return await _history_peak_detect(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "history_min_max_time":
+            return await _history_min_max_time(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "system_config_summary":
+            return await _system_config_summary(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -26287,6 +26366,466 @@ async def _system_reload_core(hass: HomeAssistant) -> dict[str, Any]:
         return {"ok": True, "action": "reload_core_config"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Core reload failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 73 — helper writes, vacuum, fan speed, media player controls, scene
+# creation, script fields, config flow, entity/device/area management,
+# sensor comparison, history peaks, system config summary
+# ---------------------------------------------------------------------------
+
+
+async def _input_datetime_set_value(
+    hass: HomeAssistant, entity_id: str, value: str,
+) -> dict[str, Any]:
+    """Set input_datetime value (date, time, or datetime string)."""
+    try:
+        data: dict[str, Any] = {"entity_id": entity_id}
+        if "T" in value or " " in value:
+            data["datetime"] = value
+        elif ":" in value:
+            data["time"] = value
+        else:
+            data["date"] = value
+        await hass.services.async_call("input_datetime", "set_datetime", data)
+        return {"ok": True, "entity_id": entity_id, "value": value}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"input_datetime set failed: {exc}"}
+
+
+async def _input_boolean_set_state(
+    hass: HomeAssistant, entity_id: str, state: str = "on",
+) -> dict[str, Any]:
+    """Set input_boolean to on or off."""
+    try:
+        service = "turn_on" if state == "on" else "turn_off"
+        await hass.services.async_call("input_boolean", service, {"entity_id": entity_id})
+        return {"ok": True, "entity_id": entity_id, "state": state}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"input_boolean set failed: {exc}"}
+
+
+async def _vacuum_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get vacuum entity details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Vacuum '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "battery_level": attrs.get("battery_level"),
+        "fan_speed": attrs.get("fan_speed"),
+        "fan_speed_list": attrs.get("fan_speed_list", []),
+        "status": attrs.get("status"),
+        "supported_features": attrs.get("supported_features"),
+    }
+
+
+async def _fan_set_speed(
+    hass: HomeAssistant, entity_id: str, percentage: int = 50,
+) -> dict[str, Any]:
+    """Set fan speed percentage."""
+    try:
+        await hass.services.async_call(
+            "fan", "set_percentage",
+            {"entity_id": entity_id, "percentage": percentage},
+        )
+        return {"ok": True, "entity_id": entity_id, "percentage": percentage}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Fan set speed failed: {exc}"}
+
+
+async def _media_player_pause(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Pause media player."""
+    try:
+        await hass.services.async_call("media_player", "media_pause", {"entity_id": entity_id})
+        return {"ok": True, "entity_id": entity_id, "action": "pause"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media pause failed: {exc}"}
+
+
+async def _media_player_resume(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Resume media player."""
+    try:
+        await hass.services.async_call("media_player", "media_play", {"entity_id": entity_id})
+        return {"ok": True, "entity_id": entity_id, "action": "play"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media resume failed: {exc}"}
+
+
+async def _media_player_next_track(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Skip to next track."""
+    try:
+        await hass.services.async_call("media_player", "media_next_track", {"entity_id": entity_id})
+        return {"ok": True, "entity_id": entity_id, "action": "next_track"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media next track failed: {exc}"}
+
+
+async def _media_player_volume_set(
+    hass: HomeAssistant, entity_id: str, volume: float = 0.5,
+) -> dict[str, Any]:
+    """Set media player volume (0.0 to 1.0)."""
+    try:
+        await hass.services.async_call(
+            "media_player", "volume_set",
+            {"entity_id": entity_id, "volume_level": volume},
+        )
+        return {"ok": True, "entity_id": entity_id, "volume": volume}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Volume set failed: {exc}"}
+
+
+async def _scene_create_from_current(
+    hass: HomeAssistant, name: str, entity_ids: list[str],
+) -> dict[str, Any]:
+    """Create a scene from current entity states."""
+    try:
+        entities = {}
+        for eid in entity_ids:
+            state = hass.states.get(eid)
+            if state:
+                entities[eid] = {"state": state.state}
+                for k, v in state.attributes.items():
+                    if k not in ("friendly_name", "icon"):
+                        entities[eid][k] = v
+        await hass.services.async_call(
+            "scene", "create",
+            {"scene_id": name.lower().replace(" ", "_"),
+             "snapshot_entities": entity_ids},
+        )
+        return {"ok": True, "name": name, "entities_captured": len(entities)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Scene create failed: {exc}"}
+
+
+async def _script_list_with_fields(hass: HomeAssistant) -> dict[str, Any]:
+    """List scripts with their fields/parameters."""
+    scripts = hass.states.async_all("script")
+    results = []
+    for state in scripts:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "friendly_name": attrs.get("friendly_name"),
+            "mode": attrs.get("mode", "single"),
+            "current": attrs.get("current", 0),
+            "last_triggered": str(attrs.get("last_triggered", "")),
+            "fields": attrs.get("fields", {}),
+        })
+    return {"ok": True, "count": len(results), "scripts": results}
+
+
+async def _config_flow_start(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Start a config flow for an integration."""
+    try:
+        result = await hass.config_entries.flow.async_init(
+            domain, context={"source": "user"},
+        )
+        return {"ok": True, "domain": domain,
+                "flow_id": result.get("flow_id"),
+                "type": result.get("type"),
+                "step_id": result.get("step_id")}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config flow start failed: {exc}"}
+
+
+async def _entity_list_by_area_domain(
+    hass: HomeAssistant, area_id: str, domain: str,
+) -> dict[str, Any]:
+    """List entities in a specific area filtered by domain."""
+    ent_reg = er.async_get(hass)
+    results = []
+    for entry in ent_reg.entities.values():
+        if entry.area_id == area_id and entry.domain == domain:
+            state = hass.states.get(entry.entity_id)
+            results.append({
+                "entity_id": entry.entity_id,
+                "name": entry.name or entry.original_name,
+                "state": state.state if state else None,
+            })
+    return {"ok": True, "area_id": area_id, "domain": domain,
+            "count": len(results), "entities": results}
+
+
+async def _entity_rename_friendly(
+    hass: HomeAssistant, entity_id: str, name: str,
+) -> dict[str, Any]:
+    """Rename an entity's friendly name in the registry."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not in registry"}
+    try:
+        reg.async_update_entity(entity_id, name=name)
+        return {"ok": True, "entity_id": entity_id, "name": name}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity rename failed: {exc}"}
+
+
+async def _entity_move_to_area(
+    hass: HomeAssistant, entity_id: str, area_id: str,
+) -> dict[str, Any]:
+    """Move an entity to a different area."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not in registry"}
+    try:
+        reg.async_update_entity(entity_id, area_id=area_id)
+        return {"ok": True, "entity_id": entity_id, "area_id": area_id}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity move failed: {exc}"}
+
+
+async def _device_list_by_area(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """List devices in an area."""
+    dev_reg = dr.async_get(hass)
+    results = []
+    for device in dev_reg.devices.values():
+        if device.area_id == area_id:
+            results.append({
+                "device_id": device.id,
+                "name": device.name or device.name_by_user,
+                "manufacturer": device.manufacturer,
+                "model": device.model,
+            })
+    return {"ok": True, "area_id": area_id, "count": len(results),
+            "devices": results}
+
+
+async def _device_list_by_manufacturer(
+    hass: HomeAssistant, manufacturer: str,
+) -> dict[str, Any]:
+    """List devices by manufacturer."""
+    dev_reg = dr.async_get(hass)
+    results = []
+    mfr_lower = manufacturer.lower()
+    for device in dev_reg.devices.values():
+        if device.manufacturer and mfr_lower in device.manufacturer.lower():
+            results.append({
+                "device_id": device.id,
+                "name": device.name,
+                "manufacturer": device.manufacturer,
+                "model": device.model,
+                "area_id": device.area_id,
+            })
+    return {"ok": True, "manufacturer": manufacturer,
+            "count": len(results), "devices": results}
+
+
+async def _device_get_diagnostics(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get diagnostic information for a device."""
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get(device_id)
+    if device is None:
+        return {"error": f"Device '{device_id}' not found"}
+    ent_reg = er.async_get(hass)
+    entities = [
+        entry.entity_id for entry in ent_reg.entities.values()
+        if entry.device_id == device_id
+    ]
+    return {
+        "ok": True,
+        "device_id": device_id,
+        "name": device.name,
+        "manufacturer": device.manufacturer,
+        "model": device.model,
+        "sw_version": device.sw_version,
+        "hw_version": device.hw_version,
+        "via_device_id": device.via_device_id,
+        "area_id": device.area_id,
+        "config_entries": list(device.config_entries),
+        "connections": list(device.connections) if device.connections else [],
+        "identifiers": list(device.identifiers) if device.identifiers else [],
+        "entity_count": len(entities),
+        "entities": entities[:50],
+    }
+
+
+async def _area_set_icon(
+    hass: HomeAssistant, area_id: str, icon: str,
+) -> dict[str, Any]:
+    """Set an area icon."""
+    area_reg = ar.async_get(hass)
+    entry = area_reg.async_get_area(area_id)
+    if entry is None:
+        return {"error": f"Area '{area_id}' not found"}
+    try:
+        area_reg.async_update(area_id, icon=icon)
+        return {"ok": True, "area_id": area_id, "icon": icon}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area icon set failed: {exc}"}
+
+
+async def _automation_toggle_batch(
+    hass: HomeAssistant, entity_ids: list[str],
+) -> dict[str, Any]:
+    """Toggle multiple automations at once."""
+    results = []
+    for eid in entity_ids:
+        try:
+            await hass.services.async_call("automation", "toggle", {"entity_id": eid})
+            results.append({"entity_id": eid, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _script_create_simple(
+    hass: HomeAssistant, alias: str, sequence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Create a simple script via YAML."""
+    try:
+        config_dir = hass.config.config_dir
+        path = os.path.join(config_dir, "scripts.yaml")
+
+        def _create():
+            existing = {}
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as f:
+                    raw = yaml.safe_load(f)
+                if isinstance(raw, dict):
+                    existing = raw
+            script_id = alias.lower().replace(" ", "_")
+            existing[script_id] = {
+                "alias": alias,
+                "sequence": sequence,
+            }
+            with open(path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(existing, f, allow_unicode=True, default_flow_style=False)
+            return script_id
+
+        sid = await hass.async_add_executor_job(_create)
+        return {"ok": True, "alias": alias, "script_id": sid}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script create failed: {exc}"}
+
+
+async def _sensor_list_numeric(hass: HomeAssistant) -> dict[str, Any]:
+    """List all sensors with numeric values."""
+    results = []
+    for state in hass.states.async_all("sensor"):
+        try:
+            val = float(state.state)
+            results.append({
+                "entity_id": state.entity_id,
+                "value": val,
+                "unit": state.attributes.get("unit_of_measurement"),
+                "device_class": state.attributes.get("device_class"),
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+        except (ValueError, TypeError):
+            pass
+    results.sort(key=lambda x: x["entity_id"])
+    return {"ok": True, "count": len(results), "sensors": results[:200]}
+
+
+async def _sensor_compare_values(
+    hass: HomeAssistant, entity_id_a: str, entity_id_b: str,
+) -> dict[str, Any]:
+    """Compare two sensor values."""
+    state_a = hass.states.get(entity_id_a)
+    state_b = hass.states.get(entity_id_b)
+    if state_a is None:
+        return {"error": f"Sensor '{entity_id_a}' not found"}
+    if state_b is None:
+        return {"error": f"Sensor '{entity_id_b}' not found"}
+    try:
+        val_a = float(state_a.state)
+        val_b = float(state_b.state)
+        diff = val_a - val_b
+        pct = round(diff / max(abs(val_b), 0.001) * 100, 2)
+        return {
+            "ok": True,
+            "a": {"entity_id": entity_id_a, "value": val_a, "unit": state_a.attributes.get("unit_of_measurement")},
+            "b": {"entity_id": entity_id_b, "value": val_b, "unit": state_b.attributes.get("unit_of_measurement")},
+            "difference": round(diff, 3),
+            "percent_diff": pct,
+            "higher": entity_id_a if val_a > val_b else entity_id_b if val_b > val_a else "equal",
+        }
+    except (ValueError, TypeError):
+        return {"ok": True, "a": {"entity_id": entity_id_a, "value": state_a.state},
+                "b": {"entity_id": entity_id_b, "value": state_b.state},
+                "note": "Non-numeric values, cannot compare numerically"}
+
+
+async def _history_peak_detect(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Find peak values for a numeric entity over time."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        values = []
+        for s in items:
+            try:
+                values.append((float(s.state), s.last_changed.isoformat() if hasattr(s, "last_changed") else ""))
+            except (ValueError, TypeError):
+                pass
+        if not values:
+            return {"ok": True, "entity_id": entity_id, "hours": hours,
+                    "note": "No numeric data"}
+        max_val = max(values, key=lambda x: x[0])
+        min_val = min(values, key=lambda x: x[0])
+        return {
+            "ok": True, "entity_id": entity_id, "hours": hours,
+            "data_points": len(values),
+            "peak_max": {"value": max_val[0], "time": max_val[1]},
+            "peak_min": {"value": min_val[0], "time": min_val[1]},
+        }
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"History peak detect failed: {exc}"}
+
+
+async def _history_min_max_time(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Find when min and max values were reached."""
+    return await _history_peak_detect(hass, entity_id, hours)
+
+
+async def _system_config_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summary of HA configuration."""
+    config = hass.config
+    entries = hass.config_entries.async_entries()
+    all_entities = hass.states.async_all()
+    domains: set[str] = set()
+    for s in all_entities:
+        domains.add(s.entity_id.split(".")[0])
+    return {
+        "ok": True,
+        "version": config.version,
+        "config_dir": config.config_dir,
+        "total_entities": len(all_entities),
+        "total_domains": len(domains),
+        "domains": sorted(domains),
+        "config_entries": len(entries),
+        "integrations": list({e.domain for e in entries}),
+    }
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -38001,4 +38540,30 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "entity_registry_stats", "description": "Get entity registry statistics (by domain, platform, disabled, hidden).", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "system_restart_ha", "description": "Restart Home Assistant. Write op.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "system_reload_core", "description": "Reload core configuration. Write op.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 73 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "input_datetime_set_value", "description": "Set input_datetime value (date, time, or datetime). Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "value": {"type": "string", "description": "Date, time, or datetime string"}}, "required": ["entity_id", "value"]}}},
+    {"type": "function", "function": {"name": "input_boolean_set_state", "description": "Set input_boolean on or off. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "state": {"type": "string", "enum": ["on", "off"]}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "vacuum_get_info", "description": "Get vacuum entity details (battery, fan speed, status).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "fan_set_speed", "description": "Set fan speed percentage. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "percentage": {"type": "integer", "default": 50}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "media_player_pause", "description": "Pause media player. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "media_player_resume", "description": "Resume/play media player. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "media_player_next_track", "description": "Skip to next track. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "media_player_volume_set", "description": "Set media player volume (0.0-1.0). Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "volume": {"type": "number", "default": 0.5}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "scene_create_from_current", "description": "Create a scene from current entity states. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "entity_ids": {"type": "array", "items": {"type": "string"}}}, "required": ["name", "entity_ids"]}}},
+    {"type": "function", "function": {"name": "script_list_with_fields", "description": "List scripts with their fields/parameters.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "config_flow_start", "description": "Start a config flow for an integration. Write op.", "parameters": {"type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}}},
+    {"type": "function", "function": {"name": "entity_list_by_area_domain", "description": "List entities in area filtered by domain.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string"}, "domain": {"type": "string"}}, "required": ["area_id", "domain"]}}},
+    {"type": "function", "function": {"name": "entity_rename_friendly", "description": "Rename entity friendly name. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "name": {"type": "string"}}, "required": ["entity_id", "name"]}}},
+    {"type": "function", "function": {"name": "entity_move_to_area", "description": "Move entity to an area. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "area_id": {"type": "string"}}, "required": ["entity_id", "area_id"]}}},
+    {"type": "function", "function": {"name": "device_list_by_area", "description": "List devices in an area.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string"}}, "required": ["area_id"]}}},
+    {"type": "function", "function": {"name": "device_list_by_manufacturer", "description": "List devices by manufacturer name.", "parameters": {"type": "object", "properties": {"manufacturer": {"type": "string"}}, "required": ["manufacturer"]}}},
+    {"type": "function", "function": {"name": "device_get_diagnostics", "description": "Get detailed diagnostic info for a device.", "parameters": {"type": "object", "properties": {"device_id": {"type": "string"}}, "required": ["device_id"]}}},
+    {"type": "function", "function": {"name": "area_set_icon", "description": "Set an area icon. Write op.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string"}, "icon": {"type": "string"}}, "required": ["area_id", "icon"]}}},
+    {"type": "function", "function": {"name": "automation_toggle_batch", "description": "Toggle multiple automations at once. Write op.", "parameters": {"type": "object", "properties": {"entity_ids": {"type": "array", "items": {"type": "string"}}}, "required": ["entity_ids"]}}},
+    {"type": "function", "function": {"name": "script_create_simple", "description": "Create a simple script via YAML. Write op.", "parameters": {"type": "object", "properties": {"alias": {"type": "string"}, "sequence": {"type": "array", "items": {"type": "object"}}}, "required": ["alias", "sequence"]}}},
+    {"type": "function", "function": {"name": "sensor_list_numeric", "description": "List all sensors with numeric values.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "sensor_compare_values", "description": "Compare two sensor values numerically.", "parameters": {"type": "object", "properties": {"entity_id_a": {"type": "string"}, "entity_id_b": {"type": "string"}}, "required": ["entity_id_a", "entity_id_b"]}}},
+    {"type": "function", "function": {"name": "history_peak_detect", "description": "Find peak (max/min) values for an entity over time.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "history_min_max_time", "description": "Find when min/max values were reached.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "system_config_summary", "description": "Summary of HA configuration (version, entities, domains, integrations).", "parameters": {"type": "object", "properties": {}}}},
 ]
