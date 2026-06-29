@@ -5861,6 +5861,486 @@ async def _get_image_url(
 
 
 # ---------------------------------------------------------------------------
+# Wave 5: floor, tag, todo, assist, thread/matter, counter, timer, valve,
+#          mower, event, datetime, text, voice, conversation, schedule,
+#          statistics, remote, backup advanced, categories
+# ---------------------------------------------------------------------------
+
+
+async def _assign_area_floor(
+    hass: HomeAssistant, area_id: str, floor_id: str,
+) -> dict[str, Any]:
+    """Assign an area to a floor."""
+    try:
+        from homeassistant.helpers import area_registry as ar
+        registry = ar.async_get(hass)
+        area = registry.async_get_area(area_id)
+        if not area:
+            for a in registry.async_list_areas():
+                if a.name.lower() == area_id.lower():
+                    area = a
+                    break
+        if not area:
+            return {"error": f"Area '{area_id}' not found"}
+        registry.async_update(area.id, floor_id=floor_id)
+        return {"ok": True, "area_id": area.id, "floor_id": floor_id}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Assign area floor failed: {exc}"}
+
+
+async def _scan_tag(
+    hass: HomeAssistant, tag_id: str, device_id: str | None = None,
+) -> dict[str, Any]:
+    """Fire a tag scanned event (simulate NFC tag scan)."""
+    event_data: dict[str, Any] = {"tag_id": tag_id}
+    if device_id:
+        event_data["device_id"] = device_id
+    hass.bus.async_fire("tag_scanned", event_data)
+    return {"ok": True, "tag_id": tag_id}
+
+
+async def _add_todo_item(
+    hass: HomeAssistant, entity_id: str, item: str,
+    due_date: str | None = None, description: str | None = None,
+) -> dict[str, Any]:
+    """Add an item to a todo list entity."""
+    data: dict[str, Any] = {"entity_id": entity_id, "item": item}
+    if due_date:
+        data["due_date"] = due_date
+    if description:
+        data["description"] = description
+    try:
+        await hass.services.async_call("todo", "add_item", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Add todo item failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "item": item}
+
+
+async def _remove_todo_item(
+    hass: HomeAssistant, entity_id: str, item: str,
+) -> dict[str, Any]:
+    """Remove an item from a todo list entity."""
+    try:
+        await hass.services.async_call(
+            "todo", "remove_item", {"entity_id": entity_id, "item": item},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remove todo item failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "removed": item}
+
+
+async def _list_assist_pipelines(hass: HomeAssistant) -> dict[str, Any]:
+    """List all configured Assist pipelines."""
+    try:
+        from homeassistant.components.assist_pipeline import async_get_pipelines
+        pipelines = async_get_pipelines(hass)
+        items = [{"id": p.id, "name": p.name, "language": p.language,
+                  "conversation_engine": p.conversation_engine,
+                  "stt_engine": p.stt_engine, "tts_engine": p.tts_engine}
+                 for p in pipelines]
+        return {"ok": True, "count": len(items), "pipelines": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "note": f"Assist pipeline unavailable ({exc})", "pipelines": []}
+
+
+async def _run_assist_pipeline(
+    hass: HomeAssistant, text: str, pipeline_id: str | None = None,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Run text through an Assist pipeline and return the response."""
+    try:
+        from homeassistant.components.conversation import async_converse
+        result = await async_converse(
+            hass, text, conversation_id=None,
+            context=None, language=language, agent_id=pipeline_id,
+        )
+        resp = result.response
+        return {
+            "ok": True, "text": text,
+            "response_type": resp.response_type.value if hasattr(resp.response_type, "value") else str(resp.response_type),
+            "speech": resp.speech.get("plain", {}).get("speech", "") if resp.speech else "",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Assist pipeline failed: {exc}"}
+
+
+async def _list_thread_networks(hass: HomeAssistant) -> dict[str, Any]:
+    """List Thread border routers and networks."""
+    try:
+        from homeassistant.components.thread import async_get_preferred_dataset
+        dataset = await async_get_preferred_dataset(hass)
+        return {"ok": True, "preferred_dataset": dataset is not None,
+                "note": "Thread dataset available" if dataset else "No Thread dataset configured"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "note": f"Thread not available ({exc})", "networks": []}
+
+
+async def _get_matter_nodes(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Matter fabric nodes."""
+    try:
+        from homeassistant.components.matter import get_matter_server
+        server = get_matter_server(hass)
+        nodes = server.get_nodes()
+        items = [{"node_id": n.node_id, "name": n.name,
+                  "vendor_id": getattr(n, "vendor_id", None),
+                  "product_id": getattr(n, "product_id", None)}
+                 for n in nodes[:50]]
+        return {"ok": True, "count": len(items), "nodes": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "note": f"Matter not available ({exc})", "nodes": []}
+
+
+async def _restore_backup(
+    hass: HomeAssistant, backup_id: str,
+) -> dict[str, Any]:
+    """Restore a Home Assistant backup by ID."""
+    try:
+        await hass.services.async_call(
+            "hassio", "restore_full", {"slug": backup_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Restore backup failed: {exc}"}
+    return {"ok": True, "backup_id": backup_id, "action": "restore_started"}
+
+
+async def _download_backup(
+    hass: HomeAssistant, backup_id: str,
+) -> dict[str, Any]:
+    """Get download info for a backup."""
+    base = hass.config.config_dir
+    return {
+        "ok": True, "backup_id": backup_id,
+        "download_path": f"/api/hassio/backups/{backup_id}/download",
+        "note": f"Use HA API to download: GET /api/hassio/backups/{backup_id}/download",
+        "config_dir": base,
+    }
+
+
+async def _assign_entity_category(
+    hass: HomeAssistant, entity_id: str, category: str,
+) -> dict[str, Any]:
+    """Set entity category (config/diagnostic/None)."""
+    try:
+        from homeassistant.helpers import entity_registry as er
+        registry = er.async_get(hass)
+        entry = registry.async_get(entity_id)
+        if not entry:
+            return {"error": f"Entity '{entity_id}' not found in registry"}
+        cat = None if category.lower() in ("none", "") else category
+        registry.async_update_entity(entity_id, entity_category=cat)
+        return {"ok": True, "entity_id": entity_id, "category": cat}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Assign entity category failed: {exc}"}
+
+
+async def _increment_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Increment a counter helper."""
+    try:
+        await hass.services.async_call(
+            "counter", "increment", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Increment counter failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "increment"}
+
+
+async def _decrement_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Decrement a counter helper."""
+    try:
+        await hass.services.async_call(
+            "counter", "decrement", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Decrement counter failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "decrement"}
+
+
+async def _reset_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Reset a counter helper to its initial value."""
+    try:
+        await hass.services.async_call(
+            "counter", "reset", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reset counter failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+
+
+async def _start_timer(
+    hass: HomeAssistant, entity_id: str, duration: str | None = None,
+) -> dict[str, Any]:
+    """Start a timer helper."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if duration:
+        data["duration"] = duration
+    try:
+        await hass.services.async_call("timer", "start", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Start timer failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "start", "duration": duration}
+
+
+async def _cancel_timer(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Cancel a running timer."""
+    try:
+        await hass.services.async_call(
+            "timer", "cancel", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cancel timer failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "cancel"}
+
+
+async def _pause_timer(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Pause a running timer."""
+    try:
+        await hass.services.async_call(
+            "timer", "pause", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Pause timer failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "pause"}
+
+
+async def _finish_timer(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Finish (complete) a timer early."""
+    try:
+        await hass.services.async_call(
+            "timer", "finish", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Finish timer failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "finish"}
+
+
+async def _mower_command(
+    hass: HomeAssistant, entity_id: str, command: str,
+) -> dict[str, Any]:
+    """Control a lawn mower (start/pause/dock)."""
+    valid = {"start": "start_mowing", "pause": "pause", "dock": "dock"}
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    try:
+        await hass.services.async_call(
+            "lawn_mower", svc, {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Mower {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _valve_control(
+    hass: HomeAssistant, entity_id: str, command: str,
+    position: int | None = None,
+) -> dict[str, Any]:
+    """Control a valve (open/close/set_position/stop)."""
+    valid = {"open": "open_valve", "close": "close_valve",
+             "set_position": "set_valve_position", "stop": "stop_valve"}
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if command == "set_position" and position is not None:
+        data["position"] = position
+    try:
+        await hass.services.async_call("valve", svc, data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Valve {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _list_event_entities(hass: HomeAssistant) -> dict[str, Any]:
+    """List all event entities with their last event type."""
+    states = hass.states.async_all("event")
+    items = []
+    for s in states:
+        items.append({
+            "entity_id": s.entity_id,
+            "state": s.state,
+            "friendly_name": s.attributes.get("friendly_name", ""),
+            "event_type": s.attributes.get("event_type"),
+            "event_types": s.attributes.get("event_types"),
+        })
+    return {"ok": True, "count": len(items), "events": items}
+
+
+async def _set_date_value(
+    hass: HomeAssistant, entity_id: str, date: str,
+) -> dict[str, Any]:
+    """Set an input_datetime entity to a date value."""
+    try:
+        await hass.services.async_call(
+            "input_datetime", "set_datetime",
+            {"entity_id": entity_id, "date": date}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set date failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "date": date}
+
+
+async def _set_time_value(
+    hass: HomeAssistant, entity_id: str, time: str,
+) -> dict[str, Any]:
+    """Set an input_datetime entity to a time value."""
+    try:
+        await hass.services.async_call(
+            "input_datetime", "set_datetime",
+            {"entity_id": entity_id, "time": time}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set time failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "time": time}
+
+
+async def _set_text_value(
+    hass: HomeAssistant, entity_id: str, value: str,
+) -> dict[str, Any]:
+    """Set a text entity value."""
+    domain = entity_id.split(".")[0] if "." in entity_id else "input_text"
+    svc_domain = "input_text" if domain == "input_text" else "text"
+    svc = "set_value"
+    try:
+        await hass.services.async_call(
+            svc_domain, svc, {"entity_id": entity_id, "value": value},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set text failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value[:80]}
+
+
+async def _list_wake_words(hass: HomeAssistant) -> dict[str, Any]:
+    """List configured wake words."""
+    try:
+        from homeassistant.components.wake_word import async_get_wake_word_detection_entity  # noqa: F401
+        entities = hass.states.async_all("wake_word")
+        items = [{"entity_id": s.entity_id, "state": s.state,
+                  "friendly_name": s.attributes.get("friendly_name", "")}
+                 for s in entities]
+        return {"ok": True, "count": len(items), "wake_words": items}
+    except Exception as exc:  # noqa: BLE001
+        entities = hass.states.async_all("wake_word")
+        items = [{"entity_id": s.entity_id, "state": s.state} for s in entities]
+        return {"ok": True, "count": len(items), "wake_words": items,
+                "note": f"Wake word component info: {exc}"}
+
+
+async def _list_stt_engines(hass: HomeAssistant) -> dict[str, Any]:
+    """List available speech-to-text engines."""
+    try:
+        from homeassistant.components.stt import async_get_speech_to_text_engines
+        engines = async_get_speech_to_text_engines(hass)
+        items = [{"engine_id": e} for e in engines] if engines else []
+        return {"ok": True, "count": len(items), "engines": items}
+    except Exception:  # noqa: BLE001
+        states = hass.states.async_all("stt")
+        items = [{"entity_id": s.entity_id, "state": s.state} for s in states]
+        return {"ok": True, "count": len(items), "engines": items}
+
+
+async def _list_tts_engines(hass: HomeAssistant) -> dict[str, Any]:
+    """List available text-to-speech engines."""
+    try:
+        from homeassistant.components.tts import async_get_text_to_speech_engines
+        engines = async_get_text_to_speech_engines(hass)
+        items = [{"engine_id": e} for e in engines] if engines else []
+        return {"ok": True, "count": len(items), "engines": items}
+    except Exception:  # noqa: BLE001
+        states = hass.states.async_all("tts")
+        items = [{"entity_id": s.entity_id, "state": s.state} for s in states]
+        return {"ok": True, "count": len(items), "engines": items}
+
+
+async def _list_conversation_agents(hass: HomeAssistant) -> dict[str, Any]:
+    """List all registered conversation agents."""
+    try:
+        from homeassistant.components.conversation import async_get_agent_info
+        info = async_get_agent_info(hass)
+        items = [{"id": a.id, "name": a.name} for a in info] if info else []
+        return {"ok": True, "count": len(items), "agents": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "note": f"Conversation agents unavailable ({exc})", "agents": []}
+
+
+async def _get_schedule(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get schedule helper state and next event."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Schedule '{entity_id}' not found"}
+    return {
+        "ok": True, "entity_id": entity_id,
+        "state": state.state,
+        "next_event": state.attributes.get("next_event"),
+        "friendly_name": state.attributes.get("friendly_name", ""),
+        "attributes": dict(state.attributes),
+    }
+
+
+async def _get_statistics_metadata(
+    hass: HomeAssistant, statistic_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Get long-term statistics metadata."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            list_statistic_ids,
+        )
+        metadata = await hass.async_add_executor_job(
+            list_statistic_ids, hass,
+        )
+        items = []
+        for m in metadata[:100]:
+            sid = m.get("statistic_id", "")
+            if statistic_ids and sid not in statistic_ids:
+                continue
+            items.append({
+                "statistic_id": sid,
+                "name": m.get("name"),
+                "source": m.get("source"),
+                "unit_of_measurement": m.get("unit_of_measurement"),
+            })
+        return {"ok": True, "count": len(items), "statistics": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "note": f"Statistics metadata unavailable ({exc})", "statistics": []}
+
+
+async def _clear_statistics(
+    hass: HomeAssistant, statistic_ids: list[str],
+) -> dict[str, Any]:
+    """Clear long-term statistics for given statistic IDs."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            async_clear_statistics,
+        )
+        await async_clear_statistics(hass, statistic_ids)
+        return {"ok": True, "cleared": statistic_ids}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Clear statistics failed: {exc}"}
+
+
+async def _send_remote_command(
+    hass: HomeAssistant, entity_id: str, command: str,
+    device: str | None = None, num_repeats: int = 1,
+) -> dict[str, Any]:
+    """Send an IR/RF command via a remote entity."""
+    data: dict[str, Any] = {"entity_id": entity_id, "command": command}
+    if device:
+        data["device"] = device
+    if num_repeats > 1:
+        data["num_repeats"] = num_repeats
+    try:
+        await hass.services.async_call(
+            "remote", "send_command", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Send remote command failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -7455,6 +7935,140 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             )
         if name == "get_image_url":
             return await _get_image_url(hass, args.get("entity_id", ""))
+        # --- Wave 5 dispatch ---
+        if name == "assign_area_floor":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _assign_area_floor(
+                hass, args.get("area_id", ""), args.get("floor_id", ""),
+            )
+        if name == "scan_tag":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _scan_tag(hass, args.get("tag_id", ""), args.get("device_id"))
+        if name == "add_todo_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _add_todo_item(
+                hass, args.get("entity_id", ""), args.get("item", ""),
+                args.get("due_date"), args.get("description"),
+            )
+        if name == "remove_todo_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remove_todo_item(
+                hass, args.get("entity_id", ""), args.get("item", ""),
+            )
+        if name == "list_assist_pipelines":
+            return await _list_assist_pipelines(hass)
+        if name == "run_assist_pipeline":
+            return await _run_assist_pipeline(
+                hass, args.get("text", ""), args.get("pipeline_id"),
+                args.get("language"),
+            )
+        if name == "list_thread_networks":
+            return await _list_thread_networks(hass)
+        if name == "get_matter_nodes":
+            return await _get_matter_nodes(hass)
+        if name == "restore_backup":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _restore_backup(hass, args.get("backup_id", ""))
+        if name == "download_backup":
+            return await _download_backup(hass, args.get("backup_id", ""))
+        if name == "assign_entity_category":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _assign_entity_category(
+                hass, args.get("entity_id", ""), args.get("category", ""),
+            )
+        if name == "increment_counter":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _increment_counter(hass, args.get("entity_id", ""))
+        if name == "decrement_counter":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _decrement_counter(hass, args.get("entity_id", ""))
+        if name == "reset_counter":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reset_counter(hass, args.get("entity_id", ""))
+        if name == "start_timer":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _start_timer(
+                hass, args.get("entity_id", ""), args.get("duration"),
+            )
+        if name == "cancel_timer":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _cancel_timer(hass, args.get("entity_id", ""))
+        if name == "pause_timer":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _pause_timer(hass, args.get("entity_id", ""))
+        if name == "finish_timer":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _finish_timer(hass, args.get("entity_id", ""))
+        if name == "mower_command":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _mower_command(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+            )
+        if name == "valve_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            pos = args.get("position")
+            return await _valve_control(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                int(pos) if pos is not None else None,
+            )
+        if name == "list_event_entities":
+            return await _list_event_entities(hass)
+        if name == "set_date_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_date_value(
+                hass, args.get("entity_id", ""), args.get("date", ""),
+            )
+        if name == "set_time_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_time_value(
+                hass, args.get("entity_id", ""), args.get("time", ""),
+            )
+        if name == "set_text_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_text_value(
+                hass, args.get("entity_id", ""), args.get("value", ""),
+            )
+        if name == "list_wake_words":
+            return await _list_wake_words(hass)
+        if name == "list_stt_engines":
+            return await _list_stt_engines(hass)
+        if name == "list_tts_engines":
+            return await _list_tts_engines(hass)
+        if name == "list_conversation_agents":
+            return await _list_conversation_agents(hass)
+        if name == "get_schedule":
+            return await _get_schedule(hass, args.get("entity_id", ""))
+        if name == "get_statistics_metadata":
+            return await _get_statistics_metadata(hass, args.get("statistic_ids"))
+        if name == "clear_statistics":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _clear_statistics(hass, args.get("statistic_ids", []))
+        if name == "send_remote_command":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _send_remote_command(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("device"), int(args.get("num_repeats", 1)),
+            )
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -8071,7 +8685,7 @@ _READ_ONLY_TOOLS = frozenset({
     "recall_memory",
 })
 # Irreversible / disruptive operations (removal, data purge, full restart).
-_DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics"})
+_DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics", "restore_backup"})
 
 
 def _is_read_only(name: str) -> bool:
@@ -9724,6 +10338,407 @@ TOOL_SPECS: list[dict[str, Any]] = [
             },
         },
     },
+    # --- Wave 5 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_area_floor",
+            "description": "Assign an area to a floor.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "area_id": {"type": "string", "description": "Area ID or name"},
+                    "floor_id": {"type": "string", "description": "Floor ID"},
+                },
+                "required": ["area_id", "floor_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scan_tag",
+            "description": "Fire a tag_scanned event (simulate NFC tag scan for automations).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tag_id": {"type": "string"},
+                    "device_id": {"type": "string", "description": "Optional device that scanned"},
+                },
+                "required": ["tag_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_todo_item",
+            "description": "Add an item to a todo list entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "item": {"type": "string", "description": "Todo item text"},
+                    "due_date": {"type": "string", "description": "Due date (YYYY-MM-DD)"},
+                    "description": {"type": "string"},
+                },
+                "required": ["entity_id", "item"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_todo_item",
+            "description": "Remove an item from a todo list entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "item": {"type": "string"},
+                },
+                "required": ["entity_id", "item"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_assist_pipelines",
+            "description": "List all configured Assist pipelines (STT/conversation/TTS engines).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_assist_pipeline",
+            "description": "Run text through an Assist pipeline and get the response.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Text to process"},
+                    "pipeline_id": {"type": "string", "description": "Specific pipeline/agent ID"},
+                    "language": {"type": "string", "description": "Language code"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_thread_networks",
+            "description": "List Thread border routers and network info.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_matter_nodes",
+            "description": "Get Matter fabric nodes (devices connected via Matter).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "restore_backup",
+            "description": "Restore a Home Assistant backup by ID (DESTRUCTIVE).",
+            "parameters": {
+                "type": "object",
+                "properties": {"backup_id": {"type": "string"}},
+                "required": ["backup_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "download_backup",
+            "description": "Get download path/URL for a backup.",
+            "parameters": {
+                "type": "object",
+                "properties": {"backup_id": {"type": "string"}},
+                "required": ["backup_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_entity_category",
+            "description": "Set entity category (config/diagnostic/None) in the entity registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "category": {"type": "string", "description": "config|diagnostic|none"},
+                },
+                "required": ["entity_id", "category"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "increment_counter",
+            "description": "Increment a counter helper by 1.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "decrement_counter",
+            "description": "Decrement a counter helper by 1.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reset_counter",
+            "description": "Reset a counter helper to its initial value.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_timer",
+            "description": "Start a timer helper with optional duration.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "duration": {"type": "string", "description": "Duration (HH:MM:SS or seconds)"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cancel_timer",
+            "description": "Cancel a running timer.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pause_timer",
+            "description": "Pause a running timer.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "finish_timer",
+            "description": "Finish (complete) a timer early.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mower_command",
+            "description": "Control a lawn mower: start/pause/dock.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "start|pause|dock"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "valve_control",
+            "description": "Control a valve: open/close/set_position/stop.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "open|close|set_position|stop"},
+                    "position": {"type": "integer", "description": "Position 0-100 (for set_position)"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_event_entities",
+            "description": "List all event entities with their last event type.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_date_value",
+            "description": "Set an input_datetime entity to a date value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
+                },
+                "required": ["entity_id", "date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_time_value",
+            "description": "Set an input_datetime entity to a time value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "time": {"type": "string", "description": "Time (HH:MM:SS)"},
+                },
+                "required": ["entity_id", "time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_text_value",
+            "description": "Set a text or input_text entity value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "string"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_wake_words",
+            "description": "List configured wake word detection entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_stt_engines",
+            "description": "List available speech-to-text engines.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_tts_engines",
+            "description": "List available text-to-speech engines.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_conversation_agents",
+            "description": "List all registered conversation agents.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_schedule",
+            "description": "Get schedule helper state and next event.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_statistics_metadata",
+            "description": "Get long-term statistics metadata (statistic IDs, sources, units).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_ids": {"type": "array", "items": {"type": "string"}, "description": "Filter by specific statistic IDs (optional)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clear_statistics",
+            "description": "Clear long-term statistics for given statistic IDs (DESTRUCTIVE).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["statistic_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_remote_command",
+            "description": "Send an IR/RF command via a remote entity (IR blaster, Broadlink, etc.).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "description": "Command name"},
+                    "device": {"type": "string", "description": "Target device name"},
+                    "num_repeats": {"type": "integer", "description": "Number of repeats (default 1)"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -10590,17 +11605,6 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "add_todo_item",
-            "description": "Add an item to a todo list. Defaults to the first todo entity if entity_id is omitted.",
-            "parameters": {"type": "object", "properties": {
-                "entity_id": {"type": "string", "description": "todo.* entity id (optional)."},
-                "item": {"type": "string", "description": "The item summary to add."},
-            }, "required": ["item"]},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "wait_for_event",
             "description": "Subscribe to the HA event bus and block (bounded by timeout) until the next event of event_type fires, then return it. Optionally filter by entity_id (e.g. for 'state_changed'). The agent's window into the live running system — observe, don't just poll. Returns {timed_out:true} if nothing fires within timeout.",
             "parameters": {"type": "object", "properties": {
@@ -10905,16 +11909,6 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "end": {"type": "string", "description": "ISO8601 UTC end (optional)."},
                 "period": {"type": "string", "description": "5minute|hour|day|week|month (default hour)."},
             }, "required": ["statistic_ids", "start"]},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "clear_statistics",
-            "description": "Delete all long-term statistics for the given statistic_ids (recorder write) — the cleanup counterpart to import_statistics. Removes the series from history/energy entirely.",
-            "parameters": {"type": "object", "properties": {
-                "statistic_ids": {"type": "array", "items": {"type": "string"}},
-            }, "required": ["statistic_ids"]},
         },
     },
     {
