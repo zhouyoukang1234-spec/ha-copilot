@@ -8339,6 +8339,437 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 32: energy, recorder, cloud, system, schedule, integration, template,
+#           shell, notify, config entries, area/label/floor/category registries
+# ---------------------------------------------------------------------------
+
+
+async def _energy_get_solar_forecast(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """Get solar energy forecast."""
+    try:
+        result = await hass.services.async_call(
+            "energy", "get_solar_forecast", {},
+            blocking=True, return_response=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Energy solar forecast failed: {exc}"}
+    return {"ok": True, "forecast": result}
+
+
+async def _recorder_purge_entities(
+    hass: HomeAssistant, entity_id: str,
+    keep_days: int = 10,
+) -> dict[str, Any]:
+    """Purge recorder data for specific entities."""
+    try:
+        await hass.services.async_call(
+            "recorder", "purge_entities",
+            {"entity_id": entity_id, "keep_days": keep_days}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder purge entities failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "purged"}
+
+
+async def _statistics_get(
+    hass: HomeAssistant, statistic_id: str,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    period: str = "hour",
+) -> dict[str, Any]:
+    """Get statistics for a statistic_id."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+        from datetime import datetime as dt
+        s = dt.fromisoformat(start_time) if start_time else None
+        e = dt.fromisoformat(end_time) if end_time else None
+        stats = await hass.async_add_executor_job(
+            statistics_during_period, hass, s, e, {statistic_id}, period, None, {"mean", "sum"},
+        )
+        return {"ok": True, "statistics": {k: len(v) for k, v in stats.items()}}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Statistics get failed: {exc}"}
+
+
+async def _statistics_list(
+    hass: HomeAssistant, statistic_type: str = "mean",
+) -> dict[str, Any]:
+    """List available statistics."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            list_statistic_ids,
+        )
+        result = await hass.async_add_executor_job(
+            list_statistic_ids, hass, None, statistic_type,
+        )
+        return {"ok": True, "statistics": result[:100]}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Statistics list failed: {exc}"}
+
+
+async def _cloud_remote_connect(hass: HomeAssistant) -> dict[str, Any]:
+    """Connect Home Assistant Cloud remote."""
+    try:
+        await hass.services.async_call(
+            "cloud", "remote_connect", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cloud remote connect failed: {exc}"}
+    return {"ok": True, "action": "remote_connected"}
+
+
+async def _cloud_remote_disconnect(hass: HomeAssistant) -> dict[str, Any]:
+    """Disconnect Home Assistant Cloud remote."""
+    try:
+        await hass.services.async_call(
+            "cloud", "remote_disconnect", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cloud remote disconnect failed: {exc}"}
+    return {"ok": True, "action": "remote_disconnected"}
+
+
+async def _webhook_trigger(
+    hass: HomeAssistant, webhook_id: str,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Trigger a webhook."""
+    import aiohttp
+    url = f"http://localhost:8123/api/webhook/{webhook_id}"
+    try:
+        async with aiohttp.ClientSession() as session, session.post(
+            url, json=data or {}, timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            body = await resp.text()
+            return {"ok": True, "status": resp.status, "body": body[:500]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Webhook trigger failed: {exc}"}
+
+
+async def _system_health_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system health information."""
+    try:
+        info: dict[str, Any] = {
+            "version": hass.config.version,
+            "config_dir": hass.config.config_dir,
+        }
+        return {"ok": True, "health": info}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System health info failed: {exc}"}
+
+
+async def _network_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get network configuration information."""
+    try:
+        import socket
+        hostname = socket.gethostname()
+        return {"ok": True, "hostname": hostname}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Network info failed: {exc}"}
+
+
+async def _schedule_get(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get schedule entity state."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Schedule {entity_id} not found"}
+    return {
+        "ok": True, "entity_id": entity_id,
+        "state": state.state if hasattr(state, "state") else str(state),
+    }
+
+
+async def _integration_reload(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Reload an integration."""
+    try:
+        await hass.services.async_call(domain, "reload", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Integration reload failed: {exc}"}
+    return {"ok": True, "domain": domain, "action": "reloaded"}
+
+
+async def _template_reload(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload template entities from YAML."""
+    try:
+        await hass.services.async_call("template", "reload", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Template reload failed: {exc}"}
+    return {"ok": True, "action": "template_reloaded"}
+
+
+async def _shell_command_execute(
+    hass: HomeAssistant, command_name: str,
+) -> dict[str, Any]:
+    """Execute a shell_command by name."""
+    try:
+        await hass.services.async_call(
+            "shell_command", command_name, {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Shell command execute failed: {exc}"}
+    return {"ok": True, "command": command_name, "action": "executed"}
+
+
+async def _notify_all(
+    hass: HomeAssistant, message: str, title: str | None = None,
+) -> dict[str, Any]:
+    """Send a notification via notify.notify (all platforms)."""
+    ndata: dict[str, Any] = {"message": message}
+    if title:
+        ndata["title"] = title
+    try:
+        await hass.services.async_call("notify", "notify", ndata, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Notify all failed: {exc}"}
+    return {"ok": True, "message": message, "action": "notified"}
+
+
+async def _config_entry_disable(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Disable a config entry."""
+    try:
+        result = await hass.config_entries.async_set_disabled_by(
+            entry_id, "user",
+        )
+    except AttributeError:
+        return {"error": "config_entries.async_set_disabled_by not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config entry disable failed: {exc}"}
+    return {"ok": True, "entry_id": entry_id, "action": "disabled", "result": str(result)}
+
+
+async def _config_entry_enable(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Enable a config entry."""
+    try:
+        result = await hass.config_entries.async_set_disabled_by(
+            entry_id, None,
+        )
+    except AttributeError:
+        return {"error": "config_entries.async_set_disabled_by not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config entry enable failed: {exc}"}
+    return {"ok": True, "entry_id": entry_id, "action": "enabled", "result": str(result)}
+
+
+async def _config_entry_reload(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Reload a config entry."""
+    try:
+        result = await hass.config_entries.async_reload(entry_id)
+    except AttributeError:
+        return {"error": "config_entries.async_reload not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config entry reload failed: {exc}"}
+    return {"ok": True, "entry_id": entry_id, "action": "reloaded", "result": str(result)}
+
+
+async def _area_create(
+    hass: HomeAssistant, name: str,
+    icon: str | None = None, floor_id: str | None = None,
+) -> dict[str, Any]:
+    """Create an area in the area registry."""
+    try:
+        from homeassistant.helpers.area_registry import async_get
+        registry = async_get(hass)
+        entry = registry.async_create(name)
+        return {"ok": True, "area_id": entry.id, "name": entry.name}
+    except ImportError:
+        return {"error": "area_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area create failed: {exc}"}
+
+
+async def _area_delete(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Delete an area from the area registry."""
+    try:
+        from homeassistant.helpers.area_registry import async_get
+        registry = async_get(hass)
+        registry.async_delete(area_id)
+        return {"ok": True, "area_id": area_id, "action": "deleted"}
+    except ImportError:
+        return {"error": "area_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area delete failed: {exc}"}
+
+
+async def _area_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all areas."""
+    try:
+        from homeassistant.helpers.area_registry import async_get
+        registry = async_get(hass)
+        areas = [
+            {"id": a.id, "name": a.name}
+            for a in registry.async_list_areas()
+        ]
+        return {"ok": True, "areas": areas}
+    except ImportError:
+        return {"error": "area_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area list failed: {exc}"}
+
+
+async def _label_create(
+    hass: HomeAssistant, name: str,
+    color: str | None = None, icon: str | None = None,
+) -> dict[str, Any]:
+    """Create a label in the label registry."""
+    try:
+        from homeassistant.helpers.label_registry import async_get
+        registry = async_get(hass)
+        entry = registry.async_create(name)
+        return {"ok": True, "label_id": entry.label_id, "name": entry.name}
+    except ImportError:
+        return {"error": "label_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Label create failed: {exc}"}
+
+
+async def _label_delete(
+    hass: HomeAssistant, label_id: str,
+) -> dict[str, Any]:
+    """Delete a label from the label registry."""
+    try:
+        from homeassistant.helpers.label_registry import async_get
+        registry = async_get(hass)
+        registry.async_delete(label_id)
+        return {"ok": True, "label_id": label_id, "action": "deleted"}
+    except ImportError:
+        return {"error": "label_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Label delete failed: {exc}"}
+
+
+async def _label_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all labels."""
+    try:
+        from homeassistant.helpers.label_registry import async_get
+        registry = async_get(hass)
+        labels = [
+            {"id": lb.label_id, "name": lb.name}
+            for lb in registry.async_list_labels()
+        ]
+        return {"ok": True, "labels": labels}
+    except ImportError:
+        return {"error": "label_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Label list failed: {exc}"}
+
+
+async def _floor_create(
+    hass: HomeAssistant, name: str,
+    level: int | None = None, icon: str | None = None,
+) -> dict[str, Any]:
+    """Create a floor in the floor registry."""
+    try:
+        from homeassistant.helpers.floor_registry import async_get
+        registry = async_get(hass)
+        entry = registry.async_create(name)
+        return {"ok": True, "floor_id": entry.floor_id, "name": entry.name}
+    except ImportError:
+        return {"error": "floor_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Floor create failed: {exc}"}
+
+
+async def _floor_delete(
+    hass: HomeAssistant, floor_id: str,
+) -> dict[str, Any]:
+    """Delete a floor from the floor registry."""
+    try:
+        from homeassistant.helpers.floor_registry import async_get
+        registry = async_get(hass)
+        registry.async_delete(floor_id)
+        return {"ok": True, "floor_id": floor_id, "action": "deleted"}
+    except ImportError:
+        return {"error": "floor_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Floor delete failed: {exc}"}
+
+
+async def _floor_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all floors."""
+    try:
+        from homeassistant.helpers.floor_registry import async_get
+        registry = async_get(hass)
+        floors = [
+            {"id": f.floor_id, "name": f.name}
+            for f in registry.async_list_floors()
+        ]
+        return {"ok": True, "floors": floors}
+    except ImportError:
+        return {"error": "floor_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Floor list failed: {exc}"}
+
+
+async def _category_create(
+    hass: HomeAssistant, scope: str, name: str,
+    icon: str | None = None,
+) -> dict[str, Any]:
+    """Create a category in the category registry."""
+    try:
+        from homeassistant.helpers.category_registry import async_get
+        registry = async_get(hass)
+        entry = registry.async_create(scope, name)
+        return {"ok": True, "category_id": entry.category_id, "name": entry.name}
+    except ImportError:
+        return {"error": "category_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Category create failed: {exc}"}
+
+
+async def _category_delete(
+    hass: HomeAssistant, scope: str, category_id: str,
+) -> dict[str, Any]:
+    """Delete a category from the category registry."""
+    try:
+        from homeassistant.helpers.category_registry import async_get
+        registry = async_get(hass)
+        registry.async_delete(scope, category_id)
+        return {"ok": True, "category_id": category_id, "action": "deleted"}
+    except ImportError:
+        return {"error": "category_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Category delete failed: {exc}"}
+
+
+async def _category_list(
+    hass: HomeAssistant, scope: str,
+) -> dict[str, Any]:
+    """List all categories for a scope."""
+    try:
+        from homeassistant.helpers.category_registry import async_get
+        registry = async_get(hass)
+        cats = [
+            {"id": c.category_id, "name": c.name}
+            for c in registry.async_list_categories(scope)
+        ]
+        return {"ok": True, "categories": cats}
+    except ImportError:
+        return {"error": "category_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Category list failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 31: persistent_notification_dismiss_all, assist_pipeline_run
 # ---------------------------------------------------------------------------
 
@@ -11848,6 +12279,132 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 32 dispatch ---
+        if name == "energy_get_solar_forecast":
+            return await _energy_get_solar_forecast(hass)
+        if name == "recorder_purge_entities":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _recorder_purge_entities(
+                hass, args.get("entity_id", ""),
+                int(args.get("keep_days", 10)),
+            )
+        if name == "statistics_get":
+            return await _statistics_get(
+                hass, args.get("statistic_id", ""),
+                args.get("start_time"), args.get("end_time"),
+                args.get("period", "hour"),
+            )
+        if name == "statistics_list":
+            return await _statistics_list(
+                hass, args.get("statistic_type", "mean"),
+            )
+        if name == "cloud_remote_connect":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _cloud_remote_connect(hass)
+        if name == "cloud_remote_disconnect":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _cloud_remote_disconnect(hass)
+        if name == "webhook_trigger":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _webhook_trigger(
+                hass, args.get("webhook_id", ""), args.get("data"),
+            )
+        if name == "system_health_info":
+            return await _system_health_info(hass)
+        if name == "network_info":
+            return await _network_info(hass)
+        if name == "schedule_get":
+            return await _schedule_get(hass, args.get("entity_id", ""))
+        if name == "integration_reload":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _integration_reload(hass, args.get("domain", ""))
+        if name == "template_reload":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _template_reload(hass)
+        if name == "shell_command_execute":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _shell_command_execute(
+                hass, args.get("command_name", ""),
+            )
+        if name == "notify_all":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _notify_all(
+                hass, args.get("message", ""), args.get("title"),
+            )
+        if name == "config_entry_disable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _config_entry_disable(hass, args.get("entry_id", ""))
+        if name == "config_entry_enable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _config_entry_enable(hass, args.get("entry_id", ""))
+        if name == "config_entry_reload":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _config_entry_reload(hass, args.get("entry_id", ""))
+        if name == "area_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _area_create(
+                hass, args.get("name", ""),
+                args.get("icon"), args.get("floor_id"),
+            )
+        if name == "area_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _area_delete(hass, args.get("area_id", ""))
+        if name == "area_list":
+            return await _area_list(hass)
+        if name == "label_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _label_create(
+                hass, args.get("name", ""),
+                args.get("color"), args.get("icon"),
+            )
+        if name == "label_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _label_delete(hass, args.get("label_id", ""))
+        if name == "label_list":
+            return await _label_list(hass)
+        if name == "floor_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _floor_create(
+                hass, args.get("name", ""),
+                args.get("level"), args.get("icon"),
+            )
+        if name == "floor_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _floor_delete(hass, args.get("floor_id", ""))
+        if name == "floor_list":
+            return await _floor_list(hass)
+        if name == "category_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _category_create(
+                hass, args.get("scope", ""), args.get("name", ""),
+                args.get("icon"),
+            )
+        if name == "category_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _category_delete(
+                hass, args.get("scope", ""), args.get("category_id", ""),
+            )
+        if name == "category_list":
+            return await _category_list(hass, args.get("scope", ""))
         # --- Wave 31 dispatch ---
         if name == "persistent_notification_dismiss_all":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -16916,6 +17473,353 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 32 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "energy_get_solar_forecast",
+            "description": "Get solar energy forecast.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_purge_entities",
+            "description": "Purge recorder data for specific entities.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "keep_days": {"type": "integer"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "statistics_get",
+            "description": "Get statistics for a statistic_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_id": {"type": "string"},
+                    "start_time": {"type": "string"},
+                    "end_time": {"type": "string"},
+                    "period": {"type": "string", "description": "5minute/hour/day/week/month"},
+                },
+                "required": ["statistic_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "statistics_list",
+            "description": "List available statistics.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_type": {"type": "string", "description": "mean/sum"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cloud_remote_connect",
+            "description": "Connect Home Assistant Cloud remote.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cloud_remote_disconnect",
+            "description": "Disconnect Home Assistant Cloud remote.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "webhook_trigger",
+            "description": "Trigger a webhook by ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "webhook_id": {"type": "string"},
+                    "data": {"type": "object"},
+                },
+                "required": ["webhook_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_health_info",
+            "description": "Get system health information.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "network_info",
+            "description": "Get network configuration information.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "schedule_get",
+            "description": "Get schedule entity state.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_reload",
+            "description": "Reload an integration by domain.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "template_reload",
+            "description": "Reload template entities from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shell_command_execute",
+            "description": "Execute a shell_command by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {"command_name": {"type": "string"}},
+                "required": ["command_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "notify_all",
+            "description": "Send a notification via notify.notify (all platforms).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "title": {"type": "string"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_disable",
+            "description": "Disable a config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_enable",
+            "description": "Enable a config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_reload",
+            "description": "Reload a config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_create",
+            "description": "Create an area in the area registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "icon": {"type": "string"},
+                    "floor_id": {"type": "string"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_delete",
+            "description": "Delete an area from the area registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"area_id": {"type": "string"}},
+                "required": ["area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_list",
+            "description": "List all areas.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "label_create",
+            "description": "Create a label in the label registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "color": {"type": "string"},
+                    "icon": {"type": "string"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "label_delete",
+            "description": "Delete a label from the label registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"label_id": {"type": "string"}},
+                "required": ["label_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "label_list",
+            "description": "List all labels.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "floor_create",
+            "description": "Create a floor in the floor registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "level": {"type": "integer"},
+                    "icon": {"type": "string"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "floor_delete",
+            "description": "Delete a floor from the floor registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"floor_id": {"type": "string"}},
+                "required": ["floor_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "floor_list",
+            "description": "List all floors.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "category_create",
+            "description": "Create a category in the category registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scope": {"type": "string"},
+                    "name": {"type": "string"},
+                    "icon": {"type": "string"},
+                },
+                "required": ["scope", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "category_delete",
+            "description": "Delete a category from the category registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scope": {"type": "string"},
+                    "category_id": {"type": "string"},
+                },
+                "required": ["scope", "category_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "category_list",
+            "description": "List all categories for a scope.",
+            "parameters": {
+                "type": "object",
+                "properties": {"scope": {"type": "string"}},
+                "required": ["scope"],
             },
         },
     },
