@@ -8339,6 +8339,165 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 30: tag scan, reload extras, timer change, counter ops, scene apply,
+#           automation trigger, script turn_off
+# ---------------------------------------------------------------------------
+
+
+async def _tag_scan(
+    hass: HomeAssistant, tag_id: str, device_id: str | None = None,
+) -> dict[str, Any]:
+    """Scan/simulate an NFC tag."""
+    data: dict[str, Any] = {"tag_id": tag_id}
+    if device_id:
+        data["device_id"] = device_id
+    try:
+        await hass.services.async_call("tag", "scan", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Tag scan failed: {exc}"}
+    return {"ok": True, "tag_id": tag_id, "action": "scanned"}
+
+
+async def _reload_zone(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload zones from YAML."""
+    try:
+        await hass.services.async_call("zone", "reload", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reload zone failed: {exc}"}
+    return {"ok": True, "action": "zones_reloaded"}
+
+
+async def _reload_customize(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload customize from YAML."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "reload_custom_templates", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reload customize failed: {exc}"}
+    return {"ok": True, "action": "customize_reloaded"}
+
+
+async def _reload_core_config(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload core configuration from YAML."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "reload_core_config", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reload core config failed: {exc}"}
+    return {"ok": True, "action": "core_config_reloaded"}
+
+
+async def _reload_all(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload all YAML configurations."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "reload_all", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reload all failed: {exc}"}
+    return {"ok": True, "action": "all_reloaded"}
+
+
+async def _timer_change(
+    hass: HomeAssistant, entity_id: str, duration: str,
+) -> dict[str, Any]:
+    """Change a running timer's duration."""
+    try:
+        await hass.services.async_call(
+            "timer", "change",
+            {"entity_id": entity_id, "duration": duration}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Timer change failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "duration": duration}
+
+
+async def _counter_increment(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Increment a counter."""
+    try:
+        await hass.services.async_call(
+            "counter", "increment", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Counter increment failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "incremented"}
+
+
+async def _counter_decrement(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Decrement a counter."""
+    try:
+        await hass.services.async_call(
+            "counter", "decrement", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Counter decrement failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "decremented"}
+
+
+async def _counter_reset(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Reset a counter to its initial value."""
+    try:
+        await hass.services.async_call(
+            "counter", "reset", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Counter reset failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+
+
+async def _scene_apply(
+    hass: HomeAssistant, entities: dict[str, Any],
+    transition: float | None = None,
+) -> dict[str, Any]:
+    """Apply a scene from entity states."""
+    data: dict[str, Any] = {"entities": entities}
+    if transition is not None:
+        data["transition"] = transition
+    try:
+        await hass.services.async_call("scene", "apply", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Scene apply failed: {exc}"}
+    return {"ok": True, "action": "scene_applied"}
+
+
+async def _automation_trigger(
+    hass: HomeAssistant, entity_id: str,
+    skip_condition: bool = True,
+) -> dict[str, Any]:
+    """Trigger an automation."""
+    try:
+        await hass.services.async_call(
+            "automation", "trigger",
+            {"entity_id": entity_id, "skip_condition": skip_condition},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation trigger failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "triggered"}
+
+
+async def _script_turn_off(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Turn off/stop a running script."""
+    try:
+        await hass.services.async_call(
+            "script", "turn_off", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script turn off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turned_off"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 29: zone, person, image snapshot, device action
 # ---------------------------------------------------------------------------
 
@@ -11650,6 +11809,65 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 30 dispatch ---
+        if name == "tag_scan":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _tag_scan(
+                hass, args.get("tag_id", ""), args.get("device_id"),
+            )
+        if name == "reload_zone":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reload_zone(hass)
+        if name == "reload_customize":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reload_customize(hass)
+        if name == "reload_core_config":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reload_core_config(hass)
+        if name == "reload_all":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reload_all(hass)
+        if name == "timer_change":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _timer_change(
+                hass, args.get("entity_id", ""), args.get("duration", ""),
+            )
+        if name == "counter_increment":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _counter_increment(hass, args.get("entity_id", ""))
+        if name == "counter_decrement":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _counter_decrement(hass, args.get("entity_id", ""))
+        if name == "counter_reset":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _counter_reset(hass, args.get("entity_id", ""))
+        if name == "scene_apply":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _scene_apply(
+                hass, args.get("entities", {}),
+                args.get("transition"),
+            )
+        if name == "automation_trigger":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_trigger(
+                hass, args.get("entity_id", ""),
+                bool(args.get("skip_condition", True)),
+            )
+        if name == "script_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _script_turn_off(hass, args.get("entity_id", ""))
         # --- Wave 29 dispatch ---
         if name == "zone_create":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -16643,6 +16861,147 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "reset_counter",
             "description": "Reset a counter entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 30 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "tag_scan",
+            "description": "Scan/simulate an NFC tag.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tag_id": {"type": "string"},
+                    "device_id": {"type": "string"},
+                },
+                "required": ["tag_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_zone",
+            "description": "Reload zones from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_customize",
+            "description": "Reload customize from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_core_config",
+            "description": "Reload core configuration from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_all",
+            "description": "Reload all YAML configurations.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "timer_change",
+            "description": "Change a running timer's duration.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "duration": {"type": "string", "description": "HH:MM:SS"},
+                },
+                "required": ["entity_id", "duration"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "counter_increment",
+            "description": "Increment a counter.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "counter_decrement",
+            "description": "Decrement a counter.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "counter_reset",
+            "description": "Reset a counter to its initial value.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scene_apply",
+            "description": "Apply a scene from entity states.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entities": {"type": "object", "description": "Entity→state map"},
+                    "transition": {"type": "number"},
+                },
+                "required": ["entities"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_trigger",
+            "description": "Trigger an automation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "skip_condition": {"type": "boolean"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_turn_off",
+            "description": "Turn off/stop a running script.",
             "parameters": {
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
