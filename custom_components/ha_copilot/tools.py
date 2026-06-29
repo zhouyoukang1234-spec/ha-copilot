@@ -8339,6 +8339,53 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 27: homeassistant_update_entity, system_log_clear/write
+# ---------------------------------------------------------------------------
+
+
+async def _homeassistant_update_entity(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Force-update an entity's state."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "update_entity",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Update entity failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "updated"}
+
+
+async def _system_log_clear(hass: HomeAssistant) -> dict[str, Any]:
+    """Clear the system log."""
+    try:
+        await hass.services.async_call(
+            "system_log", "clear", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System log clear failed: {exc}"}
+    return {"ok": True, "action": "log_cleared"}
+
+
+async def _system_log_write(
+    hass: HomeAssistant, message: str,
+    level: str = "error", logger: str | None = None,
+) -> dict[str, Any]:
+    """Write a message to the system log."""
+    data: dict[str, Any] = {"message": message, "level": level}
+    if logger:
+        data["logger"] = logger
+    try:
+        await hass.services.async_call(
+            "system_log", "write", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System log write failed: {exc}"}
+    return {"ok": True, "message": message, "level": level}
+
+
+# ---------------------------------------------------------------------------
 # Wave 26: TTS, recorder, logger, reload domain configs
 # ---------------------------------------------------------------------------
 
@@ -11255,6 +11302,24 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 27 dispatch ---
+        if name == "homeassistant_update_entity":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _homeassistant_update_entity(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "system_log_clear":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _system_log_clear(hass)
+        if name == "system_log_write":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _system_log_write(
+                hass, args.get("message", ""),
+                args.get("level", "error"), args.get("logger"),
+            )
         # --- Wave 26 dispatch ---
         if name == "tts_speak":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -16112,6 +16177,43 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 27 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "homeassistant_update_entity",
+            "description": "Force-update an entity's state.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_log_clear",
+            "description": "Clear the system log.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_log_write",
+            "description": "Write a message to the system log.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "level": {"type": "string", "description": "debug/info/warning/error/critical"},
+                    "logger": {"type": "string"},
+                },
+                "required": ["message"],
             },
         },
     },
