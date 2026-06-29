@@ -428,7 +428,8 @@ async def discover_resources(
     zwave_r = _section("zwave", zwave)
 
     # Fused top list: dedupe by repo full_name, keep the highest-starred, tag
-    # each with which source(s) surfaced it.
+    # each with which source(s) surfaced it. Also includes native integrations
+    # and device databases so the full ecosystem is represented.
     fused: dict[str, dict[str, Any]] = {}
     for source, items in (("hacs", hacs_r), ("github", github_r), ("blueprints", blueprint_r)):
         for it in items:
@@ -439,13 +440,43 @@ async def discover_resources(
             if entry is None:
                 fused[fn] = {
                     "full_name": fn,
+                    "name": it.get("name") or it.get("title") or fn.split("/")[-1],
                     "description": it.get("description") or "",
                     "stars": it.get("stars") or 0,
                     "url": it.get("url"),
+                    "source": source,
                     "sources": [source],
                 }
             elif source not in entry["sources"]:
                 entry["sources"].append(source)
+    # Include native integrations in the fused list
+    for it in native_r:
+        domain = it.get("domain", "")
+        key = f"ha:{domain}"
+        if key not in fused:
+            fused[key] = {
+                "full_name": domain,
+                "name": it.get("title") or domain,
+                "description": it.get("description") or "",
+                "stars": 0,
+                "url": it.get("url") or f"https://www.home-assistant.io/integrations/{domain}",
+                "source": "ha_integrations",
+                "sources": ["ha_integrations"],
+            }
+    # Include addons
+    for it in addons_r:
+        slug = it.get("slug", "")
+        key = f"addon:{slug}"
+        if key not in fused:
+            fused[key] = {
+                "full_name": slug,
+                "name": it.get("name") or slug,
+                "description": it.get("description") or "",
+                "stars": 0,
+                "url": it.get("url") or "",
+                "source": "addons",
+                "sources": ["addons"],
+            }
     top = sorted(
         fused.values(),
         key=lambda e: (len(e["sources"]), e["stars"]),

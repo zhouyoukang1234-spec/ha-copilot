@@ -2861,6 +2861,291 @@ async def _update_todo_item(hass: HomeAssistant, entity_id: str, item: str,
             "updated": {k: v for k, v in data.items() if k != "item"}}
 
 
+async def _manage_addon(
+    hass: HomeAssistant, slug: str, action: str
+) -> dict[str, Any]:
+    """Manage a Supervisor add-on: info/install/start/stop/restart/uninstall.
+
+    Wraps the hassio component's service calls and the Supervisor REST API
+    via ``hass.components.hassio``. Works only on HA OS / Supervised installs.
+    """
+    try:
+        hassio = hass.components.hassio  # type: ignore[attr-defined]
+    except AttributeError:
+        return {"error": "Supervisor not available (HA OS or Supervised install required)"}
+
+    if action == "info":
+        try:
+            resp = await hassio.async_get_addon_info(slug)
+            return {
+                "ok": True,
+                "slug": slug,
+                "name": resp.get("name", slug),
+                "state": resp.get("state"),
+                "version": resp.get("version"),
+                "version_latest": resp.get("version_latest"),
+                "installed": resp.get("state") != "unknown",
+                "description": resp.get("description", ""),
+                "url": resp.get("url", ""),
+            }
+        except Exception as err:  # noqa: BLE001
+            # Fallback: try the REST API directly via websession
+            try:
+                from homeassistant.helpers.aiohttp_client import async_get_clientsession
+                sess = async_get_clientsession(hass)
+                token = os.environ.get("SUPERVISOR_TOKEN", "")
+                if not token:
+                    return {"error": f"addon info failed: {err}; no SUPERVISOR_TOKEN"}
+                r = await sess.get(
+                    f"http://supervisor/addons/{slug}/info",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=10,
+                )
+                data = await r.json()
+                d = data.get("data", {})
+                return {
+                    "ok": True,
+                    "slug": slug,
+                    "name": d.get("name", slug),
+                    "state": d.get("state"),
+                    "version": d.get("version"),
+                    "version_latest": d.get("version_latest"),
+                    "installed": d.get("state") not in ("unknown", None),
+                    "description": d.get("description", ""),
+                }
+            except Exception as err2:  # noqa: BLE001
+                return {"error": f"addon info failed: {err}; fallback also failed: {err2}"}
+
+    # For write actions, use hassio services
+    svc_map = {
+        "install": "addon_install",
+        "start": "addon_start",
+        "stop": "addon_stop",
+        "restart": "addon_restart",
+        "uninstall": "addon_uninstall",
+    }
+    svc = svc_map.get(action)
+    if not svc:
+        return {"error": f"unknown action: {action}"}
+
+    try:
+        await hass.services.async_call("hassio", svc, {"addon": slug}, blocking=True)
+        return {"ok": True, "slug": slug, "action": action, "done": True}
+    except Exception as err:  # noqa: BLE001
+        # Fallback: direct REST call to Supervisor API
+        try:
+            from homeassistant.helpers.aiohttp_client import async_get_clientsession
+            sess = async_get_clientsession(hass)
+            token = os.environ.get("SUPERVISOR_TOKEN", "")
+            if not token:
+                return {"error": f"addon {action} failed: {err}; no SUPERVISOR_TOKEN"}
+            r = await sess.post(
+                f"http://supervisor/addons/{slug}/{action}",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=120,
+            )
+            data = await r.json()
+            if data.get("result") == "ok":
+                return {"ok": True, "slug": slug, "action": action, "done": True}
+            return {"error": f"addon {action}: {data.get('message', r.status)}"}
+        except Exception as err2:  # noqa: BLE001
+            return {"error": f"addon {action} failed: {err}; fallback: {err2}"}
+
+
+async def _setup_integration(
+    hass: HomeAssistant, domain: str, user_input: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Initiate a config flow to set up a native HA integration.
+
+    For simple integrations (no user input needed), just passing the domain
+    is enough. For those needing configuration, pass user_input with the
+    required fields. Returns the flow result so the caller can see if more
+    steps are needed or if setup completed.
+    """
+    from homeassistant import config_entries
+
+    try:
+        flow_mgr = hass.config_entries.flow
+    except AttributeError:
+        return {"error": "config_entries not available on this hass instance"}
+
+    try:
+        result = await flow_mgr.async_init(
+            domain, context={"source": config_entries.SOURCE_USER}
+        )
+    except Exception as err:  # noqa: BLE001
+        return {"error": f"config flow init failed for '{domain}': {err}"}
+
+    flow_id = result.get("flow_id")
+    step_type = result.get("type")
+    step_id = result.get("step_id")
+
+    # If the flow immediately created an entry (no user input needed)
+    if step_type == "create_entry":
+        entry = result.get("result")
+        return {
+            "ok": True,
+            "domain": domain,
+            "status": "created",
+            "entry_id": entry.entry_id if entry else None,
+            "title": result.get("title", domain),
+        }
+
+    # If the flow requires user input
+    if step_type == "form" and user_input is not None:
+        try:
+            result2 = await flow_mgr.async_configure(
+                flow_id, user_input=user_input
+            )
+            if result2.get("type") == "create_entry":
+                entry = result2.get("result")
+                return {
+                    "ok": True,
+                    "domain": domain,
+                    "status": "created",
+                    "entry_id": entry.entry_id if entry else None,
+                    "title": result2.get("title", domain),
+                }
+            return {
+                "ok": True,
+                "domain": domain,
+                "status": "needs_more_input",
+                "step_id": result2.get("step_id"),
+                "data_schema": _describe_schema(result2.get("data_schema")),
+                "flow_id": result2.get("flow_id"),
+            }
+        except Exception as err:  # noqa: BLE001
+            return {"error": f"config flow configure failed: {err}"}
+
+    # Flow needs user input but none provided — describe what's needed
+    return {
+        "ok": True,
+        "domain": domain,
+        "status": "needs_input",
+        "step_id": step_id,
+        "data_schema": _describe_schema(result.get("data_schema")),
+        "flow_id": flow_id,
+        "hint": "Re-call with user_input containing the required fields.",
+    }
+
+
+def _describe_schema(schema: Any) -> list[dict[str, str]] | None:
+    """Best-effort description of a voluptuous schema for tool output."""
+    if schema is None:
+        return None
+    try:
+        fields = []
+        for key in schema.schema:
+            name = str(key)
+            required = not isinstance(key, vol.Optional)
+            if hasattr(key, "schema"):
+                name = str(key.schema)
+            fields.append({"name": name, "required": required})
+        return fields
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def _manage_hacs(
+    hass: HomeAssistant, action: str, repo: str = "",
+    category: str = "integration",
+) -> dict[str, Any]:
+    """Manage HACS repositories: list, add, download (install), remove.
+
+    Uses HACS's WebSocket API (hacs/repositories/*) when available, with
+    a REST fallback via the HACS API proxy.
+    """
+    try:
+        ws_conn = hass.components.websocket_api  # noqa: F841
+    except AttributeError:
+        pass
+
+    if action == "list":
+        try:
+            # Try the HACS websocket command
+            result = await hass.services.async_call(
+                "hacs", "repositories", blocking=True
+            )
+            return {"ok": True, "action": "list", "repositories": result}
+        except Exception:  # noqa: BLE001
+            pass
+        # Fallback: query the HACS API directly
+        try:
+            from homeassistant.helpers.aiohttp_client import async_get_clientsession
+            sess = async_get_clientsession(hass)
+            r = await sess.get(
+                "http://localhost:8123/api/hacs/repositories",
+                headers={"Authorization": f"Bearer {os.environ.get('HASS_TOKEN', '')}"},
+                timeout=10,
+            )
+            data = await r.json()
+            if isinstance(data, list):
+                return {"ok": True, "action": "list", "count": len(data),
+                        "repositories": data[:20]}
+            return {"error": f"unexpected HACS response: {type(data)}"}
+        except Exception as err:  # noqa: BLE001
+            return {"error": f"HACS list failed: {err}. Is HACS installed?"}
+
+    if action in ("download", "install"):
+        if not repo:
+            return {"error": "missing 'repo' (e.g. 'basnijholt/adaptive-lighting')"}
+        try:
+            # HACS WebSocket: download/install
+            await hass.services.async_call(
+                "hacs", "install",
+                {"repository": repo, "category": category},
+                blocking=True,
+            )
+            return {"ok": True, "action": "install", "repo": repo,
+                    "hint": "Restart HA for the integration to load."}
+        except Exception:  # noqa: BLE001
+            pass
+        # Fallback approach: use the HACS API
+        try:
+            from homeassistant.helpers.aiohttp_client import async_get_clientsession
+            sess = async_get_clientsession(hass)
+            # Step 1: register the repo in HACS
+            r = await sess.post(
+                "http://localhost:8123/api/hacs/repositories",
+                headers={
+                    "Authorization": f"Bearer {os.environ.get('HASS_TOKEN', '')}",
+                    "Content-Type": "application/json",
+                },
+                json={"repository": repo, "category": category},
+                timeout=30,
+            )
+            # Step 2: trigger download
+            r2 = await sess.post(
+                f"http://localhost:8123/api/hacs/repositories/{repo}/download",
+                headers={
+                    "Authorization": f"Bearer {os.environ.get('HASS_TOKEN', '')}",
+                    "Content-Type": "application/json",
+                },
+                timeout=60,
+            )
+            if r2.status < 300:
+                return {"ok": True, "action": "install", "repo": repo,
+                        "hint": "Restart HA for the integration to load."}
+            return {"error": f"HACS download returned {r2.status}"}
+        except Exception as err:  # noqa: BLE001
+            return {"error": f"HACS install failed: {err}. Is HACS installed?"}
+
+    if action == "remove":
+        if not repo:
+            return {"error": "missing 'repo'"}
+        try:
+            await hass.services.async_call(
+                "hacs", "remove",
+                {"repository": repo},
+                blocking=True,
+            )
+            return {"ok": True, "action": "remove", "repo": repo}
+        except Exception as err:  # noqa: BLE001
+            return {"error": f"HACS remove failed: {err}"}
+
+    return {"error": f"unknown action '{action}' — use list/install/download/remove"}
+
+
 async def _run_tools(
     hass: HomeAssistant, store: dict, args: dict[str, Any]
 ) -> dict[str, Any]:
@@ -3480,6 +3765,32 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
         if name == "search_ha_addons":
             return await resources.search_ha_addons(
                 hass, args.get("query", ""), int(args.get("limit", 10))
+            )
+        if name == "manage_addon":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            slug = args.get("slug", "")
+            action = args.get("action", "info")
+            if not slug:
+                return {"error": "missing required argument: slug (e.g. 'core_mosquitto')"}
+            if action not in ("info", "install", "start", "stop", "restart", "uninstall"):
+                return {"error": f"invalid action '{action}' — use info/install/start/stop/restart/uninstall"}
+            return await _manage_addon(hass, slug, action)
+        if name == "setup_integration":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            domain = args.get("domain", "")
+            if not domain:
+                return {"error": "missing required argument: domain"}
+            user_input = args.get("user_input")
+            return await _setup_integration(hass, domain, user_input)
+        if name == "manage_hacs":
+            action = args.get("action", "list")
+            if action != "list" and not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _manage_hacs(
+                hass, action, args.get("repo", ""),
+                args.get("category", "integration"),
             )
         if name == "search_zwave_devices":
             return await resources.search_zwave_devices(
@@ -5194,6 +5505,40 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "query": {"type": "string", "description": "a need, e.g. 'mqtt' or 'zigbee2mqtt'."},
                 "limit": {"type": "integer", "description": "max add-ons to return (default 10)."},
             }, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_addon",
+            "description": "Manage a Supervisor add-on: get info, install, start, stop, restart, or uninstall. Use search_ha_addons to find the slug first, then this tool to act on it. Requires HA OS or Supervised install. Write op (except info) \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "slug": {"type": "string", "description": "add-on slug from search_ha_addons (e.g. 'core_mosquitto', 'a0d7b954_zigbee2mqtt')."},
+                "action": {"type": "string", "enum": ["info", "install", "start", "stop", "restart", "uninstall"], "description": "action to perform (default: info)."},
+            }, "required": ["slug"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "setup_integration",
+            "description": "Set up a native HA integration via its config flow. Pass the domain (from search_ha_integrations) to start. If the integration needs user input, returns the required fields; re-call with user_input to complete setup. For zero-config integrations, one call creates the entry. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "integration domain (e.g. 'utility_meter', 'mqtt', 'zha')."},
+                "user_input": {"type": "object", "description": "optional: config values for the flow step (e.g. {\"host\": \"192.168.1.5\", \"port\": 1883})."},
+            }, "required": ["domain"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "manage_hacs",
+            "description": "Manage HACS (Home Assistant Community Store) repositories: list installed, install (download) a new repo, or remove one. Use search_community_resources to find the repo first, then this tool to install it. Requires HACS to be installed. Write ops (except list) gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "action": {"type": "string", "enum": ["list", "install", "remove"], "description": "action to perform (default: list)."},
+                "repo": {"type": "string", "description": "GitHub repo (e.g. 'basnijholt/adaptive-lighting'). Required for install/remove."},
+                "category": {"type": "string", "enum": ["integration", "plugin", "theme", "appdaemon", "python_script"], "description": "HACS category (default: integration)."},
+            }},
         },
     },
     {
