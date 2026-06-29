@@ -8339,6 +8339,116 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 23: light/fan/cover toggle, HA restart/stop, media player stop/clear,
+#           reload automations/scripts
+# ---------------------------------------------------------------------------
+
+
+async def _light_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Toggle a light."""
+    try:
+        await hass.services.async_call(
+            "light", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _fan_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Toggle a fan."""
+    try:
+        await hass.services.async_call(
+            "fan", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Fan toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _cover_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Toggle a cover (open/close)."""
+    try:
+        await hass.services.async_call(
+            "cover", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cover toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _homeassistant_restart(hass: HomeAssistant) -> dict[str, Any]:
+    """Restart Home Assistant."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "restart", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"HA restart failed: {exc}"}
+    return {"ok": True, "action": "restart"}
+
+
+async def _homeassistant_stop(hass: HomeAssistant) -> dict[str, Any]:
+    """Stop Home Assistant."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "stop", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"HA stop failed: {exc}"}
+    return {"ok": True, "action": "stop"}
+
+
+async def _media_player_media_stop(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Stop media playback."""
+    try:
+        await hass.services.async_call(
+            "media_player", "media_stop", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player stop failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "stopped"}
+
+
+async def _media_player_clear_playlist(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Clear media player playlist."""
+    try:
+        await hass.services.async_call(
+            "media_player", "clear_playlist",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player clear playlist failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "playlist_cleared"}
+
+
+async def _reload_automations(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload automations."""
+    try:
+        await hass.services.async_call(
+            "automation", "reload", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reload automations failed: {exc}"}
+    return {"ok": True, "action": "automations_reloaded"}
+
+
+async def _reload_scripts(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload scripts."""
+    try:
+        await hass.services.async_call(
+            "script", "reload", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reload scripts failed: {exc}"}
+    return {"ok": True, "action": "scripts_reloaded"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 22: light flash, switch toggle, media player join/unjoin,
 #           water heater away mode, climate on/off
 # ---------------------------------------------------------------------------
@@ -10736,6 +10846,43 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 23 dispatch ---
+        if name == "light_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _light_toggle(hass, args.get("entity_id", ""))
+        if name == "fan_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _fan_toggle(hass, args.get("entity_id", ""))
+        if name == "cover_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _cover_toggle(hass, args.get("entity_id", ""))
+        if name == "homeassistant_restart":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _homeassistant_restart(hass)
+        if name == "homeassistant_stop":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _homeassistant_stop(hass)
+        if name == "media_player_media_stop":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_media_stop(hass, args.get("entity_id", ""))
+        if name == "media_player_clear_playlist":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_clear_playlist(hass, args.get("entity_id", ""))
+        if name == "reload_automations":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reload_automations(hass)
+        if name == "reload_scripts":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reload_scripts(hass)
         # --- Wave 22 dispatch ---
         if name == "light_flash":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -15391,6 +15538,111 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 23 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "light_toggle",
+            "description": "Toggle a light.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fan_toggle",
+            "description": "Toggle a fan.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cover_toggle",
+            "description": "Toggle a cover (open/close).",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "homeassistant_restart",
+            "description": "Restart Home Assistant.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "homeassistant_stop",
+            "description": "Stop Home Assistant.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_media_stop",
+            "description": "Stop media playback.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_clear_playlist",
+            "description": "Clear media player playlist.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_automations",
+            "description": "Reload automations from YAML.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_scripts",
+            "description": "Reload scripts from YAML.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
             },
         },
     },
