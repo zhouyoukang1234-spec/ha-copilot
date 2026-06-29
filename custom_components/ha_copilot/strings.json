@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA-Copilot",
+        "description": "Set up HA-Copilot — a deterministic capability layer for Home Assistant. No model, no API keys needed.",
+        "data": {
+          "allow_write": "Allow writing config files",
+          "allow_restart": "Allow restarting Home Assistant"
+        },
+        "data_description": {
+          "allow_write": "Enables tools that create/modify automations, scenes, scripts, and config files (with automatic backup).",
+          "allow_restart": "Enables the restart tool. Disabled by default for safety."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "HA-Copilot is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HA-Copilot Options",
+        "description": "Adjust safety toggles for the capability layer.",
+        "data": {
+          "allow_write": "Allow writing config files",
+          "allow_restart": "Allow restarting Home Assistant"
+        },
+        "data_description": {
+          "allow_write": "Enables tools that create/modify automations, scenes, scripts, and config files (with automatic backup).",
+          "allow_restart": "Enables the restart tool. Disabled by default for safety."
+        }
+      }
+    }
+  }
+}
