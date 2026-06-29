@@ -5016,6 +5016,216 @@ async def _test_condition(
 
 
 # ---------------------------------------------------------------------------
+# Advanced domain tools — energy, camera, climate, vacuum, cover, updates
+# ---------------------------------------------------------------------------
+
+
+async def _get_energy_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Get energy usage summary from the energy dashboard configuration."""
+    try:
+        prefs = hass.data.get("energy_manager")
+        if prefs and hasattr(prefs, "data"):
+            data = prefs.data
+            return {"ok": True, "data": data}
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        energy_data = await hass.async_add_executor_job(
+            lambda: hass.data.get("energy")
+        )
+        if energy_data:
+            return {"ok": True, "data": energy_data}
+    except Exception:  # noqa: BLE001
+        pass
+    energy_entities = []
+    for state in hass.states.async_all():
+        attrs = state.attributes
+        dc = attrs.get("device_class", "")
+        if dc in ("energy", "power", "gas"):
+            energy_entities.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "unit": attrs.get("unit_of_measurement", ""),
+                "device_class": dc,
+                "name": attrs.get("friendly_name", ""),
+            })
+    return {"ok": True, "count": len(energy_entities),
+            "energy_entities": energy_entities,
+            "note": "Energy manager not available; listing energy-class entities instead."}
+
+
+async def _list_energy_sources(hass: HomeAssistant) -> dict[str, Any]:
+    """List configured energy sources from the energy preferences."""
+    try:
+        prefs = hass.data.get("energy_manager")
+        if prefs and hasattr(prefs, "data"):
+            sources = prefs.data.get("energy_sources", [])
+            return {"ok": True, "count": len(sources), "sources": sources}
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "count": 0, "sources": [],
+            "note": "Energy manager not available; configure energy dashboard first."}
+
+
+async def _camera_snapshot(
+    hass: HomeAssistant, entity_id: str, filename: str | None = None,
+) -> dict[str, Any]:
+    """Take a snapshot from a camera entity."""
+    try:
+        fname = filename or f"/config/www/snapshot_{entity_id.split('.')[-1]}.jpg"
+        await hass.services.async_call(
+            "camera", "snapshot",
+            {"entity_id": entity_id, "filename": fname},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Camera snapshot failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "filename": fname}
+
+
+async def _list_cameras(hass: HomeAssistant) -> dict[str, Any]:
+    """List all camera entities with their status."""
+    cameras = []
+    for state in hass.states.async_all("camera"):
+        cameras.append({
+            "entity_id": state.entity_id,
+            "name": state.attributes.get("friendly_name", ""),
+            "state": state.state,
+            "brand": state.attributes.get("brand", ""),
+            "model": state.attributes.get("model_name", ""),
+            "is_streaming": state.state == "streaming",
+        })
+    return {"ok": True, "count": len(cameras), "cameras": cameras}
+
+
+async def _set_climate_preset(
+    hass: HomeAssistant, entity_id: str, preset_mode: str,
+) -> dict[str, Any]:
+    """Set a climate entity's preset mode (e.g. 'away', 'eco', 'boost')."""
+    try:
+        await hass.services.async_call(
+            "climate", "set_preset_mode",
+            {"entity_id": entity_id, "preset_mode": preset_mode},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set climate preset failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "preset_mode": preset_mode}
+
+
+async def _get_climate_schedule(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get climate entity state and available modes/presets."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Climate entity '{entity_id}' not found"}
+    attrs = state.attributes
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "current_temperature": attrs.get("current_temperature"),
+        "target_temperature": attrs.get("temperature"),
+        "target_temp_low": attrs.get("target_temp_low"),
+        "target_temp_high": attrs.get("target_temp_high"),
+        "hvac_modes": attrs.get("hvac_modes", []),
+        "preset_mode": attrs.get("preset_mode"),
+        "preset_modes": attrs.get("preset_modes", []),
+        "fan_mode": attrs.get("fan_mode"),
+        "fan_modes": attrs.get("fan_modes", []),
+        "swing_mode": attrs.get("swing_mode"),
+    }
+
+
+async def _set_cover_position(
+    hass: HomeAssistant, entity_id: str, position: int,
+) -> dict[str, Any]:
+    """Set cover (blinds/curtains/garage door) position (0=closed, 100=open)."""
+    try:
+        await hass.services.async_call(
+            "cover", "set_cover_position",
+            {"entity_id": entity_id, "position": max(0, min(100, position))},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set cover position failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "position": position}
+
+
+async def _vacuum_command(
+    hass: HomeAssistant, entity_id: str, command: str,
+) -> dict[str, Any]:
+    """Send command to a vacuum entity (start, stop, pause, return_to_base, locate, clean_spot)."""
+    valid = {"start", "stop", "pause", "return_to_base", "locate", "clean_spot"}
+    if command not in valid:
+        return {"error": f"Invalid command '{command}'. Valid: {sorted(valid)}"}
+    try:
+        await hass.services.async_call(
+            "vacuum", command, {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum {command} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _set_input_value(
+    hass: HomeAssistant, entity_id: str, value: Any,
+) -> dict[str, Any]:
+    """Set value of input_number, input_boolean, input_text, input_select, or input_datetime."""
+    domain = entity_id.split(".")[0] if "." in entity_id else ""
+    svc_map = {
+        "input_number": ("input_number", "set_value", {"value": value}),
+        "input_boolean": ("input_boolean", "turn_on" if value else "turn_off", {}),
+        "input_text": ("input_text", "set_value", {"value": str(value)}),
+        "input_select": ("input_select", "select_option", {"option": str(value)}),
+        "input_datetime": ("input_datetime", "set_datetime", {"datetime": str(value)} if "T" in str(value) else {"time": str(value)}),
+    }
+    if domain not in svc_map:
+        return {"error": f"Unsupported domain '{domain}'. Supported: {list(svc_map.keys())}"}
+
+    svc_domain, svc_name, svc_data = svc_map[domain]
+    svc_data["entity_id"] = entity_id
+    try:
+        await hass.services.async_call(svc_domain, svc_name, svc_data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set input value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _list_updates(hass: HomeAssistant) -> dict[str, Any]:
+    """List all pending updates (HA core, addons, HACS, devices)."""
+    updates = []
+    for state in hass.states.async_all("update"):
+        attrs = state.attributes
+        if state.state == "on":
+            updates.append({
+                "entity_id": state.entity_id,
+                "name": attrs.get("friendly_name", ""),
+                "installed_version": attrs.get("installed_version"),
+                "latest_version": attrs.get("latest_version"),
+                "release_summary": attrs.get("release_summary", "")[:200],
+                "release_url": attrs.get("release_url", ""),
+            })
+    return {"ok": True, "count": len(updates), "updates": updates}
+
+
+async def _install_update(
+    hass: HomeAssistant, entity_id: str, backup: bool = True,
+) -> dict[str, Any]:
+    """Install a pending update (with optional backup)."""
+    try:
+        await hass.services.async_call(
+            "update", "install",
+            {"entity_id": entity_id, "backup": backup},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Install update failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "backup": backup}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -6408,6 +6618,52 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             )
         if name == "test_condition":
             return await _test_condition(hass, args.get("condition", {}))
+        if name == "get_energy_summary":
+            return await _get_energy_summary(hass)
+        if name == "list_energy_sources":
+            return await _list_energy_sources(hass)
+        if name == "camera_snapshot":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _camera_snapshot(
+                hass, args.get("entity_id", ""), args.get("filename"),
+            )
+        if name == "list_cameras":
+            return await _list_cameras(hass)
+        if name == "set_climate_preset":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_climate_preset(
+                hass, args.get("entity_id", ""), args.get("preset_mode", ""),
+            )
+        if name == "get_climate_schedule":
+            return await _get_climate_schedule(hass, args.get("entity_id", ""))
+        if name == "set_cover_position":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_cover_position(
+                hass, args.get("entity_id", ""), int(args.get("position", 50)),
+            )
+        if name == "vacuum_command":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_command(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+            )
+        if name == "set_input_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_input_value(
+                hass, args.get("entity_id", ""), args.get("value"),
+            )
+        if name == "list_updates":
+            return await _list_updates(hass)
+        if name == "install_update":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _install_update(
+                hass, args.get("entity_id", ""), bool(args.get("backup", True)),
+            )
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -8086,6 +8342,140 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "condition": {"type": "object", "description": "HA condition config (e.g. {condition: state, entity_id: ..., state: on})"},
                 },
                 "required": ["condition"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_energy_summary",
+            "description": "Get energy usage summary — configured sources or energy-class entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_energy_sources",
+            "description": "List configured energy sources from the energy dashboard.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "camera_snapshot",
+            "description": "Take a snapshot from a camera entity and save to file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "filename": {"type": "string", "description": "Output path (default: /config/www/snapshot_<name>.jpg)"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_cameras",
+            "description": "List all camera entities with their status and brand.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_climate_preset",
+            "description": "Set a climate entity's preset mode (away, eco, boost, etc.).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "preset_mode": {"type": "string"},
+                },
+                "required": ["entity_id", "preset_mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_climate_schedule",
+            "description": "Get climate entity state, modes, presets, fan modes, and temperatures.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_cover_position",
+            "description": "Set cover (blinds/curtains) position (0=closed, 100=open).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "position": {"type": "integer", "minimum": 0, "maximum": 100},
+                },
+                "required": ["entity_id", "position"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_command",
+            "description": "Send command to a vacuum (start, stop, pause, return_to_base, locate, clean_spot).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string", "enum": ["start", "stop", "pause", "return_to_base", "locate", "clean_spot"]},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_input_value",
+            "description": "Set value of input_number, input_boolean, input_text, input_select, or input_datetime.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"description": "Value to set (type depends on input domain)"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_updates",
+            "description": "List all pending updates (HA core, addons, HACS, devices).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "install_update",
+            "description": "Install a pending update for an update entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "backup": {"type": "boolean", "description": "Create backup before update (default true)"},
+                },
+                "required": ["entity_id"],
             },
         },
     },
