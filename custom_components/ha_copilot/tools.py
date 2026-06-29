@@ -21146,6 +21146,45 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _domain_list_all(hass)
         if name == "entity_unavailable_list":
             return await _entity_unavailable_list(hass)
+        # --- Wave 78 dispatch ---
+        if name == "media_browser_browse":
+            return await _media_browser_browse(hass, args.get("entity_id", ""), args.get("media_content_type", ""), args.get("media_content_id", ""))
+        if name == "camera_get_stream_url":
+            return await _camera_get_stream_url(hass, args.get("entity_id", ""))
+        if name == "camera_list_with_streams":
+            return await _camera_list_with_streams(hass)
+        if name == "geo_location_list_sources":
+            return await _geo_location_list_sources(hass)
+        if name == "service_get_fields":
+            return await _service_get_fields(hass, args.get("domain", ""), args.get("service", ""))
+        if name == "service_list_all":
+            return await _service_list_all(hass)
+        if name == "input_text_list_all":
+            return await _input_text_list_all(hass)
+        if name == "input_number_list_all":
+            return await _input_number_list_all(hass)
+        if name == "input_boolean_list_all":
+            return await _input_boolean_list_all(hass)
+        if name == "input_select_list_all":
+            return await _input_select_list_all(hass)
+        if name == "input_datetime_list_all":
+            return await _input_datetime_list_all(hass)
+        if name == "state_get_last_n_changes":
+            return await _state_get_last_n_changes(hass, args.get("entity_id", ""), args.get("count", 10))
+        if name == "state_duration_in_state":
+            return await _state_duration_in_state(hass, args.get("entity_id", ""), args.get("target_state", ""), args.get("hours", 24))
+        if name == "entity_get_all_attributes":
+            return await _entity_get_all_attributes(hass, args.get("entity_id", ""))
+        if name == "automation_count_by_state":
+            return await _automation_count_by_state(hass)
+        if name == "script_count_by_state":
+            return await _script_count_by_state(hass)
+        if name == "device_count_by_manufacturer":
+            return await _device_count_by_manufacturer(hass)
+        if name == "notification_send_persistent":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _notification_send_persistent(hass, args.get("message", ""), args.get("title", ""))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -28457,6 +28496,315 @@ async def _entity_unavailable_list(hass: HomeAssistant) -> dict[str, Any]:
                 "last_changed": str(state.last_changed),
             })
     return {"ok": True, "count": len(results), "entities": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 78 — media browser, camera streams, geo_location, service fields,
+# input helper listing, state duration/last-n, entity attributes,
+# automation/script counts, device manufacturer count, persistent notification
+# ---------------------------------------------------------------------------
+
+
+async def _media_browser_browse(
+    hass: HomeAssistant, entity_id: str, media_content_type: str, media_content_id: str,
+) -> dict[str, Any]:
+    """Browse media on a media player."""
+    try:
+        from homeassistant.components.media_player import async_browse_media
+        result = await async_browse_media(hass, entity_id, media_content_type, media_content_id)
+        if isinstance(result, dict):
+            return {"ok": True, "entity_id": entity_id, "media": result}
+        return {"ok": True, "entity_id": entity_id, "title": str(getattr(result, "title", "")),
+                "children_count": len(getattr(result, "children", []))}
+    except ImportError:
+        return {"ok": True, "note": "Media browser not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media browse failed: {exc}"}
+
+
+async def _camera_get_stream_url(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get camera stream URL."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Camera '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "entity_picture": attrs.get("entity_picture"),
+        "access_token": attrs.get("access_token"),
+        "frontend_stream_type": attrs.get("frontend_stream_type"),
+        "friendly_name": attrs.get("friendly_name"),
+    }
+
+
+async def _camera_list_with_streams(hass: HomeAssistant) -> dict[str, Any]:
+    """List all cameras with stream info."""
+    results = []
+    for state in hass.states.async_all("camera"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "entity_picture": attrs.get("entity_picture"),
+            "frontend_stream_type": attrs.get("frontend_stream_type"),
+            "model_name": attrs.get("model_name"),
+            "brand": attrs.get("brand"),
+        })
+    return {"ok": True, "count": len(results), "cameras": results}
+
+
+async def _geo_location_list_sources(hass: HomeAssistant) -> dict[str, Any]:
+    """List geo_location sources and entities."""
+    results = []
+    for state in hass.states.async_all("geo_location"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "source": attrs.get("source"),
+            "latitude": attrs.get("latitude"),
+            "longitude": attrs.get("longitude"),
+            "distance": attrs.get("distance"),
+        })
+    return {"ok": True, "count": len(results), "sources": results}
+
+
+async def _service_get_fields(
+    hass: HomeAssistant, domain: str, service: str,
+) -> dict[str, Any]:
+    """Get fields/parameters for a specific service."""
+    all_services = hass.services.async_services()
+    domain_services = all_services.get(domain, {})
+    svc_data = domain_services.get(service)
+    if svc_data is None:
+        return {"error": f"Service '{domain}.{service}' not found"}
+    if isinstance(svc_data, dict):
+        return {"ok": True, "domain": domain, "service": service, "fields": svc_data}
+    return {"ok": True, "domain": domain, "service": service, "data": str(svc_data)[:500]}
+
+
+async def _service_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all available services grouped by domain."""
+    all_services = hass.services.async_services()
+    results = {}
+    total = 0
+    for domain, services in all_services.items():
+        svc_list = list(services.keys()) if isinstance(services, dict) else []
+        results[domain] = svc_list
+        total += len(svc_list)
+    return {"ok": True, "total_services": total,
+            "domain_count": len(results), "services": results}
+
+
+async def _input_text_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_text helpers."""
+    results = []
+    for state in hass.states.async_all("input_text"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "value": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "mode": attrs.get("mode"),
+            "min": attrs.get("min"),
+            "max": attrs.get("max"),
+            "pattern": attrs.get("pattern"),
+        })
+    return {"ok": True, "count": len(results), "helpers": results}
+
+
+async def _input_number_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_number helpers."""
+    results = []
+    for state in hass.states.async_all("input_number"):
+        attrs = dict(state.attributes)
+        try:
+            val = float(state.state)
+        except (ValueError, TypeError):
+            val = state.state
+        results.append({
+            "entity_id": state.entity_id,
+            "value": val,
+            "friendly_name": attrs.get("friendly_name"),
+            "min": attrs.get("min"),
+            "max": attrs.get("max"),
+            "step": attrs.get("step"),
+            "mode": attrs.get("mode"),
+            "unit": attrs.get("unit_of_measurement"),
+        })
+    return {"ok": True, "count": len(results), "helpers": results}
+
+
+async def _input_boolean_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_boolean helpers."""
+    results = []
+    for state in hass.states.async_all("input_boolean"):
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": state.attributes.get("friendly_name"),
+            "icon": state.attributes.get("icon"),
+        })
+    return {"ok": True, "count": len(results), "helpers": results}
+
+
+async def _input_select_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_select helpers."""
+    results = []
+    for state in hass.states.async_all("input_select"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "current": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "options": attrs.get("options", []),
+        })
+    return {"ok": True, "count": len(results), "helpers": results}
+
+
+async def _input_datetime_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_datetime helpers."""
+    results = []
+    for state in hass.states.async_all("input_datetime"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "value": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "has_date": attrs.get("has_date"),
+            "has_time": attrs.get("has_time"),
+        })
+    return {"ok": True, "count": len(results), "helpers": results}
+
+
+async def _state_get_last_n_changes(
+    hass: HomeAssistant, entity_id: str, count: int = 10,
+) -> dict[str, Any]:
+    """Get last N state changes for an entity."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=168)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        results = []
+        for s in items[-count:]:
+            results.append({"state": s.state, "last_changed": str(s.last_changed)})
+        return {"ok": True, "entity_id": entity_id, "requested": count,
+                "returned": len(results), "changes": results}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"State last N changes failed: {exc}"}
+
+
+async def _state_duration_in_state(
+    hass: HomeAssistant, entity_id: str, target_state: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Calculate time spent in a specific state."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        total_seconds = 0.0
+        for i, s in enumerate(items):
+            if s.state == target_state:
+                next_time = items[i + 1].last_changed if i + 1 < len(items) else end
+                total_seconds += (next_time - s.last_changed).total_seconds()
+        total_hours = round(total_seconds / 3600, 3)
+        pct = round((total_seconds / (hours * 3600)) * 100, 1) if hours > 0 else 0
+        return {"ok": True, "entity_id": entity_id, "target_state": target_state,
+                "hours_in_state": total_hours, "percentage": pct,
+                "total_seconds": round(total_seconds, 1)}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"State duration failed: {exc}"}
+
+
+async def _entity_get_all_attributes(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get all attributes of an entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    attrs = {}
+    for key, val in state.attributes.items():
+        try:
+            attrs[key] = val
+        except Exception:  # noqa: BLE001
+            attrs[key] = str(val)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "last_changed": str(state.last_changed),
+        "last_updated": str(state.last_updated),
+        "attribute_count": len(attrs),
+        "attributes": attrs,
+    }
+
+
+async def _automation_count_by_state(hass: HomeAssistant) -> dict[str, Any]:
+    """Count automations by state (on/off)."""
+    on_count = off_count = 0
+    for state in hass.states.async_all("automation"):
+        if state.state == "on":
+            on_count += 1
+        else:
+            off_count += 1
+    return {"ok": True, "total": on_count + off_count,
+            "on": on_count, "off": off_count}
+
+
+async def _script_count_by_state(hass: HomeAssistant) -> dict[str, Any]:
+    """Count scripts by state (on/off)."""
+    on_count = off_count = 0
+    for state in hass.states.async_all("script"):
+        if state.state == "on":
+            on_count += 1
+        else:
+            off_count += 1
+    return {"ok": True, "total": on_count + off_count,
+            "running": on_count, "idle": off_count}
+
+
+async def _device_count_by_manufacturer(hass: HomeAssistant) -> dict[str, Any]:
+    """Count devices grouped by manufacturer."""
+    reg = dr.async_get(hass)
+    counts: dict[str, int] = {}
+    for device in reg.devices.values():
+        mfr = device.manufacturer or "Unknown"
+        counts[mfr] = counts.get(mfr, 0) + 1
+    sorted_counts = dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))
+    return {"ok": True, "total_devices": sum(counts.values()),
+            "manufacturer_count": len(counts), "manufacturers": sorted_counts}
+
+
+async def _notification_send_persistent(
+    hass: HomeAssistant, message: str, title: str = "",
+) -> dict[str, Any]:
+    """Send a persistent notification."""
+    try:
+        await hass.services.async_call("persistent_notification", "create", {
+            "message": message,
+            "title": title or "HA-Copilot",
+        })
+        return {"ok": True, "sent": True, "message": message[:100]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Persistent notification failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -40279,4 +40627,23 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "entity_search_by_name", "description": "Search entities by friendly name.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {"name": "domain_list_all", "description": "List all active entity domains.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "entity_unavailable_list", "description": "List all unavailable/unknown entities.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 78 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "media_browser_browse", "description": "Browse media on a media player.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "media_content_type": {"type": "string"}, "media_content_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "camera_get_stream_url", "description": "Get camera stream URL and access info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "camera_list_with_streams", "description": "List all cameras with stream info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "geo_location_list_sources", "description": "List geo_location sources and entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "service_get_fields", "description": "Get fields/parameters for a specific service.", "parameters": {"type": "object", "properties": {"domain": {"type": "string"}, "service": {"type": "string"}}, "required": ["domain", "service"]}}},
+    {"type": "function", "function": {"name": "service_list_all", "description": "List all services grouped by domain.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "input_text_list_all", "description": "List all input_text helpers.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "input_number_list_all", "description": "List all input_number helpers.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "input_boolean_list_all", "description": "List all input_boolean helpers.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "input_select_list_all", "description": "List all input_select helpers with options.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "input_datetime_list_all", "description": "List all input_datetime helpers.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "state_get_last_n_changes", "description": "Get last N state changes for an entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "count": {"type": "integer", "default": 10}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "state_duration_in_state", "description": "Calculate time spent in a specific state.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "target_state": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id", "target_state"]}}},
+    {"type": "function", "function": {"name": "entity_get_all_attributes", "description": "Get all attributes of an entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_count_by_state", "description": "Count automations by state (on/off).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "script_count_by_state", "description": "Count scripts by state (running/idle).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_count_by_manufacturer", "description": "Count devices grouped by manufacturer.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "notification_send_persistent", "description": "Send a persistent notification. Write op.", "parameters": {"type": "object", "properties": {"message": {"type": "string"}, "title": {"type": "string"}}, "required": ["message"]}}},
 ]
