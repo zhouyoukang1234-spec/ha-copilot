@@ -21416,6 +21416,49 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _entity_naming_audit(hass)
         if name == "entity_duplicate_detection":
             return await _entity_duplicate_detection(hass)
+        # --- Wave 84 dispatch ---
+        if name == "automation_condition_list":
+            return await _automation_condition_list(hass, args.get("entity_id", ""))
+        if name == "automation_action_list":
+            return await _automation_action_list(hass, args.get("entity_id", ""))
+        if name == "device_supported_features":
+            return await _device_supported_features(hass, args.get("entity_id", ""))
+        if name == "device_config_entries":
+            return await _device_config_entries(hass, args.get("device_id", ""))
+        if name == "climate_zone_summary":
+            return await _climate_zone_summary(hass)
+        if name == "climate_schedule_analysis":
+            return await _climate_schedule_analysis(hass)
+        if name == "thermostat_setpoint_history":
+            return await _thermostat_setpoint_history(hass, args.get("entity_id", ""))
+        if name == "thermostat_mode_schedule":
+            return await _thermostat_mode_schedule(hass, args.get("entity_id", ""))
+        if name == "script_execution_stats":
+            return await _script_execution_stats(hass)
+        if name == "script_dependency_map":
+            return await _script_dependency_map(hass)
+        if name == "integration_version_check":
+            return await _integration_version_check(hass)
+        if name == "integration_config_flow_status":
+            return await _integration_config_flow_status(hass)
+        if name == "registry_orphan_entities":
+            return await _registry_orphan_entities(hass)
+        if name == "registry_disabled_entities":
+            return await _registry_disabled_entities(hass)
+        if name == "binary_sensor_pattern_analysis":
+            return await _binary_sensor_pattern_analysis(hass)
+        if name == "binary_sensor_contact_summary":
+            return await _binary_sensor_contact_summary(hass)
+        if name == "power_factor_summary":
+            return await _power_factor_summary(hass)
+        if name == "voltage_monitoring":
+            return await _voltage_monitoring(hass)
+        if name == "hvac_runtime_estimate":
+            return await _hvac_runtime_estimate(hass)
+        if name == "hvac_temperature_differential":
+            return await _hvac_temperature_differential(hass)
+        if name == "presence_zone_population":
+            return await _presence_zone_population(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -31162,6 +31205,378 @@ async def _entity_duplicate_detection(hass: HomeAssistant) -> dict[str, Any]:
     for name, eids in sorted(dupes.items(), key=lambda x: len(x[1]), reverse=True)[:20]:
         results.append({"friendly_name": name, "entity_ids": eids, "count": len(eids)})
     return {"ok": True, "duplicate_groups": len(results), "duplicates": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 84 — automation condition/action, device capabilities, climate zone,
+# thermostat, script analysis, integration deep, registry analysis,
+# binary sensor patterns, power quality, HVAC, presence zones
+# ---------------------------------------------------------------------------
+
+
+async def _automation_condition_list(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List conditions of an automation."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Automation '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    conditions = attrs.get("condition", [])
+    return {"ok": True, "entity_id": entity_id,
+            "friendly_name": attrs.get("friendly_name"),
+            "condition_count": len(conditions) if isinstance(conditions, list) else 0,
+            "conditions": conditions if isinstance(conditions, list) else []}
+
+
+async def _automation_action_list(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List actions of an automation."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Automation '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    actions = attrs.get("action", [])
+    return {"ok": True, "entity_id": entity_id,
+            "friendly_name": attrs.get("friendly_name"),
+            "action_count": len(actions) if isinstance(actions, list) else 0,
+            "actions": actions if isinstance(actions, list) else []}
+
+
+async def _device_supported_features(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get supported features bitmap for an entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    features = state.attributes.get("supported_features", 0)
+    return {"ok": True, "entity_id": entity_id,
+            "supported_features": features,
+            "friendly_name": state.attributes.get("friendly_name"),
+            "device_class": state.attributes.get("device_class")}
+
+
+async def _device_config_entries(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get config entries for a device."""
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get(device_id)
+    if device is None:
+        return {"error": f"Device '{device_id}' not found"}
+    entries = []
+    for entry_id in device.config_entries:
+        entry = hass.config_entries.async_entries()
+        for e in entry:
+            if hasattr(e, "entry_id") and e.entry_id == entry_id:
+                entries.append({"entry_id": entry_id, "domain": getattr(e, "domain", ""),
+                                "title": getattr(e, "title", "")})
+                break
+    return {"ok": True, "device_id": device_id, "device_name": device.name,
+            "config_entries": entries}
+
+
+async def _climate_zone_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize climate entities by zone/area."""
+    ent_reg = er.async_get(hass)
+    area_reg = ar.async_get(hass)
+    zones: dict[str, list[dict[str, Any]]] = {}
+    for s in hass.states.async_all("climate"):
+        entry = ent_reg.async_get(s.entity_id)
+        area_id = entry.area_id if entry else "unassigned"
+        area = area_reg.async_get_area(area_id) if area_id and area_id != "unassigned" else None
+        area_name = area.name if area else "Unassigned"
+        if area_name not in zones:
+            zones[area_name] = []
+        zones[area_name].append({
+            "entity_id": s.entity_id,
+            "mode": s.state,
+            "target_temp": s.attributes.get("temperature"),
+            "current_temp": s.attributes.get("current_temperature"),
+        })
+    return {"ok": True, "zone_count": len(zones), "zones": zones}
+
+
+async def _climate_schedule_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze climate scheduling patterns."""
+    automations = hass.states.async_all("automation")
+    climate_autos = []
+    for a in automations:
+        name = (a.attributes.get("friendly_name") or a.entity_id).lower()
+        if any(kw in name for kw in ("climate", "thermostat", "heat", "cool", "hvac", "temperature")):
+            climate_autos.append({
+                "entity_id": a.entity_id,
+                "friendly_name": a.attributes.get("friendly_name"),
+                "state": a.state,
+            })
+    return {"ok": True, "climate_automations": len(climate_autos),
+            "automations": climate_autos}
+
+
+async def _thermostat_setpoint_history(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get thermostat setpoint info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Climate '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id, "mode": state.state,
+            "target_temp": attrs.get("temperature"),
+            "target_temp_high": attrs.get("target_temp_high"),
+            "target_temp_low": attrs.get("target_temp_low"),
+            "current_temp": attrs.get("current_temperature"),
+            "hvac_modes": attrs.get("hvac_modes", []),
+            "preset_mode": attrs.get("preset_mode"),
+            "preset_modes": attrs.get("preset_modes", [])}
+
+
+async def _thermostat_mode_schedule(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get thermostat mode and schedule info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Climate '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id, "current_mode": state.state,
+            "available_modes": attrs.get("hvac_modes", []),
+            "fan_mode": attrs.get("fan_mode"),
+            "fan_modes": attrs.get("fan_modes", []),
+            "swing_mode": attrs.get("swing_mode"),
+            "swing_modes": attrs.get("swing_modes", []),
+            "friendly_name": attrs.get("friendly_name")}
+
+
+async def _script_execution_stats(hass: HomeAssistant) -> dict[str, Any]:
+    """Get script execution statistics."""
+    scripts = hass.states.async_all("script")
+    triggered = []
+    never = []
+    for s in scripts:
+        lt = s.attributes.get("last_triggered")
+        if lt and str(lt) != "None":
+            triggered.append({
+                "entity_id": s.entity_id,
+                "last_triggered": str(lt),
+                "current_running": s.attributes.get("current", 0),
+            })
+        else:
+            never.append(s.entity_id)
+    return {"ok": True, "total": len(scripts), "triggered": len(triggered),
+            "never_triggered": len(never), "recent": triggered[:20],
+            "unused": never[:20]}
+
+
+async def _script_dependency_map(hass: HomeAssistant) -> dict[str, Any]:
+    """Map script dependencies by referenced entities."""
+    results = []
+    for s in hass.states.async_all("script"):
+        sequence = s.attributes.get("sequence", [])
+        referenced = []
+        if isinstance(sequence, list):
+            for step in sequence:
+                if isinstance(step, dict):
+                    target = step.get("target", {})
+                    if isinstance(target, dict):
+                        eid = target.get("entity_id")
+                        if eid:
+                            if isinstance(eid, list):
+                                referenced.extend(eid)
+                            else:
+                                referenced.append(eid)
+        results.append({
+            "entity_id": s.entity_id,
+            "friendly_name": s.attributes.get("friendly_name"),
+            "step_count": len(sequence) if isinstance(sequence, list) else 0,
+            "referenced_entities": referenced,
+        })
+    return {"ok": True, "count": len(results), "scripts": results}
+
+
+async def _integration_version_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check integration versions via config entries."""
+    entries = hass.config_entries.async_entries()
+    results = []
+    for entry in entries:
+        results.append({
+            "domain": getattr(entry, "domain", "unknown"),
+            "title": getattr(entry, "title", ""),
+            "version": getattr(entry, "version", None),
+            "state": str(getattr(entry, "state", "")),
+        })
+    return {"ok": True, "count": len(results), "integrations": results[:30]}
+
+
+async def _integration_config_flow_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check config flow status for integrations."""
+    flows = hass.config_entries.flow.async_progress()
+    results = []
+    if isinstance(flows, list):
+        for flow in flows:
+            if isinstance(flow, dict):
+                results.append({
+                    "handler": flow.get("handler"),
+                    "context": flow.get("context"),
+                    "step_id": flow.get("step_id"),
+                })
+    return {"ok": True, "active_flows": len(results), "flows": results}
+
+
+async def _registry_orphan_entities(hass: HomeAssistant) -> dict[str, Any]:
+    """Find orphaned entity registry entries without state."""
+    ent_reg = er.async_get(hass)
+    orphans = []
+    for entry in ent_reg.entities.values():
+        state = hass.states.get(entry.entity_id)
+        if state is None:
+            orphans.append({
+                "entity_id": entry.entity_id,
+                "platform": entry.platform,
+                "disabled": entry.disabled,
+            })
+    return {"ok": True, "orphan_count": len(orphans), "orphans": orphans[:50]}
+
+
+async def _registry_disabled_entities(hass: HomeAssistant) -> dict[str, Any]:
+    """List disabled entities in registry."""
+    ent_reg = er.async_get(hass)
+    disabled = []
+    for entry in ent_reg.entities.values():
+        if entry.disabled:
+            disabled.append({
+                "entity_id": entry.entity_id,
+                "platform": entry.platform,
+                "disabled_by": str(entry.disabled_by) if entry.disabled_by else None,
+            })
+    return {"ok": True, "disabled_count": len(disabled), "entities": disabled[:50]}
+
+
+async def _binary_sensor_pattern_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze binary sensor patterns by device class."""
+    classes: dict[str, dict[str, int]] = {}
+    for s in hass.states.async_all("binary_sensor"):
+        dc = s.attributes.get("device_class", "none")
+        if dc not in classes:
+            classes[dc] = {"on": 0, "off": 0, "total": 0}
+        classes[dc]["total"] += 1
+        if s.state == "on":
+            classes[dc]["on"] += 1
+        else:
+            classes[dc]["off"] += 1
+    return {"ok": True, "class_count": len(classes), "patterns": classes}
+
+
+async def _binary_sensor_contact_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize door/window contact sensors."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("door", "window", "garage_door", "opening"):
+            results.append({
+                "entity_id": s.entity_id,
+                "state": s.state,
+                "device_class": dc,
+                "is_open": s.state == "on",
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    open_count = sum(1 for r in results if r["is_open"])
+    return {"ok": True, "total": len(results), "open": open_count,
+            "closed": len(results) - open_count, "contacts": results}
+
+
+async def _power_factor_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize power factor sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc == "power_factor" or "power_factor" in s.entity_id.lower():
+            try:
+                results.append({
+                    "entity_id": s.entity_id,
+                    "value": float(s.state),
+                    "unit": s.attributes.get("unit_of_measurement"),
+                })
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _voltage_monitoring(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor voltage sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc == "voltage" or s.attributes.get("unit_of_measurement") == "V":
+            try:
+                results.append({
+                    "entity_id": s.entity_id,
+                    "voltage": float(s.state),
+                    "friendly_name": s.attributes.get("friendly_name"),
+                })
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _hvac_runtime_estimate(hass: HomeAssistant) -> dict[str, Any]:
+    """Estimate HVAC runtime based on state duration."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("climate"):
+        hours_in_mode = (now - s.last_changed).total_seconds() / 3600
+        is_active = s.state in ("heat", "cool", "heat_cool", "auto")
+        results.append({
+            "entity_id": s.entity_id,
+            "mode": s.state,
+            "hours_in_mode": round(hours_in_mode, 1),
+            "is_active": is_active,
+        })
+    active_count = sum(1 for r in results if r["is_active"])
+    return {"ok": True, "total": len(results), "active": active_count,
+            "details": results}
+
+
+async def _hvac_temperature_differential(hass: HomeAssistant) -> dict[str, Any]:
+    """Get temperature differential between target and current for HVAC."""
+    results = []
+    for s in hass.states.async_all("climate"):
+        target = s.attributes.get("temperature")
+        current = s.attributes.get("current_temperature")
+        if target is not None and current is not None:
+            try:
+                diff = round(float(target) - float(current), 1)
+                results.append({
+                    "entity_id": s.entity_id,
+                    "target": float(target),
+                    "current": float(current),
+                    "differential": diff,
+                    "mode": s.state,
+                })
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "differentials": results}
+
+
+async def _presence_zone_population(hass: HomeAssistant) -> dict[str, Any]:
+    """Get population count per zone."""
+    zones: dict[str, list[str]] = {}
+    for s in hass.states.async_all("person"):
+        zone = s.state.lower()
+        if zone not in zones:
+            zones[zone] = []
+        zones[zone].append(s.entity_id)
+    for s in hass.states.async_all("device_tracker"):
+        zone = s.state.lower()
+        if zone not in zones:
+            zones[zone] = []
+        zones[zone].append(s.entity_id)
+    results = []
+    for zone, entities in sorted(zones.items(), key=lambda x: len(x[1]), reverse=True):
+        results.append({"zone": zone, "count": len(entities), "entities": entities})
+    return {"ok": True, "zone_count": len(results), "zones": results}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -43116,4 +43531,26 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "air_quality_aqi", "description": "Get Air Quality Index.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "entity_naming_audit", "description": "Audit entity naming conventions.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "entity_duplicate_detection", "description": "Detect potential duplicate entities.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 84 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "automation_condition_list", "description": "List conditions of an automation.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_action_list", "description": "List actions of an automation.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "device_supported_features", "description": "Get supported features bitmap for an entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "device_config_entries", "description": "Get config entries for a device.", "parameters": {"type": "object", "properties": {"device_id": {"type": "string"}}, "required": ["device_id"]}}},
+    {"type": "function", "function": {"name": "climate_zone_summary", "description": "Summarize climate entities by zone/area.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "climate_schedule_analysis", "description": "Analyze climate scheduling patterns.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thermostat_setpoint_history", "description": "Get thermostat setpoint info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "thermostat_mode_schedule", "description": "Get thermostat mode and schedule info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "script_execution_stats", "description": "Get script execution statistics.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "script_dependency_map", "description": "Map script dependencies by referenced entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_version_check", "description": "Check integration versions via config entries.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_config_flow_status", "description": "Check config flow status for integrations.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "registry_orphan_entities", "description": "Find orphaned entity registry entries.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "registry_disabled_entities", "description": "List disabled entities in registry.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "binary_sensor_pattern_analysis", "description": "Analyze binary sensor patterns by device class.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "binary_sensor_contact_summary", "description": "Summarize door/window contact sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "power_factor_summary", "description": "Summarize power factor sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "voltage_monitoring", "description": "Monitor voltage sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "hvac_runtime_estimate", "description": "Estimate HVAC runtime based on state.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "hvac_temperature_differential", "description": "Get temp differential between target and current.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "presence_zone_population", "description": "Get population count per zone.", "parameters": {"type": "object", "properties": {}}}},
 ]
