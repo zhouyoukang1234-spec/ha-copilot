@@ -20112,11 +20112,293 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await memory.snapshot_device_profile(hass)
+        # --- Wave 60 dispatch ---
+        if name == "entity_registry_disable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_registry_disable(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "entity_registry_enable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_registry_enable(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "device_trigger_list":
+            return await _device_trigger_list(
+                hass, args.get("device_id", ""),
+            )
+        if name == "device_condition_list":
+            return await _device_condition_list(
+                hass, args.get("device_id", ""),
+            )
+        if name == "entity_get_capabilities":
+            return await _entity_get_capabilities(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "config_entry_get_options":
+            return await _config_entry_get_options(
+                hass, args.get("entry_id", ""),
+            )
+        if name == "platform_list_entities":
+            return await _platform_list_entities(
+                hass, args.get("platform", ""),
+            )
+        if name == "entity_set_state":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_set_state(
+                hass, args.get("entity_id", ""),
+                args.get("state", ""),
+                args.get("attributes"),
+            )
+        if name == "debug_list_event_listeners":
+            return await _debug_list_event_listeners(hass)
+        if name == "debug_fire_event":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _debug_fire_event(
+                hass, args.get("event_type", ""),
+                args.get("event_data"),
+            )
+        if name == "backup_info":
+            return await _backup_info(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
     except Exception as err:  # noqa: BLE001 - surface any tool failure to the agent
         return {"error": f"{type(err).__name__}: {err}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 60 — entity registry disable/enable, device triggers/conditions,
+# entity capabilities, config entry options, platform entities, entity set
+# state, debug event listeners/fire, backup info
+# ---------------------------------------------------------------------------
+
+
+async def _entity_registry_disable(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Disable an entity in the entity registry."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not found in registry"}
+    try:
+        from homeassistant.helpers.entity_registry import RegistryEntryDisabler
+        reg.async_update_entity(
+            entity_id, disabled_by=RegistryEntryDisabler.USER,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Disable entity failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "disabled": True}
+
+
+async def _entity_registry_enable(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Re-enable a disabled entity in the entity registry."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not found in registry"}
+    try:
+        reg.async_update_entity(entity_id, disabled_by=None)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Enable entity failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "disabled": False}
+
+
+async def _device_trigger_list(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List automation triggers available for a device."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        triggers = await async_get_device_automations(
+            hass, "trigger", [device_id],
+        )
+        items = []
+        for t in triggers.get(device_id, []):
+            items.append({
+                "platform": t.get("platform", ""),
+                "type": t.get("type", ""),
+                "subtype": t.get("subtype"),
+                "entity_id": t.get("entity_id"),
+                "domain": t.get("domain", ""),
+            })
+        return {"ok": True, "device_id": device_id, "count": len(items),
+                "triggers": items}
+    except ImportError:
+        return {"error": "device_automation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"List device triggers failed: {exc}"}
+
+
+async def _device_condition_list(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List automation conditions available for a device."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        conditions = await async_get_device_automations(
+            hass, "condition", [device_id],
+        )
+        items = []
+        for c in conditions.get(device_id, []):
+            items.append({
+                "condition": c.get("condition", ""),
+                "type": c.get("type", ""),
+                "subtype": c.get("subtype"),
+                "entity_id": c.get("entity_id"),
+                "domain": c.get("domain", ""),
+            })
+        return {"ok": True, "device_id": device_id, "count": len(items),
+                "conditions": items}
+    except ImportError:
+        return {"error": "device_automation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"List device conditions failed: {exc}"}
+
+
+async def _entity_get_capabilities(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get capabilities/attributes metadata for an entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    caps: dict[str, Any] = {
+        "entity_id": entity_id,
+        "domain": entity_id.split(".")[0],
+        "state": state.state,
+        "attributes": attrs,
+    }
+    if "supported_features" in attrs:
+        caps["supported_features"] = attrs["supported_features"]
+    if "device_class" in attrs:
+        caps["device_class"] = attrs["device_class"]
+    if "unit_of_measurement" in attrs:
+        caps["unit_of_measurement"] = attrs["unit_of_measurement"]
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry:
+        caps["platform"] = entry.platform
+        caps["disabled_by"] = str(entry.disabled_by) if entry.disabled_by else None
+        caps["hidden_by"] = str(entry.hidden_by) if entry.hidden_by else None
+        caps["entity_category"] = str(entry.entity_category) if entry.entity_category else None
+    return {"ok": True, **caps}
+
+
+async def _config_entry_get_options(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Get the options dict for a config entry."""
+    entry = None
+    for e in hass.config_entries.async_entries():
+        if e.entry_id == entry_id:
+            entry = e
+            break
+    if entry is None:
+        return {"error": f"Config entry '{entry_id}' not found"}
+    return {
+        "ok": True,
+        "entry_id": entry_id,
+        "domain": entry.domain,
+        "title": entry.title,
+        "options": dict(entry.options),
+        "data_keys": list(entry.data.keys()),
+    }
+
+
+async def _platform_list_entities(
+    hass: HomeAssistant, platform: str,
+) -> dict[str, Any]:
+    """List all entities registered by a specific platform/integration."""
+    reg = er.async_get(hass)
+    entities = []
+    for entry in reg.entities.values():
+        if entry.platform == platform:
+            state = hass.states.get(entry.entity_id)
+            entities.append({
+                "entity_id": entry.entity_id,
+                "name": entry.name or entry.original_name,
+                "domain": entry.domain,
+                "state": state.state if state else None,
+                "disabled": entry.disabled_by is not None,
+            })
+    return {"ok": True, "platform": platform, "count": len(entities),
+            "entities": entities[:500]}
+
+
+async def _entity_set_state(
+    hass: HomeAssistant, entity_id: str, state: str,
+    attributes: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Set the state (and optionally attributes) of an entity directly."""
+    old = hass.states.get(entity_id)
+    merged_attrs = dict(old.attributes) if old else {}
+    if attributes:
+        merged_attrs.update(attributes)
+    hass.states.async_set(entity_id, state, merged_attrs)
+    return {"ok": True, "entity_id": entity_id, "new_state": state}
+
+
+async def _debug_list_event_listeners(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """List all registered event listeners (event types and counts)."""
+    try:
+        listeners = hass.bus.async_listeners()
+        items = [{"event_type": k, "count": v}
+                 for k, v in sorted(listeners.items())]
+        return {"ok": True, "count": len(items), "listeners": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"List event listeners failed: {exc}"}
+
+
+async def _debug_fire_event(
+    hass: HomeAssistant, event_type: str,
+    event_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Fire a custom event on the HA event bus."""
+    if not event_type:
+        return {"error": "event_type is required"}
+    hass.bus.async_fire(event_type, event_data or {})
+    return {"ok": True, "event_type": event_type, "fired": True}
+
+
+async def _backup_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get backup manager info: list existing backups."""
+    try:
+        manager = hass.data.get("backup_manager")
+        if manager is None:
+            manager = hass.data.get("backup")
+        if manager is None:
+            return {"ok": True, "backups": [],
+                    "note": "Backup manager not available"}
+        backups_data = await manager.async_get_backups()
+        if isinstance(backups_data, tuple):
+            backups_data = backups_data[0]
+        items = []
+        if isinstance(backups_data, dict):
+            for slug, bk in backups_data.items():
+                items.append({
+                    "slug": slug,
+                    "name": getattr(bk, "name", str(bk)),
+                    "date": str(getattr(bk, "date", "")),
+                    "size": getattr(bk, "size", None),
+                })
+        return {"ok": True, "count": len(items), "backups": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup info failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -30675,6 +30957,116 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "snapshot_device_profile",
             "description": "Capture the home's real device signals (manufacturers, integration domains, entity-domain counts) into memory under category 'devices', so later sessions recall what the home contains without re-scanning and can detect changes. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    # --- Wave 60 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_registry_disable",
+            "description": "Disable an entity in the entity registry (sets disabled_by=user). Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity to disable"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_registry_enable",
+            "description": "Re-enable a disabled entity in the entity registry (clears disabled_by). Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity to enable"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_trigger_list",
+            "description": "List all automation triggers available for a device (device_automation platform).",
+            "parameters": {"type": "object", "properties": {
+                "device_id": {"type": "string", "description": "Device ID"},
+            }, "required": ["device_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_condition_list",
+            "description": "List all automation conditions available for a device (device_automation platform).",
+            "parameters": {"type": "object", "properties": {
+                "device_id": {"type": "string", "description": "Device ID"},
+            }, "required": ["device_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_get_capabilities",
+            "description": "Get capabilities, attributes metadata, supported features, device_class, platform info for an entity.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_get_options",
+            "description": "Get the current options dict and data keys for a config entry.",
+            "parameters": {"type": "object", "properties": {
+                "entry_id": {"type": "string", "description": "Config entry ID"},
+            }, "required": ["entry_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "platform_list_entities",
+            "description": "List all entities registered by a specific platform/integration (e.g. 'hue', 'zwave_js', 'mqtt').",
+            "parameters": {"type": "object", "properties": {
+                "platform": {"type": "string", "description": "Platform name (e.g. hue, mqtt, zwave_js)"},
+            }, "required": ["platform"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_set_state",
+            "description": "Directly set the state (and optionally attributes) of an entity. Bypasses service calls — useful for virtual/template entities or testing. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity ID"},
+                "state": {"type": "string", "description": "New state value"},
+                "attributes": {"type": "object", "description": "Optional attributes to merge"},
+            }, "required": ["entity_id", "state"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "debug_list_event_listeners",
+            "description": "List all registered event types and their listener counts on the HA event bus.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "debug_fire_event",
+            "description": "Fire a custom event on the HA event bus. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "event_type": {"type": "string", "description": "Event type to fire"},
+                "event_data": {"type": "object", "description": "Optional event data payload"},
+            }, "required": ["event_type"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "backup_info",
+            "description": "Get info about existing backups from the backup manager.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
