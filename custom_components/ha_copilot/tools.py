@@ -6982,6 +6982,256 @@ async def _device_tracker_see(
 
 
 # ---------------------------------------------------------------------------
+# Wave 13: automation enable/disable, script trigger, entity attrs, integration
+#           info, input_text, light/switch shortcuts, climate set, HA domain,
+#           intent handlers
+# ---------------------------------------------------------------------------
+
+
+async def _enable_automation(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Enable an automation."""
+    try:
+        await hass.services.async_call(
+            "automation", "turn_on", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Enable automation failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "enabled"}
+
+
+async def _disable_automation(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Disable an automation."""
+    try:
+        await hass.services.async_call(
+            "automation", "turn_off", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Disable automation failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "disabled"}
+
+
+async def _trigger_script(
+    hass: HomeAssistant, entity_id: str,
+    variables: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Trigger a script with optional variables."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if variables:
+        data["variables"] = variables
+    try:
+        await hass.services.async_call("script", "turn_on", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Trigger script failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "triggered"}
+
+
+async def _get_entity_attributes(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get all attributes of a specific entity."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Entity '{entity_id}' not found"}
+    return {
+        "ok": True, "entity_id": entity_id, "state": state.state,
+        "attributes": dict(state.attributes),
+        "last_changed": str(state.last_changed),
+        "last_updated": str(state.last_updated),
+    }
+
+
+async def _get_integration_info(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Get detailed info about a specific integration domain."""
+    entries = [
+        e for e in hass.config_entries.async_entries()
+        if e.domain == domain
+    ]
+    items = []
+    for e in entries:
+        items.append({
+            "entry_id": e.entry_id,
+            "title": e.title,
+            "state": str(e.state),
+            "domain": e.domain,
+        })
+    if not items:
+        return {"ok": True, "domain": domain, "note": "No config entries for this domain",
+                "entries": []}
+    return {"ok": True, "domain": domain, "count": len(items), "entries": items}
+
+
+async def _set_input_text(
+    hass: HomeAssistant, entity_id: str, value: str,
+) -> dict[str, Any]:
+    """Set an input_text entity value."""
+    try:
+        await hass.services.async_call(
+            "input_text", "set_value",
+            {"entity_id": entity_id, "value": value}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set input_text failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _light_turn_on(
+    hass: HomeAssistant, entity_id: str,
+    brightness: int | None = None, color_temp: int | None = None,
+    rgb_color: list[int] | None = None, transition: float | None = None,
+    effect: str | None = None,
+) -> dict[str, Any]:
+    """Turn on a light with optional brightness/color/transition."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if brightness is not None:
+        data["brightness"] = brightness
+    if color_temp is not None:
+        data["color_temp"] = color_temp
+    if rgb_color:
+        data["rgb_color"] = rgb_color
+    if transition is not None:
+        data["transition"] = transition
+    if effect:
+        data["effect"] = effect
+    try:
+        await hass.services.async_call("light", "turn_on", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light turn_on failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+
+
+async def _light_turn_off(
+    hass: HomeAssistant, entity_id: str,
+    transition: float | None = None,
+) -> dict[str, Any]:
+    """Turn off a light."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if transition is not None:
+        data["transition"] = transition
+    try:
+        await hass.services.async_call("light", "turn_off", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light turn_off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+
+
+async def _switch_turn_on(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Turn on a switch."""
+    try:
+        await hass.services.async_call(
+            "switch", "turn_on", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Switch turn_on failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+
+
+async def _switch_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Turn off a switch."""
+    try:
+        await hass.services.async_call(
+            "switch", "turn_off", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Switch turn_off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+
+
+async def _climate_set_temperature(
+    hass: HomeAssistant, entity_id: str,
+    temperature: float | None = None,
+    target_temp_high: float | None = None,
+    target_temp_low: float | None = None,
+    hvac_mode: str | None = None,
+) -> dict[str, Any]:
+    """Set climate target temperature."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if temperature is not None:
+        data["temperature"] = float(temperature)
+    if target_temp_high is not None:
+        data["target_temp_high"] = float(target_temp_high)
+    if target_temp_low is not None:
+        data["target_temp_low"] = float(target_temp_low)
+    if hvac_mode:
+        data["hvac_mode"] = hvac_mode
+    try:
+        await hass.services.async_call(
+            "climate", "set_temperature", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate set temperature failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "data": data}
+
+
+async def _climate_set_hvac_mode(
+    hass: HomeAssistant, entity_id: str, hvac_mode: str,
+) -> dict[str, Any]:
+    """Set climate HVAC mode (off/heat/cool/heat_cool/auto/dry/fan_only)."""
+    try:
+        await hass.services.async_call(
+            "climate", "set_hvac_mode",
+            {"entity_id": entity_id, "hvac_mode": hvac_mode}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate set HVAC mode failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "hvac_mode": hvac_mode}
+
+
+async def _homeassistant_turn_on(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Turn on any entity via homeassistant.turn_on (universal)."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "turn_on", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"HA turn_on failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+
+
+async def _homeassistant_turn_off(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Turn off any entity via homeassistant.turn_off (universal)."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "turn_off", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"HA turn_off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+
+
+async def _homeassistant_toggle(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Toggle any entity via homeassistant.toggle (universal)."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"HA toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _list_intent_handlers(hass: HomeAssistant) -> dict[str, Any]:
+    """List registered conversation intent handlers."""
+    try:
+        from homeassistant.helpers import intent as intent_helper
+        intents = list(intent_helper.async_get(hass) or {})
+        return {"ok": True, "count": len(intents), "intents": intents[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "note": f"Intent handlers unavailable ({exc})", "intents": []}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -8898,6 +9148,82 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 args.get("gps_accuracy"), args.get("battery"),
                 args.get("host_name"),
             )
+        # --- Wave 13 dispatch ---
+        if name == "enable_automation":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _enable_automation(hass, args.get("entity_id", ""))
+        if name == "disable_automation":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _disable_automation(hass, args.get("entity_id", ""))
+        if name == "trigger_script":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _trigger_script(
+                hass, args.get("entity_id", ""), args.get("variables"),
+            )
+        if name == "get_entity_attributes":
+            return await _get_entity_attributes(hass, args.get("entity_id", ""))
+        if name == "get_integration_info":
+            return await _get_integration_info(hass, args.get("domain", ""))
+        if name == "set_input_text":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_input_text(
+                hass, args.get("entity_id", ""), args.get("value", ""),
+            )
+        if name == "light_turn_on":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _light_turn_on(
+                hass, args.get("entity_id", ""),
+                args.get("brightness"), args.get("color_temp"),
+                args.get("rgb_color"), args.get("transition"),
+                args.get("effect"),
+            )
+        if name == "light_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _light_turn_off(
+                hass, args.get("entity_id", ""), args.get("transition"),
+            )
+        if name == "switch_turn_on":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _switch_turn_on(hass, args.get("entity_id", ""))
+        if name == "switch_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _switch_turn_off(hass, args.get("entity_id", ""))
+        if name == "climate_set_temperature":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_set_temperature(
+                hass, args.get("entity_id", ""),
+                args.get("temperature"), args.get("target_temp_high"),
+                args.get("target_temp_low"), args.get("hvac_mode"),
+            )
+        if name == "climate_set_hvac_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_set_hvac_mode(
+                hass, args.get("entity_id", ""), args.get("hvac_mode", ""),
+            )
+        if name == "homeassistant_turn_on":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _homeassistant_turn_on(hass, args.get("entity_id", ""))
+        if name == "homeassistant_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _homeassistant_turn_off(hass, args.get("entity_id", ""))
+        if name == "homeassistant_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _homeassistant_toggle(hass, args.get("entity_id", ""))
+        if name == "list_intent_handlers":
+            return await _list_intent_handlers(hass)
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -12065,6 +12391,220 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "host_name": {"type": "string"},
                 },
             },
+        },
+    },
+    # --- Wave 13 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "enable_automation",
+            "description": "Enable an automation.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "disable_automation",
+            "description": "Disable an automation.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_script",
+            "description": "Trigger a script with optional variables.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "variables": {"type": "object", "description": "Script variables"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_entity_attributes",
+            "description": "Get all attributes of a specific entity (state, attributes, timestamps).",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_integration_info",
+            "description": "Get detailed info about a specific integration domain (config entries, states).",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_input_text",
+            "description": "Set an input_text entity value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "string"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "light_turn_on",
+            "description": "Turn on a light with optional brightness, color_temp, rgb_color, transition, effect.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "brightness": {"type": "integer", "description": "0-255"},
+                    "color_temp": {"type": "integer", "description": "Mireds"},
+                    "rgb_color": {"type": "array", "items": {"type": "integer"}, "description": "[R, G, B]"},
+                    "transition": {"type": "number", "description": "Seconds"},
+                    "effect": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "light_turn_off",
+            "description": "Turn off a light with optional transition.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "transition": {"type": "number", "description": "Seconds"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "switch_turn_on",
+            "description": "Turn on a switch.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "switch_turn_off",
+            "description": "Turn off a switch.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_set_temperature",
+            "description": "Set climate target temperature (single or range).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "temperature": {"type": "number"},
+                    "target_temp_high": {"type": "number"},
+                    "target_temp_low": {"type": "number"},
+                    "hvac_mode": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_set_hvac_mode",
+            "description": "Set climate HVAC mode (off/heat/cool/heat_cool/auto/dry/fan_only).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "hvac_mode": {"type": "string", "description": "off|heat|cool|heat_cool|auto|dry|fan_only"},
+                },
+                "required": ["entity_id", "hvac_mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "homeassistant_turn_on",
+            "description": "Turn on any entity via homeassistant.turn_on (universal).",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "homeassistant_turn_off",
+            "description": "Turn off any entity via homeassistant.turn_off (universal).",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "homeassistant_toggle",
+            "description": "Toggle any entity via homeassistant.toggle (universal).",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_intent_handlers",
+            "description": "List registered conversation intent handlers.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
