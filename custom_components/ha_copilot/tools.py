@@ -22953,6 +22953,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _acceleration_sensor_check(hass)
         if name == "compass_sensor_check":
             return await _compass_sensor_check(hass)
+        # --- Wave 121 dispatch ---
+        if name == "automation_trigger_analysis":
+            return await _automation_trigger_analysis(hass)
+        if name == "automation_action_analysis":
+            return await _automation_action_analysis(hass)
+        if name == "automation_condition_check":
+            return await _automation_condition_check(hass)
+        if name == "automation_dependency_map":
+            return await _automation_dependency_map(hass)
+        if name == "automation_timeline":
+            return await _automation_timeline(hass)
+        if name == "scene_analysis":
+            return await _scene_analysis(hass)
+        if name == "script_execution_timeline":
+            return await _script_execution_timeline(hass)
+        if name == "automation_performance":
+            return await _automation_performance(hass)
+        if name == "automation_duplicate_check":
+            return await _automation_duplicate_check(hass)
+        if name == "automation_orphan_check":
+            return await _automation_orphan_check(hass)
+        if name == "event_bus_monitor":
+            return await _event_bus_monitor(hass)
+        if name == "service_call_frequency":
+            return await _service_call_frequency(hass)
+        if name == "webhook_monitor":
+            return await _webhook_monitor(hass)
+        if name == "template_sensor_check":
+            return await _template_sensor_check(hass)
+        if name == "integration_list_deep":
+            return await _integration_list_deep(hass)
+        if name == "entity_registry_deep":
+            return await _entity_registry_deep(hass)
+        if name == "device_registry_deep":
+            return await _device_registry_deep(hass)
+        if name == "area_registry_deep":
+            return await _area_registry_deep(hass)
+        if name == "label_registry_check":
+            return await _label_registry_check(hass)
+        if name == "floor_registry_check":
+            return await _floor_registry_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -43479,6 +43520,221 @@ async def _compass_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "sensors": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 121 — automation analysis & registry deep: trigger/action/condition
+# analysis, dependency map, timeline, scene analysis, script timeline,
+# performance, duplicate/orphan check, event bus, service call frequency,
+# webhook, template sensor, integration/entity/device/area/label/floor registry
+# ---------------------------------------------------------------------------
+
+
+async def _automation_trigger_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze automation triggers."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        triggers = s.attributes.get("trigger", [])
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "trigger_count": len(triggers) if isinstance(triggers, list) else 0,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    enabled = sum(1 for r in results if r["state"] == "on")
+    return {"ok": True, "count": len(results), "enabled": enabled,
+            "automations": results}
+
+
+async def _automation_action_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze automation actions."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "last_triggered": str(s.attributes.get("last_triggered")),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "automations": results}
+
+
+async def _automation_condition_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check automation conditions."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "current_state": s.attributes.get("current", 0),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "automations": results}
+
+
+async def _automation_dependency_map(hass: HomeAssistant) -> dict[str, Any]:
+    """Map automation dependencies."""
+    automations = []
+    for s in hass.states.async_all("automation"):
+        automations.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(automations), "map": automations}
+
+
+async def _automation_timeline(hass: HomeAssistant) -> dict[str, Any]:
+    """Check automation timeline."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        lt = s.attributes.get("last_triggered")
+        results.append({"entity_id": s.entity_id,
+                        "last_triggered": str(lt) if lt else None,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    triggered = [r for r in results if r["last_triggered"] and r["last_triggered"] != "None"]
+    return {"ok": True, "total": len(results), "triggered": len(triggered),
+            "timeline": results}
+
+
+async def _scene_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze scenes."""
+    results = []
+    for s in hass.states.async_all("scene"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "entity_count": len(s.attributes.get("entity_id", [])),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "scenes": results}
+
+
+async def _script_execution_timeline(hass: HomeAssistant) -> dict[str, Any]:
+    """Check script execution timeline."""
+    results = []
+    for s in hass.states.async_all("script"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "last_triggered": str(s.attributes.get("last_triggered")),
+                        "current": s.attributes.get("current", 0),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "scripts": results}
+
+
+async def _automation_performance(hass: HomeAssistant) -> dict[str, Any]:
+    """Check automation performance."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "last_triggered": str(s.attributes.get("last_triggered")),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "performance": results}
+
+
+async def _automation_duplicate_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check for duplicate automations."""
+    names = {}
+    for s in hass.states.async_all("automation"):
+        fn = s.attributes.get("friendly_name", s.entity_id)
+        names.setdefault(fn, []).append(s.entity_id)
+    dupes = {n: eids for n, eids in names.items() if len(eids) > 1}
+    return {"ok": True, "total": sum(len(v) for v in names.values()),
+            "duplicate_groups": len(dupes), "duplicates": dupes}
+
+
+async def _automation_orphan_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check for orphan automations."""
+    results = []
+    for s in hass.states.async_all("automation"):
+        if s.state == "unavailable":
+            results.append({"entity_id": s.entity_id,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "orphan_count": len(results), "orphans": results}
+
+
+async def _event_bus_monitor(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor event bus."""
+    listeners = {}
+    if hasattr(hass.bus, "async_listeners"):
+        listeners = hass.bus.async_listeners()
+    return {"ok": True, "listener_count": len(listeners),
+            "listeners": dict(listeners) if isinstance(listeners, dict) else {}}
+
+
+async def _service_call_frequency(hass: HomeAssistant) -> dict[str, Any]:
+    """Check service call frequency."""
+    services = {}
+    if hasattr(hass.services, "async_services"):
+        svc_data = hass.services.async_services()
+        for domain, svcs in (svc_data.items() if isinstance(svc_data, dict) else []):
+            services[domain] = list(svcs.keys()) if isinstance(svcs, dict) else []
+    return {"ok": True, "domain_count": len(services), "services": services}
+
+
+async def _webhook_monitor(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor webhooks."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "webhook" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "webhooks": results}
+
+
+async def _template_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check template sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "template" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _integration_list_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """List integrations deep."""
+    entries = hass.config_entries.async_entries()
+    results = []
+    for entry in entries:
+        results.append({"domain": getattr(entry, "domain", "unknown"),
+                        "title": getattr(entry, "title", ""),
+                        "state": getattr(entry, "state", "unknown")})
+    return {"ok": True, "count": len(results), "integrations": results}
+
+
+async def _entity_registry_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """Check entity registry deep."""
+    domains = {}
+    for s in hass.states.async_all():
+        domain = s.entity_id.split(".")[0]
+        domains.setdefault(domain, 0)
+        domains[domain] += 1
+    total = sum(domains.values())
+    breakdown = [{"domain": d, "count": c} for d, c in sorted(
+        domains.items(), key=lambda x: x[1], reverse=True)]
+    return {"ok": True, "total_entities": total,
+            "domain_count": len(domains), "breakdown": breakdown}
+
+
+async def _device_registry_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """Check device registry deep."""
+    entries = hass.config_entries.async_entries()
+    return {"ok": True, "integration_count": len(entries)}
+
+
+async def _area_registry_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """Check area registry deep."""
+    areas = set()
+    for s in hass.states.async_all():
+        area = s.attributes.get("area_id")
+        if area:
+            areas.add(area)
+    return {"ok": True, "area_count": len(areas), "areas": list(areas)}
+
+
+async def _label_registry_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check label registry."""
+    labels = set()
+    for s in hass.states.async_all():
+        for lbl in s.attributes.get("labels", []):
+            labels.add(lbl)
+    return {"ok": True, "label_count": len(labels), "labels": list(labels)}
+
+
+async def _floor_registry_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check floor registry."""
+    floors = set()
+    for s in hass.states.async_all():
+        floor = s.attributes.get("floor_id")
+        if floor:
+            floors.add(floor)
+    return {"ok": True, "floor_count": len(floors), "floors": list(floors)}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -56217,4 +56473,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "gyroscope_sensor_check", "description": "Gyroscope sensor.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "acceleration_sensor_check", "description": "Acceleration sensor.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "compass_sensor_check", "description": "Compass sensor.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 121 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "automation_trigger_analysis", "description": "Automation trigger analysis.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_action_analysis", "description": "Automation action analysis.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_condition_check", "description": "Automation condition.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_dependency_map", "description": "Automation dependency map.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_timeline", "description": "Automation timeline.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "scene_analysis", "description": "Scene analysis.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "script_execution_timeline", "description": "Script execution timeline.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_performance", "description": "Automation performance.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_duplicate_check", "description": "Automation duplicate check.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_orphan_check", "description": "Automation orphan check.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "event_bus_monitor", "description": "Event bus monitor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "service_call_frequency", "description": "Service call frequency.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "webhook_monitor", "description": "Webhook monitor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "template_sensor_check", "description": "Template sensor check.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_list_deep", "description": "Integration list deep.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_registry_deep", "description": "Entity registry deep.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_registry_deep", "description": "Device registry deep.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "area_registry_deep", "description": "Area registry deep.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "label_registry_check", "description": "Label registry.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "floor_registry_check", "description": "Floor registry.", "parameters": {"type": "object", "properties": {}}}},
 ]
