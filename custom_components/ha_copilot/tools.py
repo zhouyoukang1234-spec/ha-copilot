@@ -21064,6 +21064,45 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _integration_list_loaded(hass)
         if name == "integration_get_entry_details":
             return await _integration_get_entry_details(hass, args.get("domain", ""))
+        # --- Wave 76 dispatch ---
+        if name == "image_get_snapshot":
+            return await _image_get_snapshot(hass, args.get("entity_id", ""))
+        if name == "remote_list_commands":
+            return await _remote_list_commands(hass, args.get("entity_id", ""))
+        if name == "alarm_get_status":
+            return await _alarm_get_status(hass)
+        if name == "schedule_get_info":
+            return await _schedule_get_info(hass, args.get("entity_id", ""))
+        if name == "schedule_list_all":
+            return await _schedule_list_all(hass)
+        if name == "todo_complete_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _todo_complete_item(hass, args.get("entity_id", ""), args.get("item", ""))
+        if name == "automation_get_trace":
+            return await _automation_get_trace(hass, args.get("entity_id", ""))
+        if name == "automation_list_with_last_triggered":
+            return await _automation_list_with_last_triggered(hass)
+        if name == "automation_get_condition_entities":
+            return await _automation_get_condition_entities(hass, args.get("entity_id", ""))
+        if name == "energy_get_cost_summary":
+            return await _energy_get_cost_summary(hass)
+        if name == "device_list_with_entities":
+            return await _device_list_with_entities(hass, args.get("device_id", ""))
+        if name == "device_get_config_entry":
+            return await _device_get_config_entry(hass, args.get("device_id", ""))
+        if name == "notification_list_services":
+            return await _notification_list_services(hass)
+        if name == "thermostat_schedule_get":
+            return await _thermostat_schedule_get(hass, args.get("entity_id", ""))
+        if name == "dns_list_entries":
+            return await _dns_list_entries(hass)
+        if name == "backup_list_with_details":
+            return await _backup_list_with_details(hass)
+        if name == "addon_get_info":
+            return await _addon_get_info(hass, args.get("slug", ""))
+        if name == "ha_os_get_info":
+            return await _ha_os_get_info(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -27663,6 +27702,333 @@ async def _integration_get_entry_details(
         })
     return {"ok": True, "domain": domain, "count": len(results),
             "entries": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 76 — image snapshot, remote commands, alarm status, schedule, todo
+# complete, automation traces, energy cost, device entities, notification
+# services, thermostat schedule, DNS, backup details, addon, HA OS
+# ---------------------------------------------------------------------------
+
+
+async def _image_get_snapshot(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get image entity snapshot info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Image entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "entity_picture": attrs.get("entity_picture"),
+        "access_token": attrs.get("access_token"),
+        "friendly_name": attrs.get("friendly_name"),
+    }
+
+
+async def _remote_list_commands(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List commands available on a remote control entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Remote '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "activity_list": attrs.get("activity_list", []),
+        "current_activity": attrs.get("current_activity"),
+        "friendly_name": attrs.get("friendly_name"),
+    }
+
+
+async def _alarm_get_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Get status of all alarm control panels."""
+    results = []
+    for state in hass.states.async_all("alarm_control_panel"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "code_arm_required": attrs.get("code_arm_required"),
+            "supported_features": attrs.get("supported_features"),
+            "friendly_name": attrs.get("friendly_name"),
+            "changed_by": attrs.get("changed_by"),
+        })
+    return {"ok": True, "count": len(results), "panels": results}
+
+
+async def _schedule_get_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get schedule helper info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Schedule '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "friendly_name": attrs.get("friendly_name"),
+        "next_event": str(attrs.get("next_event", "")),
+        "editable": attrs.get("editable"),
+    }
+
+
+async def _schedule_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all schedule entities."""
+    results = []
+    for state in hass.states.async_all("schedule"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+        })
+    return {"ok": True, "count": len(results), "schedules": results}
+
+
+async def _todo_complete_item(
+    hass: HomeAssistant, entity_id: str, item: str,
+) -> dict[str, Any]:
+    """Complete a todo list item."""
+    try:
+        await hass.services.async_call("todo", "update_item", {
+            "entity_id": entity_id,
+            "item": item,
+            "status": "completed",
+        })
+        return {"ok": True, "entity_id": entity_id, "item": item, "status": "completed"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo complete failed: {exc}"}
+
+
+async def _automation_get_trace(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get last automation trace/run info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Automation '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "last_triggered": str(attrs.get("last_triggered", "")),
+        "current": attrs.get("current", 0),
+        "friendly_name": attrs.get("friendly_name"),
+        "mode": attrs.get("mode"),
+    }
+
+
+async def _automation_list_with_last_triggered(hass: HomeAssistant) -> dict[str, Any]:
+    """List automations with their last triggered time."""
+    results = []
+    for state in hass.states.async_all("automation"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "last_triggered": str(attrs.get("last_triggered", "")),
+            "mode": attrs.get("mode"),
+        })
+    results.sort(key=lambda x: x["last_triggered"], reverse=True)
+    return {"ok": True, "count": len(results), "automations": results}
+
+
+async def _automation_get_condition_entities(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Analyze automation config for referenced entities."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Automation '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    referenced = set()
+    triggers = attrs.get("trigger", [])
+    if isinstance(triggers, list):
+        for trig in triggers:
+            if isinstance(trig, dict):
+                eid = trig.get("entity_id")
+                if eid:
+                    referenced.add(eid) if isinstance(eid, str) else referenced.update(eid)
+    conditions = attrs.get("condition", [])
+    if isinstance(conditions, list):
+        for cond in conditions:
+            if isinstance(cond, dict):
+                eid = cond.get("entity_id")
+                if eid:
+                    referenced.add(eid) if isinstance(eid, str) else referenced.update(eid)
+    return {"ok": True, "entity_id": entity_id,
+            "referenced_entities": sorted(referenced),
+            "count": len(referenced)}
+
+
+async def _energy_get_cost_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Get energy cost summary from energy sensors."""
+    cost_sensors = []
+    for state in hass.states.async_all("sensor"):
+        attrs = dict(state.attributes)
+        dc = attrs.get("device_class", "")
+        if dc in ("energy", "monetary") or "cost" in state.entity_id.lower() or "energy" in state.entity_id.lower():
+            try:
+                val = float(state.state)
+            except (ValueError, TypeError):
+                val = None
+            cost_sensors.append({
+                "entity_id": state.entity_id,
+                "value": val,
+                "unit": attrs.get("unit_of_measurement"),
+                "device_class": dc,
+                "friendly_name": attrs.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(cost_sensors), "sensors": cost_sensors}
+
+
+async def _device_list_with_entities(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List all entities belonging to a device."""
+    ent_reg = er.async_get(hass)
+    entities = []
+    for entry in ent_reg.entities.values():
+        if entry.device_id == device_id:
+            state = hass.states.get(entry.entity_id)
+            entities.append({
+                "entity_id": entry.entity_id,
+                "platform": entry.platform,
+                "state": state.state if state else None,
+                "disabled": entry.disabled,
+            })
+    return {"ok": True, "device_id": device_id, "count": len(entities),
+            "entities": entities}
+
+
+async def _device_get_config_entry(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get config entry info for a device."""
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get(device_id)
+    if device is None:
+        return {"error": f"Device '{device_id}' not found"}
+    config_entries = []
+    for entry_id in device.config_entries:
+        entry = hass.config_entries.async_get_entry(entry_id) if hasattr(hass.config_entries, "async_get_entry") else None
+        if entry:
+            config_entries.append({
+                "entry_id": entry.entry_id,
+                "title": entry.title,
+                "domain": entry.domain,
+                "state": str(entry.state),
+            })
+        else:
+            config_entries.append({"entry_id": entry_id})
+    return {"ok": True, "device_id": device_id,
+            "name": device.name,
+            "manufacturer": device.manufacturer,
+            "model": device.model,
+            "config_entries": config_entries}
+
+
+async def _notification_list_services(hass: HomeAssistant) -> dict[str, Any]:
+    """List available notification services."""
+    all_services = hass.services.async_services()
+    notify_services = all_services.get("notify", {})
+    results = list(notify_services.keys()) if isinstance(notify_services, dict) else []
+    return {"ok": True, "count": len(results), "services": results}
+
+
+async def _thermostat_schedule_get(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get thermostat schedule info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Climate '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "preset_mode": attrs.get("preset_mode"),
+        "preset_modes": attrs.get("preset_modes", []),
+        "target_temperature": attrs.get("temperature"),
+        "target_temp_high": attrs.get("target_temp_high"),
+        "target_temp_low": attrs.get("target_temp_low"),
+    }
+
+
+async def _dns_list_entries(hass: HomeAssistant) -> dict[str, Any]:
+    """List DNS-related entities and network info."""
+    dns_entities = []
+    for state in hass.states.async_all():
+        name_lower = (state.attributes.get("friendly_name") or state.entity_id).lower()
+        if "dns" in name_lower or "network" in name_lower:
+            dns_entities.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(dns_entities), "entries": dns_entities}
+
+
+async def _backup_list_with_details(hass: HomeAssistant) -> dict[str, Any]:
+    """List backups with detailed info."""
+    try:
+        from homeassistant.components.backup import async_get_manager
+        manager = async_get_manager(hass)
+        backups = await manager.async_get_backups()
+        results = []
+        for backup in backups:
+            if isinstance(backup, dict):
+                results.append(backup)
+            else:
+                results.append({"name": str(backup)[:200]})
+        return {"ok": True, "count": len(results), "backups": results}
+    except (ImportError, Exception) as exc:  # noqa: BLE001
+        backup_data = hass.data.get("backup", {})
+        if isinstance(backup_data, dict) and backup_data:
+            return {"ok": True, "backup_data": {k: str(v)[:200] for k, v in backup_data.items()}}
+        return {"ok": True, "note": f"Backup info not available: {exc}"}
+
+
+async def _addon_get_info(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Get info about a specific HA add-on."""
+    try:
+        from homeassistant.components.hassio import async_get_addon_info
+        info = await async_get_addon_info(hass, slug)
+        if isinstance(info, dict):
+            return {"ok": True, "slug": slug, "info": info}
+        return {"ok": True, "slug": slug, "info": str(info)[:500]}
+    except ImportError:
+        return {"error": "hassio not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon info failed: {exc}"}
+
+
+async def _ha_os_get_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Home Assistant OS info."""
+    try:
+        from homeassistant.components.hassio import get_os_info
+        info = await get_os_info(hass)
+        if isinstance(info, dict):
+            return {"ok": True, "os_info": info}
+        return {"ok": True, "os_info": str(info)[:500]}
+    except ImportError:
+        return {"ok": True, "note": "HA OS info not available (not running HAOS)"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"HA OS info failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -39444,4 +39810,23 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "timer_get_status", "description": "Get timer entity status (state, duration, remaining).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
     {"type": "function", "function": {"name": "integration_list_loaded", "description": "List all loaded integrations with entry counts.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "integration_get_entry_details", "description": "Get detailed config entries for an integration domain.", "parameters": {"type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}}},
+    # --- Wave 76 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "image_get_snapshot", "description": "Get image entity snapshot info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "remote_list_commands", "description": "List commands available on a remote control entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "alarm_get_status", "description": "Get status of all alarm control panels.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "schedule_get_info", "description": "Get schedule helper entity info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "schedule_list_all", "description": "List all schedule entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "todo_complete_item", "description": "Complete a todo list item. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "item": {"type": "string"}}, "required": ["entity_id", "item"]}}},
+    {"type": "function", "function": {"name": "automation_get_trace", "description": "Get last automation trace/run info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_list_with_last_triggered", "description": "List automations sorted by last triggered time.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_get_condition_entities", "description": "Analyze automation for referenced entities in triggers/conditions.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "energy_get_cost_summary", "description": "Get energy cost summary from energy/monetary sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_list_with_entities", "description": "List all entities belonging to a device.", "parameters": {"type": "object", "properties": {"device_id": {"type": "string"}}, "required": ["device_id"]}}},
+    {"type": "function", "function": {"name": "device_get_config_entry", "description": "Get config entry info for a device.", "parameters": {"type": "object", "properties": {"device_id": {"type": "string"}}, "required": ["device_id"]}}},
+    {"type": "function", "function": {"name": "notification_list_services", "description": "List available notification services.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thermostat_schedule_get", "description": "Get thermostat schedule and preset info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "dns_list_entries", "description": "List DNS and network related entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "backup_list_with_details", "description": "List backups with detailed info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "addon_get_info", "description": "Get info about a specific HA add-on.", "parameters": {"type": "object", "properties": {"slug": {"type": "string"}}, "required": ["slug"]}}},
+    {"type": "function", "function": {"name": "ha_os_get_info", "description": "Get Home Assistant OS info.", "parameters": {"type": "object", "properties": {}}}},
 ]
