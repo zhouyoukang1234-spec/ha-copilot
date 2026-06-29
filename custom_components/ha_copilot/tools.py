@@ -3121,6 +3121,59 @@ async def _setup_integration(
     }
 
 
+async def _reconfigure_integration(
+    hass: HomeAssistant, entry_id: str, user_input: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Update the options of an existing config entry via its options flow.
+
+    Most integrations expose an options flow for post-setup reconfiguration
+    (e.g. changing Adaptive Lighting switches, Powercalc device models).
+    Pass entry_id from list_config_entries. If user_input is None, returns the
+    required fields; otherwise submits the form.
+    """
+    entry = hass.config_entries.async_get_entry(entry_id)
+    if entry is None:
+        return {"error": f"config entry '{entry_id}' not found"}
+
+    try:
+        result = await hass.config_entries.options.async_init(entry_id)
+    except Exception as err:  # noqa: BLE001
+        return {"error": f"options flow init failed: {err} (integration may not support options)"}
+
+    flow_id = result.get("flow_id")
+    step_id = result.get("step_id")
+    rtype = result.get("type")
+
+    if rtype == "create_entry" or (rtype and str(rtype).endswith("create_entry")):
+        return {"ok": True, "entry_id": entry_id, "status": "no_options",
+                "hint": "This integration has no configurable options."}
+
+    if user_input is not None and flow_id:
+        try:
+            result2 = await hass.config_entries.options.async_configure(
+                flow_id, user_input,
+            )
+            rtype2 = result2.get("type")
+            if rtype2 == "create_entry" or (rtype2 and str(rtype2).endswith("create_entry")):
+                return {"ok": True, "entry_id": entry_id, "status": "updated"}
+            return {
+                "ok": True, "entry_id": entry_id, "status": "needs_more_input",
+                "step_id": result2.get("step_id"),
+                "data_schema": _describe_schema(result2.get("data_schema")),
+                "flow_id": result2.get("flow_id"),
+            }
+        except Exception as err:  # noqa: BLE001
+            return {"error": f"options flow configure failed: {err}"}
+
+    return {
+        "ok": True, "entry_id": entry_id, "status": "needs_input",
+        "step_id": step_id,
+        "data_schema": _describe_schema(result.get("data_schema")),
+        "flow_id": flow_id,
+        "hint": "Re-call with user_input containing the option values.",
+    }
+
+
 def _describe_schema(schema: Any) -> list[dict[str, str]] | None:
     """Best-effort description of a voluptuous schema for tool output."""
     if schema is None:
@@ -3885,6 +3938,13 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 return {"error": "missing required argument: domain"}
             user_input = args.get("user_input")
             return await _setup_integration(hass, domain, user_input)
+        if name == "reconfigure_integration":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            eid = args.get("entry_id", "")
+            if not eid:
+                return {"error": "missing required argument: entry_id"}
+            return await _reconfigure_integration(hass, eid, args.get("user_input"))
         if name == "manage_hacs":
             action = args.get("action", "list")
             if action != "list" and not store.get(CONF_ALLOW_WRITE, True):
@@ -5649,6 +5709,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "domain": {"type": "string", "description": "integration domain (e.g. 'utility_meter', 'mqtt', 'zha')."},
                 "user_input": {"type": "object", "description": "optional: config values for the flow step (e.g. {\"host\": \"192.168.1.5\", \"port\": 1883})."},
             }, "required": ["domain"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reconfigure_integration",
+            "description": "Update options of an existing config entry via its options flow. Most integrations support reconfiguration after setup (e.g. Adaptive Lighting switches, Powercalc models). Pass entry_id from list_config_entries. Returns required fields if user_input omitted. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entry_id": {"type": "string", "description": "config entry ID from list_config_entries."},
+                "user_input": {"type": "object", "description": "optional: new option values for the flow step."},
+            }, "required": ["entry_id"]},
         },
     },
     {
