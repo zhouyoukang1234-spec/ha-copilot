@@ -51,6 +51,14 @@ _RECOMMEND_BP_SCHEMA = vol.Schema(
         ),
     }
 )
+_RESOLVE_INTENT_SCHEMA = vol.Schema(
+    {
+        vol.Required("need"): cv.string,
+        vol.Optional("limit", default=3): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=10)
+        ),
+    }
+)
 
 
 async def async_register_services(hass: HomeAssistant) -> None:
@@ -116,6 +124,11 @@ async def async_register_services(hass: HomeAssistant) -> None:
             hass, call.data["limit"]
         )
 
+    async def _resolve_intent(call: ServiceCall) -> dict:
+        return await resources.resolve_user_intent(
+            hass, call.data["need"], call.data["limit"]
+        )
+
     services = [
         ("discover_resources", _discover, _DISCOVER_SCHEMA),
         ("search_hacs", _search_hacs, _SEARCH_SCHEMA),
@@ -129,6 +142,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
         ("search_ha_addons", _search_addons, _SEARCH_SCHEMA),
         ("recommend_resources", _recommend, _RECOMMEND_SCHEMA),
         ("recommend_blueprints", _recommend_blueprints, _RECOMMEND_BP_SCHEMA),
+        ("resolve_user_intent", _resolve_intent, _RESOLVE_INTENT_SCHEMA),
     ]
 
     def _wrap_with_event(svc_name: str, handler):

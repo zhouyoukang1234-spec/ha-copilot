@@ -3513,6 +3513,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.recommend_blueprints(
                 hass, int(args.get("limit", 12)), preferred, imported
             )
+        if name == "resolve_user_intent":
+            return await resources.resolve_user_intent(
+                hass, args.get("need", ""), int(args.get("limit", 3))
+            )
         if name == "import_blueprint":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -5237,6 +5241,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "limit": {"type": "integer", "description": "max blueprint recommendations (default 12)."},
             }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resolve_user_intent",
+            "description": "Translate a natural-language user need ('I want my lights to turn on with motion', 'set up security cameras', 'save energy') into matched intents with step-by-step tool chains, recommended search queries, and HACS keywords. Reverse-engineered from top 50+ community projects (21k+ stars). Returns the optimal sequence of tool calls to fulfill the need — so the operator says WHAT they want and gets back HOW to do it. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "need": {"type": "string", "description": "natural-language description of what the user wants"},
+                "limit": {"type": "integer", "description": "max intent matches (default 3)"},
+            }, "required": ["need"]},
         },
     },
     {

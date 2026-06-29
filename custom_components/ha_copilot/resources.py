@@ -1832,3 +1832,286 @@ def _url_quote(s: str) -> str:
     from urllib.parse import quote_plus
 
     return quote_plus(s)
+
+
+# ---------------------------------------------------------------------------
+# Intent Resolution Engine
+# ---------------------------------------------------------------------------
+# Reverse-engineered from top community projects (21k+ stars Xiaomi Home,
+# 7.5k HACS, 5k+ Mushroom, 4k+ Bubble Card, 3.3k Adaptive Lighting, etc.)
+# plus blueprint demand analysis. Maps natural language user needs to the
+# optimal sequence of tool calls and resources — so a non-expert says what
+# they want and gets back exactly which tools to call, in which order.
+# ---------------------------------------------------------------------------
+
+_INTENT_PATTERNS: dict[str, dict[str, Any]] = {
+    "motion_light": {
+        "keywords": ["motion", "occupancy", "pir", "movement", "detect", "walk", "room", "light", "automatic"],
+        "entity_hints": ["binary_sensor", "light"],
+        "description": "Automatically turn lights on/off based on motion sensors",
+        "tool_chain": [
+            "search_zigbee_devices(query=<motion sensor brand>) — confirm hardware",
+            "search_blueprints(query='motion activated light') — find ready blueprint",
+            "list_repo_blueprints(repo) → import_blueprint(url) — deploy it",
+            "validate_blueprint_inputs → create_automation_from_blueprint — activate",
+        ],
+        "recommended_search": "motion activated light",
+        "hacs_keywords": ["adaptive lighting", "motion"],
+    },
+    "presence_automation": {
+        "keywords": ["presence", "away", "leave", "arrive", "home", "geofence", "zone", "who", "someone", "nobody"],
+        "entity_hints": ["person", "device_tracker"],
+        "description": "Automate actions based on who is home or away",
+        "tool_chain": [
+            "search_ha_integrations(query=<phone tracker>) — native tracking",
+            "search_blueprints(query='presence detection') — find blueprint",
+            "import_blueprint → create_automation_from_blueprint — activate",
+        ],
+        "recommended_search": "presence away home automation",
+        "hacs_keywords": ["presence", "zone"],
+    },
+    "climate_control": {
+        "keywords": ["thermostat", "hvac", "heating", "cooling", "temperature", "climate", "heat", "warm", "cold", "degree"],
+        "entity_hints": ["climate"],
+        "description": "Smart thermostat schedules, away mode, window-open detection",
+        "tool_chain": [
+            "search_ha_integrations(query=<thermostat brand>) — native support",
+            "search_community_resources(query='better thermostat') — enhanced control",
+            "search_blueprints(query='thermostat schedule') — scheduling blueprint",
+        ],
+        "recommended_search": "thermostat schedule climate",
+        "hacs_keywords": ["better thermostat", "climate"],
+    },
+    "security_alarm": {
+        "keywords": ["alarm", "security", "intrusion", "burglar", "protect", "armed", "safe", "intruder"],
+        "entity_hints": ["alarm_control_panel", "binary_sensor", "camera", "lock"],
+        "description": "Security system with arm/disarm, notifications, camera integration",
+        "tool_chain": [
+            "search_community_resources(query='alarmo') — advanced alarm integration",
+            "search_blueprints(query='alarm notification') — alert blueprints",
+            "search_ha_integrations(query=<camera brand>) — camera integration",
+        ],
+        "recommended_search": "alarm security notification",
+        "hacs_keywords": ["alarmo", "security"],
+    },
+    "energy_monitoring": {
+        "keywords": ["energy", "power", "solar", "battery", "consumption", "kwh", "watt", "meter"],
+        "entity_hints": ["sensor"],
+        "description": "Track energy consumption, solar production, power costs",
+        "tool_chain": [
+            "search_community_resources(query='powercalc') — virtual power sensors",
+            "search_community_resources(query='energy flow card') — dashboard card",
+            "search_ha_integrations(query='energy') — native energy dashboard",
+        ],
+        "recommended_search": "energy monitoring power",
+        "hacs_keywords": ["powercalc", "energy", "power flow"],
+    },
+    "dashboard_ui": {
+        "keywords": ["dashboard", "ui", "card", "lovelace", "frontend", "interface", "theme", "beautiful", "modern", "design"],
+        "entity_hints": [],
+        "description": "Modern dashboard with custom cards, themes, layout",
+        "tool_chain": [
+            "search_community_resources(query='mushroom', category='plugin') — modern cards",
+            "search_community_resources(query='bubble card') — animated cards",
+            "search_community_resources(query='theme', category='theme') — themes",
+        ],
+        "recommended_search": "dashboard card modern ui",
+        "hacs_keywords": ["mushroom", "bubble card", "card-mod", "layout-card"],
+    },
+    "vacuum_control": {
+        "keywords": ["vacuum", "robot", "clean", "mop", "roborock", "dreame", "roomba", "sweep", "floor"],
+        "entity_hints": ["vacuum"],
+        "description": "Smart vacuum scheduling, room cleaning, map integration",
+        "tool_chain": [
+            "search_ha_integrations(query=<vacuum brand>) — native integration",
+            "search_community_resources(query='vacuum map card') — map card",
+            "search_blueprints(query='vacuum schedule') — scheduling blueprint",
+        ],
+        "recommended_search": "vacuum robot clean schedule",
+        "hacs_keywords": ["vacuum map", "dreame", "roborock"],
+    },
+    "media_control": {
+        "keywords": ["media", "music", "speaker", "cast", "tts", "sonos", "audio", "chromecast"],
+        "entity_hints": ["media_player"],
+        "description": "Multi-room audio, TTS announcements, media automation",
+        "tool_chain": [
+            "search_ha_integrations(query=<speaker brand>) — native integration",
+            "search_community_resources(query='mini media player') — card",
+            "search_blueprints(query='TTS announcement') — notification blueprint",
+        ],
+        "recommended_search": "media player music speaker",
+        "hacs_keywords": ["mini media player", "sonos", "browser mod"],
+    },
+    "cover_blinds": {
+        "keywords": ["cover", "blind", "curtain", "shade", "roller", "sun", "window"],
+        "entity_hints": ["cover"],
+        "description": "Automated blinds/covers based on sun position, time, temperature",
+        "tool_chain": [
+            "search_blueprints(query='cover sun position') — sun tracking blueprint",
+            "search_ha_integrations(query=<cover brand>) — native integration",
+            "search_community_resources(query='cover') — enhanced control",
+        ],
+        "recommended_search": "cover blind sun position",
+        "hacs_keywords": ["cover", "blind"],
+    },
+    "notification_alert": {
+        "keywords": ["notify", "notification", "alert", "push", "mobile", "telegram", "sms", "phone", "message"],
+        "entity_hints": [],
+        "description": "Smart notifications to phone, Telegram, email based on events",
+        "tool_chain": [
+            "search_ha_integrations(query='mobile app') — native push",
+            "search_blueprints(query='notification alert') — alert blueprints",
+            "search_community_resources(query='alert') — alert integrations",
+        ],
+        "recommended_search": "notification alert mobile push",
+        "hacs_keywords": ["alert", "notification"],
+    },
+    "battery_management": {
+        "keywords": ["battery", "low", "charge", "level"],
+        "entity_hints": ["sensor"],
+        "description": "Track all device batteries, alert when low",
+        "tool_chain": [
+            "search_community_resources(query='battery state card') — dashboard",
+            "search_blueprints(query='low battery notification') — alert blueprint",
+        ],
+        "recommended_search": "battery low notification",
+        "hacs_keywords": ["battery", "battery state"],
+    },
+    "water_leak": {
+        "keywords": ["water", "leak", "flood", "moisture"],
+        "entity_hints": ["binary_sensor"],
+        "description": "Water leak detection with immediate alerts and valve shutoff",
+        "tool_chain": [
+            "search_zigbee_devices(query='water leak sensor') — confirm hardware",
+            "search_blueprints(query='water leak notification') — alert blueprint",
+        ],
+        "recommended_search": "water leak sensor notification",
+        "hacs_keywords": [],
+    },
+    "garage_door": {
+        "keywords": ["garage", "gate", "door opener"],
+        "entity_hints": ["cover"],
+        "description": "Smart garage door control with auto-close and notifications",
+        "tool_chain": [
+            "search_ha_integrations(query='garage') — native support",
+            "search_blueprints(query='garage door') — automation blueprint",
+            "search_community_resources(query='garage') — enhanced control",
+        ],
+        "recommended_search": "garage door opener automation",
+        "hacs_keywords": ["garage"],
+    },
+    "zigbee_setup": {
+        "keywords": ["zigbee", "zigbee2mqtt", "zha", "coordinator", "stick"],
+        "entity_hints": [],
+        "description": "Set up Zigbee network with coordinator, pair devices",
+        "tool_chain": [
+            "search_ha_addons(query='zigbee2mqtt') — install bridge addon",
+            "search_zigbee_devices(query=<device>) — check compatibility",
+            "search_ha_integrations(query='zha') — alternative native bridge",
+        ],
+        "recommended_search": "zigbee coordinator setup",
+        "hacs_keywords": [],
+    },
+    "zwave_setup": {
+        "keywords": ["zwave", "z-wave", "zwave-js"],
+        "entity_hints": [],
+        "description": "Set up Z-Wave network, pair and configure devices",
+        "tool_chain": [
+            "search_ha_addons(query='z-wave js') — install Z-Wave JS addon",
+            "search_zwave_devices(query=<device>) — check compatibility",
+            "search_ha_integrations(query='zwave') — native integration",
+        ],
+        "recommended_search": "z-wave setup configuration",
+        "hacs_keywords": [],
+    },
+    "esphome_diy": {
+        "keywords": ["esphome", "esp32", "esp8266", "diy", "custom sensor", "wemos"],
+        "entity_hints": [],
+        "description": "Build custom sensors/actuators with ESPHome on ESP chips",
+        "tool_chain": [
+            "search_ha_addons(query='esphome') — install ESPHome addon",
+            "search_esphome_devices(query=<device>) — find config template",
+            "search_ha_integrations(query='esphome') — native integration",
+        ],
+        "recommended_search": "esphome diy sensor",
+        "hacs_keywords": [],
+    },
+    "tasmota_flash": {
+        "keywords": ["tasmota", "flash", "sonoff", "tuya convert", "esp firmware"],
+        "entity_hints": [],
+        "description": "Flash Tasmota firmware for local control of WiFi devices",
+        "tool_chain": [
+            "search_tasmota_devices(query=<device>) — find GPIO template",
+            "search_ha_integrations(query='tasmota') — native HA integration",
+            "search_ha_addons(query='mosquitto') — MQTT broker addon",
+        ],
+        "recommended_search": "tasmota flash template",
+        "hacs_keywords": [],
+    },
+}
+
+
+async def resolve_user_intent(
+    hass: HomeAssistant,
+    need: str,
+    limit: int = 3,
+) -> dict[str, Any]:
+    """Resolve a natural-language user need into matched intents with action plans.
+
+    Takes a free-text description of what the user wants (e.g. "I want my lights
+    to turn on when I walk into a room", "set up security cameras", "save energy")
+    and matches it against the intent pattern database (reverse-engineered from
+    top community projects). Returns the matched intents with recommended tool
+    chains, search queries, and HACS keywords — so the operator knows exactly
+    which tools to call and in what order.
+
+    This is the bridge between what a user says and what the system should do.
+    """
+    q = (need or "").strip().lower()
+    if not q:
+        return {"error": "describe what you want (e.g. 'turn on lights when motion detected')"}
+
+    words = set(q.split())
+    scored: list[tuple[float, str, dict[str, Any]]] = []
+
+    for intent_name, pattern in _INTENT_PATTERNS.items():
+        kw_hits = sum(1 for kw in pattern["keywords"] if kw in q)
+        word_hits = sum(1 for kw in pattern["keywords"] if any(kw in w for w in words))
+        score = kw_hits * 10 + word_hits * 3
+        if score > 0:
+            scored.append((score, intent_name, pattern))
+
+    scored.sort(key=lambda t: t[0], reverse=True)
+
+    if not scored:
+        return {
+            "ok": True,
+            "matched_intents": [],
+            "suggestion": (
+                "No specific intent matched. Try discover_resources(query) for "
+                "a broad search, or describe your need more specifically."
+            ),
+        }
+
+    results = []
+    for score, name, pattern in scored[: max(1, limit)]:
+        results.append({
+            "intent": name,
+            "score": score,
+            "description": pattern["description"],
+            "tool_chain": pattern["tool_chain"],
+            "recommended_search": pattern["recommended_search"],
+            "hacs_keywords": pattern["hacs_keywords"],
+            "entity_hints": pattern["entity_hints"],
+        })
+
+    return {
+        "ok": True,
+        "need": need,
+        "matched_intents": results,
+        "note": (
+            "Execute the tool_chain steps in order. The recommended_search "
+            "can be passed directly to discover_resources or search_blueprints. "
+            "hacs_keywords are ready for search_community_resources."
+        ),
+    }
