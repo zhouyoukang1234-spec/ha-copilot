@@ -22295,6 +22295,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _guest_network_status(hass)
         if name == "home_health_score":
             return await _home_health_score(hass)
+        # --- Wave 105 dispatch ---
+        if name == "pool_pump_runtime":
+            return await _pool_pump_runtime(hass)
+        if name == "pool_chemical_balance":
+            return await _pool_chemical_balance(hass)
+        if name == "garage_parking_sensor":
+            return await _garage_parking_sensor(hass)
+        if name == "doorbell_last_ring":
+            return await _doorbell_last_ring(hass)
+        if name == "intercom_status":
+            return await _intercom_status(hass)
+        if name == "natural_gas_detector":
+            return await _natural_gas_detector(hass)
+        if name == "water_meter_reading":
+            return await _water_meter_reading(hass)
+        if name == "gas_meter_reading":
+            return await _gas_meter_reading(hass)
+        if name == "electricity_phase_balance":
+            return await _electricity_phase_balance(hass)
+        if name == "network_bandwidth_check":
+            return await _network_bandwidth_check(hass)
+        if name == "dns_server_status":
+            return await _dns_server_status(hass)
+        if name == "nas_storage_check":
+            return await _nas_storage_check(hass)
+        if name == "printer_status_check":
+            return await _printer_status_check(hass)
+        if name == "projector_status":
+            return await _projector_status(hass)
+        if name == "soundbar_status":
+            return await _soundbar_status(hass)
+        if name == "smart_mirror_status":
+            return await _smart_mirror_status(hass)
+        if name == "smart_scale_reading":
+            return await _smart_scale_reading(hass)
+        if name == "air_freshener_status":
+            return await _air_freshener_status(hass)
+        if name == "coffee_maker_status":
+            return await _coffee_maker_status(hass)
+        if name == "robot_feeder_status":
+            return await _robot_feeder_status(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -38679,6 +38720,293 @@ async def _home_health_score(hass: HomeAssistant) -> dict[str, Any]:
             "unavailable": unavail, "low_battery_devices": low_bat}
 
 
+# ---------------------------------------------------------------------------
+# Wave 105 — pool, garage parking, doorbell, intercom, gas detector, meters,
+# electricity phase, network, NAS, printer, projector, soundbar, mirror,
+# scale, air freshener, coffee maker, robot feeder
+# ---------------------------------------------------------------------------
+
+
+async def _pool_pump_runtime(hass: HomeAssistant) -> dict[str, Any]:
+    """Check pool pump runtime."""
+    results = []
+    for s in hass.states.async_all("switch"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "pool" in name and ("pump" in name or "filter" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "pool" in name and ("runtime" in name or "pump" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _pool_chemical_balance(hass: HomeAssistant) -> dict[str, Any]:
+    """Check pool chemical balance."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "pool" in name and any(kw in name for kw in ("ph", "chlorine", "orp",
+                                                         "alkalinity", "tds")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "readings": results}
+
+
+async def _garage_parking_sensor(hass: HomeAssistant) -> dict[str, Any]:
+    """Check garage parking sensor."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "garage" in name and ("parking" in name or "car" in name or "occupancy" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "occupied": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "garage" in name and "distance" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _doorbell_last_ring(hass: HomeAssistant) -> dict[str, Any]:
+    """Check doorbell last ring."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "doorbell" in name or (s.attributes.get("device_class") == "occupancy" and "door" in name):
+            hours = (now - s.last_changed).total_seconds() / 3600
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "hours_since_change": round(hours, 1),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("event"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "doorbell" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "doorbells": results}
+
+
+async def _intercom_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check intercom status."""
+    results = []
+    for domain in ("switch", "binary_sensor", "sensor"):
+        for s in hass.states.async_all(domain):
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if "intercom" in name:
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _natural_gas_detector(hass: HomeAssistant) -> dict[str, Any]:
+    """Check natural gas detector."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "gas":
+            results.append({"entity_id": s.entity_id,
+                            "gas_detected": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    alert = sum(1 for r in results if r["gas_detected"])
+    return {"ok": True, "total": len(results), "alerts": alert, "sensors": results}
+
+
+async def _water_meter_reading(hass: HomeAssistant) -> dict[str, Any]:
+    """Check water meter reading."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc == "water" or ("water" in name and ("meter" in name or "consumption" in name)):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "meters": results}
+
+
+async def _gas_meter_reading(hass: HomeAssistant) -> dict[str, Any]:
+    """Check gas meter reading."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc == "gas" or ("gas" in name and ("meter" in name or "consumption" in name)):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "meters": results}
+
+
+async def _electricity_phase_balance(hass: HomeAssistant) -> dict[str, Any]:
+    """Check electricity phase balance."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("phase_a", "phase_b", "phase_c", "l1", "l2", "l3")) and \
+           s.attributes.get("device_class") in ("power", "current", "voltage"):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "device_class": s.attributes.get("device_class"),
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "phases": results}
+
+
+async def _network_bandwidth_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check network bandwidth."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("bandwidth", "download_speed", "upload_speed",
+                                      "speedtest", "throughput")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _dns_server_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check DNS server status."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "dns" in name or "pihole" in name or "adguard" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "dns" in name and ("queries" in name or "blocked" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _nas_storage_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check NAS storage."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("nas", "synology", "qnap", "truenas")) and \
+           any(kw in name for kw in ("disk", "storage", "volume", "used", "free")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "storage": results}
+
+
+async def _printer_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check printer status."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "printer" in name or "ink" in name or "toner" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "printers": results}
+
+
+async def _projector_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check projector status."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "projector" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("switch"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "projector" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "projectors": results}
+
+
+async def _soundbar_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check soundbar status."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "soundbar" in name or "sound_bar" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "volume": s.attributes.get("volume_level"),
+                            "source": s.attributes.get("source"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "soundbars": results}
+
+
+async def _smart_mirror_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart mirror status."""
+    results = []
+    for domain in ("switch", "sensor", "light"):
+        for s in hass.states.async_all(domain):
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if "mirror" in name and "smart" in name:
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "mirrors": results}
+
+
+async def _smart_scale_reading(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart scale readings."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("scale", "weight", "body_mass", "withings")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "readings": results}
+
+
+async def _air_freshener_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check air freshener status."""
+    results = []
+    for s in hass.states.async_all("switch"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("air_freshener", "diffuser", "aroma")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _coffee_maker_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check coffee maker status."""
+    results = []
+    for s in hass.states.async_all("switch"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("coffee", "espresso", "nespresso")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("coffee", "espresso")) and \
+           any(kw in name for kw in ("cup", "brew", "water_level")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "devices": results}
+
+
+async def _robot_feeder_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check robot pet feeder status."""
+    results = []
+    for domain in ("switch", "sensor", "button"):
+        for s in hass.states.async_all(domain):
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if any(kw in name for kw in ("pet_feeder", "cat_feeder", "dog_feeder",
+                                          "auto_feeder", "food_dispenser")):
+                results.append({"entity_id": s.entity_id, "state": s.state,
+                                "domain": domain,
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "feeders": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -51080,4 +51408,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "do_not_disturb_mode_check", "description": "Check DnD mode.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "guest_network_status", "description": "Check guest network.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "home_health_score", "description": "Home health score.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 105 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "pool_pump_runtime", "description": "Check pool pump.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pool_chemical_balance", "description": "Check pool chemicals.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "garage_parking_sensor", "description": "Check parking sensor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "doorbell_last_ring", "description": "Check doorbell.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "intercom_status", "description": "Check intercom.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "natural_gas_detector", "description": "Check gas detector.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "water_meter_reading", "description": "Check water meter.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "gas_meter_reading", "description": "Check gas meter.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "electricity_phase_balance", "description": "Check phase balance.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "network_bandwidth_check", "description": "Check bandwidth.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "dns_server_status", "description": "Check DNS server.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "nas_storage_check", "description": "Check NAS storage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "printer_status_check", "description": "Check printer.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "projector_status", "description": "Check projector.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "soundbar_status", "description": "Check soundbar.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_mirror_status", "description": "Check smart mirror.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_scale_reading", "description": "Check smart scale.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "air_freshener_status", "description": "Check air freshener.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "coffee_maker_status", "description": "Check coffee maker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "robot_feeder_status", "description": "Check pet feeder.", "parameters": {"type": "object", "properties": {}}}},
 ]
