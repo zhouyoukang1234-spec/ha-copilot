@@ -21760,6 +21760,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _zwave_failed_node_check(hass)
         if name == "motion_light_coverage":
             return await _motion_light_coverage(hass)
+        # --- Wave 92 dispatch ---
+        if name == "light_color_palette_analysis":
+            return await _light_color_palette_analysis(hass)
+        if name == "light_dimmer_usage_stats":
+            return await _light_dimmer_usage_stats(hass)
+        if name == "media_source_distribution":
+            return await _media_source_distribution(hass)
+        if name == "media_player_idle_detection":
+            return await _media_player_idle_detection(hass)
+        if name == "sensor_correlation_matrix":
+            return await _sensor_correlation_matrix(hass)
+        if name == "sensor_anomaly_timeline":
+            return await _sensor_anomaly_timeline(hass)
+        if name == "home_automation_coverage":
+            return await _home_automation_coverage(hass)
+        if name == "home_device_diversity_index":
+            return await _home_device_diversity_index(hass)
+        if name == "backup_freshness_check":
+            return await _backup_freshness_check(hass)
+        if name == "backup_size_trend":
+            return await _backup_size_trend(hass)
+        if name == "integration_restart_frequency":
+            return await _integration_restart_frequency(hass)
+        if name == "integration_error_log_scan":
+            return await _integration_error_log_scan(hass)
+        if name == "climate_setpoint_history":
+            return await _climate_setpoint_history(hass)
+        if name == "entity_naming_consistency":
+            return await _entity_naming_consistency(hass)
+        if name == "entity_duplicate_name_check":
+            return await _entity_duplicate_name_check(hass)
+        if name == "area_device_density":
+            return await _area_device_density(hass)
+        if name == "area_unassigned_entities":
+            return await _area_unassigned_entities(hass)
+        if name == "switch_on_time_ranking":
+            return await _switch_on_time_ranking(hass)
+        if name == "event_bus_traffic_analysis":
+            return await _event_bus_traffic_analysis(hass)
+        if name == "proximity_zone_summary":
+            return await _proximity_zone_summary(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -34374,6 +34415,336 @@ async def _motion_light_coverage(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "area_count": len(coverage), "coverage": coverage}
 
 
+# ---------------------------------------------------------------------------
+# Wave 92 — lighting advanced, media advanced, sensor correlation, home value,
+# backup, integration stability, climate, naming, area, switch, event, proximity
+# ---------------------------------------------------------------------------
+
+
+async def _light_color_palette_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze color palette of active lights."""
+    results = []
+    for s in hass.states.async_all("light"):
+        if s.state != "on":
+            continue
+        rgb = s.attributes.get("rgb_color")
+        hs = s.attributes.get("hs_color")
+        ct = s.attributes.get("color_temp")
+        results.append({
+            "entity_id": s.entity_id, "rgb_color": rgb, "hs_color": hs,
+            "color_temp": ct, "color_mode": s.attributes.get("color_mode"),
+            "brightness": s.attributes.get("brightness"),
+        })
+    return {"ok": True, "active_lights": len(results), "palette": results}
+
+
+async def _light_dimmer_usage_stats(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze dimmer usage across lights."""
+    full = dimmed = off = no_dimmer = 0
+    details = []
+    for s in hass.states.async_all("light"):
+        if s.state != "on":
+            off += 1
+            continue
+        brightness = s.attributes.get("brightness")
+        if brightness is None:
+            no_dimmer += 1
+        elif isinstance(brightness, (int, float)):
+            if brightness >= 250:
+                full += 1
+            else:
+                dimmed += 1
+            details.append({"entity_id": s.entity_id, "brightness": brightness})
+    details.sort(key=lambda x: x["brightness"])
+    return {"ok": True, "full_brightness": full, "dimmed": dimmed, "off": off,
+            "no_dimmer": no_dimmer, "details": details[:20]}
+
+
+async def _media_source_distribution(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze media source distribution across players."""
+    sources: dict[str, int] = {}
+    for s in hass.states.async_all("media_player"):
+        source = s.attributes.get("source")
+        if source:
+            sources[source] = sources.get(source, 0) + 1
+    ranking = sorted(sources.items(), key=lambda x: x[1], reverse=True)
+    return {"ok": True, "source_count": len(sources),
+            "distribution": [{"source": k, "count": v} for k, v in ranking]}
+
+
+async def _media_player_idle_detection(hass: HomeAssistant) -> dict[str, Any]:
+    """Detect idle media players."""
+    now = datetime.now(timezone.utc)
+    idle = []
+    for s in hass.states.async_all("media_player"):
+        if s.state in ("idle", "standby", "off"):
+            hours = (now - s.last_changed).total_seconds() / 3600
+            idle.append({"entity_id": s.entity_id, "state": s.state,
+                         "hours_idle": round(hours, 1)})
+    idle.sort(key=lambda x: x["hours_idle"], reverse=True)
+    return {"ok": True, "idle_count": len(idle), "players": idle}
+
+
+async def _sensor_correlation_matrix(hass: HomeAssistant) -> dict[str, Any]:
+    """Build correlation hints from numeric sensors by device class."""
+    dc_vals: dict[str, list[tuple[str, float]]] = {}
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if not dc:
+            continue
+        try:
+            dc_vals.setdefault(dc, []).append((s.entity_id, float(s.state)))
+        except (ValueError, TypeError):
+            pass
+    summary = []
+    for dc, entries in sorted(dc_vals.items()):
+        vals = [v for _, v in entries]
+        avg = sum(vals) / len(vals) if vals else 0
+        summary.append({"device_class": dc, "count": len(entries),
+                        "mean": round(avg, 2),
+                        "min": round(min(vals), 2) if vals else 0,
+                        "max": round(max(vals), 2) if vals else 0})
+    return {"ok": True, "classes": len(summary), "matrix": summary}
+
+
+async def _sensor_anomaly_timeline(hass: HomeAssistant) -> dict[str, Any]:
+    """Find sensors in unusual states."""
+    anomalies = []
+    for s in hass.states.async_all("sensor"):
+        if s.state in ("unavailable", "unknown"):
+            anomalies.append({"entity_id": s.entity_id, "state": s.state,
+                              "type": "bad_state"})
+    return {"ok": True, "anomaly_count": len(anomalies), "anomalies": anomalies[:30]}
+
+
+async def _home_automation_coverage(hass: HomeAssistant) -> dict[str, Any]:
+    """Assess overall home automation coverage."""
+    domains = {}
+    for s in hass.states.async_all():
+        d = s.entity_id.split(".")[0]
+        domains[d] = domains.get(d, 0) + 1
+    automations = len(hass.states.async_all("automation"))
+    scenes = len(hass.states.async_all("scene"))
+    scripts = len(hass.states.async_all("script"))
+    total = sum(domains.values())
+    return {"ok": True, "total_entities": total, "domain_count": len(domains),
+            "automations": automations, "scenes": scenes, "scripts": scripts,
+            "automation_ratio": round(automations / max(total, 1) * 100, 1)}
+
+
+async def _home_device_diversity_index(hass: HomeAssistant) -> dict[str, Any]:
+    """Calculate device diversity index."""
+    domains: dict[str, int] = {}
+    for s in hass.states.async_all():
+        d = s.entity_id.split(".")[0]
+        domains[d] = domains.get(d, 0) + 1
+    total = sum(domains.values())
+    import math
+    shannon = 0.0
+    for count in domains.values():
+        p = count / max(total, 1)
+        if p > 0:
+            shannon -= p * math.log2(p)
+    max_entropy = math.log2(max(len(domains), 1))
+    evenness = round(shannon / max(max_entropy, 0.01), 3)
+    return {"ok": True, "domain_count": len(domains), "shannon_entropy": round(shannon, 3),
+            "evenness": evenness, "total_entities": total}
+
+
+async def _backup_freshness_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check backup freshness."""
+    backup_dir = hass.config.path("backups")
+    results: list[dict[str, Any]] = []
+    try:
+        import os
+        if os.path.isdir(backup_dir):
+            for f in os.listdir(backup_dir):
+                fp = os.path.join(backup_dir, f)
+                if os.path.isfile(fp):
+                    age_h = (datetime.now(timezone.utc).timestamp() - os.path.getmtime(fp)) / 3600
+                    results.append({"file": f, "size_mb": round(os.path.getsize(fp) / 1048576, 1),
+                                    "hours_old": round(age_h, 1)})
+            results.sort(key=lambda x: x["hours_old"])
+    except Exception:
+        pass
+    fresh = any(r["hours_old"] < 48 for r in results) if results else False
+    return {"ok": True, "backup_count": len(results), "fresh": fresh,
+            "backups": results[:10]}
+
+
+async def _backup_size_trend(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze backup size trend."""
+    backup_dir = hass.config.path("backups")
+    results: list[dict[str, Any]] = []
+    try:
+        import os
+        if os.path.isdir(backup_dir):
+            for f in sorted(os.listdir(backup_dir)):
+                fp = os.path.join(backup_dir, f)
+                if os.path.isfile(fp):
+                    results.append({"file": f,
+                                    "size_mb": round(os.path.getsize(fp) / 1048576, 1)})
+    except Exception:
+        pass
+    sizes = [r["size_mb"] for r in results]
+    trend = "stable"
+    if len(sizes) >= 2:
+        trend = "growing" if sizes[-1] > sizes[0] * 1.1 else "shrinking" if sizes[-1] < sizes[0] * 0.9 else "stable"
+    return {"ok": True, "count": len(results), "trend": trend, "backups": results[:10]}
+
+
+async def _integration_restart_frequency(hass: HomeAssistant) -> dict[str, Any]:
+    """Estimate integration restart frequency from config entry states."""
+    entries = hass.config_entries.async_entries()
+    results = []
+    for e in entries:
+        results.append({"domain": e.domain, "title": e.title,
+                        "state": str(e.state) if hasattr(e, "state") else "unknown"})
+    failed = [r for r in results if r["state"] in ("setup_error", "setup_retry")]
+    return {"ok": True, "total": len(results), "failed": len(failed),
+            "entries": results[:20]}
+
+
+async def _integration_error_log_scan(hass: HomeAssistant) -> dict[str, Any]:
+    """Scan for integration errors in home-assistant.log."""
+    log_path = hass.config.path("home-assistant.log")
+    errors: list[str] = []
+    try:
+        import os
+        if os.path.isfile(log_path):
+            with open(log_path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if "ERROR" in line:
+                        errors.append(line.strip()[:200])
+    except Exception:
+        pass
+    return {"ok": True, "error_count": len(errors), "recent_errors": errors[-20:]}
+
+
+async def _climate_setpoint_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Track current climate setpoints."""
+    results = []
+    for s in hass.states.async_all("climate"):
+        results.append({
+            "entity_id": s.entity_id, "mode": s.state,
+            "target_temp": s.attributes.get("temperature"),
+            "target_temp_high": s.attributes.get("target_temp_high"),
+            "target_temp_low": s.attributes.get("target_temp_low"),
+            "current_temp": s.attributes.get("current_temperature"),
+            "preset": s.attributes.get("preset_mode"),
+        })
+    return {"ok": True, "count": len(results), "setpoints": results}
+
+
+async def _entity_naming_consistency(hass: HomeAssistant) -> dict[str, Any]:
+    """Check entity naming consistency."""
+    patterns: dict[str, int] = {}
+    issues = []
+    for s in hass.states.async_all():
+        eid = s.entity_id
+        parts = eid.split(".")
+        if len(parts) == 2:
+            obj_id = parts[1]
+            if " " in obj_id:
+                issues.append({"entity_id": eid, "issue": "contains spaces"})
+            if obj_id != obj_id.lower():
+                issues.append({"entity_id": eid, "issue": "mixed case"})
+            sep = "underscore" if "_" in obj_id else "no_separator"
+            patterns[sep] = patterns.get(sep, 0) + 1
+    return {"ok": True, "issue_count": len(issues), "patterns": patterns,
+            "issues": issues[:20]}
+
+
+async def _entity_duplicate_name_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Find entities with duplicate friendly names."""
+    name_map: dict[str, list[str]] = {}
+    for s in hass.states.async_all():
+        fname = s.attributes.get("friendly_name", "")
+        if fname:
+            name_map.setdefault(fname, []).append(s.entity_id)
+    dupes = {n: eids for n, eids in name_map.items() if len(eids) > 1}
+    return {"ok": True, "duplicate_count": len(dupes),
+            "duplicates": {n: eids for n, eids in list(dupes.items())[:20]}}
+
+
+async def _area_device_density(hass: HomeAssistant) -> dict[str, Any]:
+    """Calculate device density per area."""
+    ent_reg = er.async_get(hass)
+    area_reg = ar.async_get(hass)
+    area_counts: dict[str, int] = {}
+    for entry in ent_reg.entities.values():
+        area_id = entry.area_id
+        if area_id:
+            area = area_reg.async_get_area(area_id)
+            name = area.name if area else area_id
+            area_counts[name] = area_counts.get(name, 0) + 1
+    results = [{"area": a, "entities": c} for a, c in
+               sorted(area_counts.items(), key=lambda x: x[1], reverse=True)]
+    return {"ok": True, "area_count": len(results), "density": results}
+
+
+async def _area_unassigned_entities(hass: HomeAssistant) -> dict[str, Any]:
+    """Find entities not assigned to any area."""
+    ent_reg = er.async_get(hass)
+    unassigned = []
+    for entry in ent_reg.entities.values():
+        if not entry.area_id:
+            unassigned.append({"entity_id": entry.entity_id,
+                               "domain": entry.domain})
+    domain_counts: dict[str, int] = {}
+    for u in unassigned:
+        domain_counts[u["domain"]] = domain_counts.get(u["domain"], 0) + 1
+    return {"ok": True, "unassigned_count": len(unassigned),
+            "by_domain": domain_counts, "sample": unassigned[:20]}
+
+
+async def _switch_on_time_ranking(hass: HomeAssistant) -> dict[str, Any]:
+    """Rank switches by time in on state."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all("switch"):
+        if s.state == "on":
+            hours = (now - s.last_changed).total_seconds() / 3600
+            results.append({"entity_id": s.entity_id,
+                            "hours_on": round(hours, 1),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    results.sort(key=lambda x: x["hours_on"], reverse=True)
+    return {"ok": True, "on_count": len(results), "ranking": results}
+
+
+async def _event_bus_traffic_analysis(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze event bus traffic."""
+    listeners = hass.bus.async_listeners()
+    total = sum(listeners.values()) if isinstance(listeners, dict) else 0
+    top = sorted(listeners.items(), key=lambda x: x[1], reverse=True)[:15] if isinstance(listeners, dict) else []
+    return {"ok": True, "total_listeners": total,
+            "event_type_count": len(listeners) if isinstance(listeners, dict) else 0,
+            "top_events": [{"event": e, "listeners": c} for e, c in top]}
+
+
+async def _proximity_zone_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize proximity zones."""
+    zones = []
+    for s in hass.states.async_all("zone"):
+        zones.append({
+            "entity_id": s.entity_id,
+            "name": s.attributes.get("friendly_name"),
+            "latitude": s.attributes.get("latitude"),
+            "longitude": s.attributes.get("longitude"),
+            "radius": s.attributes.get("radius"),
+            "persons_home": s.attributes.get("persons", s.state),
+        })
+    proximities = []
+    for s in hass.states.async_all("proximity"):
+        proximities.append({
+            "entity_id": s.entity_id, "distance": s.state,
+            "unit": s.attributes.get("unit_of_measurement"),
+            "direction": s.attributes.get("dir_of_travel"),
+        })
+    return {"ok": True, "zone_count": len(zones), "proximity_count": len(proximities),
+            "zones": zones, "proximities": proximities}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -46501,4 +46872,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "zwave_node_health", "description": "Check Z-Wave node health.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "zwave_failed_node_check", "description": "Check for failed Z-Wave nodes.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "motion_light_coverage", "description": "Analyze motion/light coverage.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 92 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "light_color_palette_analysis", "description": "Analyze light color palette.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "light_dimmer_usage_stats", "description": "Analyze dimmer usage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "media_source_distribution", "description": "Analyze media source distribution.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "media_player_idle_detection", "description": "Detect idle media players.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "sensor_correlation_matrix", "description": "Build sensor correlation matrix.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "sensor_anomaly_timeline", "description": "Find sensor anomalies.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_automation_coverage", "description": "Assess automation coverage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "home_device_diversity_index", "description": "Calculate device diversity.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "backup_freshness_check", "description": "Check backup freshness.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "backup_size_trend", "description": "Analyze backup size trend.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_restart_frequency", "description": "Check integration restart frequency.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_error_log_scan", "description": "Scan error log for integrations.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "climate_setpoint_history", "description": "Track climate setpoints.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_naming_consistency", "description": "Check entity naming consistency.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_duplicate_name_check", "description": "Find duplicate friendly names.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "area_device_density", "description": "Calculate area device density.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "area_unassigned_entities", "description": "Find unassigned entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "switch_on_time_ranking", "description": "Rank switches by on time.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "event_bus_traffic_analysis", "description": "Analyze event bus traffic.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "proximity_zone_summary", "description": "Summarize proximity zones.", "parameters": {"type": "object", "properties": {}}}},
 ]
