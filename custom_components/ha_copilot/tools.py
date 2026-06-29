@@ -8339,6 +8339,357 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 36: trace, blueprint, config flow, entity/device registry, repairs,
+#           analytics, hardware, diagnostics
+# ---------------------------------------------------------------------------
+
+
+async def _trace_get(
+    hass: HomeAssistant, domain: str, item_id: str, run_id: str,
+) -> dict[str, Any]:
+    """Get a specific automation/script trace."""
+    try:
+        from homeassistant.components.trace import async_get_trace
+        trace = await async_get_trace(hass, domain, item_id, run_id)
+        return {"ok": True, "trace": str(trace)[:2000]}
+    except ImportError:
+        return {"error": "trace component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Trace get failed: {exc}"}
+
+
+async def _trace_list(
+    hass: HomeAssistant, domain: str, item_id: str | None = None,
+) -> dict[str, Any]:
+    """List traces for automation/script."""
+    try:
+        from homeassistant.components.trace import async_list_traces
+        traces = await async_list_traces(hass, domain, item_id)
+        return {"ok": True, "traces": traces[:50] if traces else []}
+    except ImportError:
+        return {"error": "trace component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Trace list failed: {exc}"}
+
+
+async def _trace_contexts(
+    hass: HomeAssistant, domain: str, item_id: str,
+) -> dict[str, Any]:
+    """Get trace contexts."""
+    try:
+        from homeassistant.components.trace import async_list_contexts
+        contexts = await async_list_contexts(hass, domain, item_id)
+        return {"ok": True, "contexts": contexts[:50] if contexts else []}
+    except ImportError:
+        return {"error": "trace component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Trace contexts failed: {exc}"}
+
+
+async def _blueprint_import(
+    hass: HomeAssistant, domain: str, url: str,
+) -> dict[str, Any]:
+    """Import a blueprint from URL."""
+    try:
+        from homeassistant.components.blueprint.importer import (
+            fetch_blueprint_from_url,
+        )
+        result = await fetch_blueprint_from_url(hass, url)
+        return {"ok": True, "domain": domain, "blueprint": str(result)[:1000]}
+    except ImportError:
+        return {"error": "blueprint component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Blueprint import failed: {exc}"}
+
+
+async def _blueprint_list(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """List blueprints for a domain."""
+    try:
+        from homeassistant.components.blueprint.models import DomainBlueprints
+        bps = DomainBlueprints(hass, domain, None, None)
+        blueprints = await bps.async_get_blueprints()
+        return {"ok": True, "domain": domain, "count": len(blueprints)}
+    except ImportError:
+        return {"error": "blueprint component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Blueprint list failed: {exc}"}
+
+
+async def _config_flow_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List active config flows."""
+    try:
+        flows = hass.config_entries.flow.async_progress()
+        result = [
+            {"flow_id": f.get("flow_id", ""), "handler": f.get("handler", "")}
+            for f in flows
+        ] if flows else []
+        return {"ok": True, "flows": result[:50]}
+    except AttributeError:
+        return {"error": "config_entries.flow not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config flow list failed: {exc}"}
+
+
+async def _config_flow_create(
+    hass: HomeAssistant, handler: str,
+) -> dict[str, Any]:
+    """Start a new config flow for a handler."""
+    try:
+        result = await hass.config_entries.flow.async_init(
+            handler, context={"source": "user"},
+        )
+        return {"ok": True, "flow_id": result.get("flow_id", ""), "type": result.get("type", "")}
+    except AttributeError:
+        return {"error": "config_entries.flow not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config flow create failed: {exc}"}
+
+
+async def _config_flow_progress(
+    hass: HomeAssistant, flow_id: str,
+) -> dict[str, Any]:
+    """Get progress of a config flow."""
+    try:
+        flows = hass.config_entries.flow.async_progress()
+        for f in flows:
+            if f.get("flow_id") == flow_id:
+                return {"ok": True, "flow": f}
+        return {"error": f"Flow {flow_id} not found"}
+    except AttributeError:
+        return {"error": "config_entries.flow not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config flow progress failed: {exc}"}
+
+
+async def _system_options_update(
+    hass: HomeAssistant, entry_id: str,
+    disable_new_entities: bool | None = None,
+    disable_polling: bool | None = None,
+) -> dict[str, Any]:
+    """Update system options for a config entry."""
+    try:
+        entry = None
+        for e in hass.config_entries.async_entries():
+            if e.entry_id == entry_id:
+                entry = e
+                break
+        if entry is None:
+            return {"error": f"Config entry {entry_id} not found"}
+        opts: dict[str, Any] = {}
+        if disable_new_entities is not None:
+            opts["disable_new_entities"] = disable_new_entities
+        if disable_polling is not None:
+            opts["disable_polling"] = disable_polling
+        hass.config_entries.async_update_entry(entry, **opts)
+        return {"ok": True, "entry_id": entry_id, "action": "updated"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System options update failed: {exc}"}
+
+
+async def _entity_registry_update(
+    hass: HomeAssistant, entity_id: str,
+    name: str | None = None,
+    icon: str | None = None,
+    disabled_by: str | None = None,
+) -> dict[str, Any]:
+    """Update entity registry entry."""
+    try:
+        from homeassistant.helpers.entity_registry import async_get
+        registry = async_get(hass)
+        entry = registry.async_get(entity_id)
+        if entry is None:
+            return {"error": f"Entity {entity_id} not in registry"}
+        changes: dict[str, Any] = {}
+        if name is not None:
+            changes["name"] = name
+        if icon is not None:
+            changes["icon"] = icon
+        if disabled_by is not None:
+            changes["disabled_by"] = disabled_by if disabled_by else None
+        registry.async_update_entity(entity_id, **changes)
+        return {"ok": True, "entity_id": entity_id, "action": "updated"}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity registry update failed: {exc}"}
+
+
+async def _entity_registry_remove(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Remove entity from registry."""
+    try:
+        from homeassistant.helpers.entity_registry import async_get
+        registry = async_get(hass)
+        registry.async_remove(entity_id)
+        return {"ok": True, "entity_id": entity_id, "action": "removed"}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity registry remove failed: {exc}"}
+
+
+async def _entity_registry_get(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get entity registry entry details."""
+    try:
+        from homeassistant.helpers.entity_registry import async_get
+        registry = async_get(hass)
+        entry = registry.async_get(entity_id)
+        if entry is None:
+            return {"error": f"Entity {entity_id} not in registry"}
+        return {
+            "ok": True, "entity_id": entry.entity_id,
+            "platform": entry.platform, "name": entry.name,
+            "icon": entry.icon,
+            "disabled_by": str(entry.disabled_by) if entry.disabled_by else None,
+        }
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity registry get failed: {exc}"}
+
+
+async def _entity_registry_list_by_domain(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """List entity registry entries by domain."""
+    try:
+        from homeassistant.helpers.entity_registry import async_get
+        registry = async_get(hass)
+        entries = [
+            {"entity_id": e.entity_id, "name": e.name, "platform": e.platform}
+            for e in registry.entities.values()
+            if e.domain == domain
+        ]
+        return {"ok": True, "domain": domain, "entities": entries[:100]}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity registry list by domain failed: {exc}"}
+
+
+async def _device_registry_update(
+    hass: HomeAssistant, device_id: str,
+    name: str | None = None,
+    area_id: str | None = None,
+    disabled_by: str | None = None,
+) -> dict[str, Any]:
+    """Update device registry entry."""
+    try:
+        from homeassistant.helpers.device_registry import async_get
+        registry = async_get(hass)
+        device = registry.async_get(device_id)
+        if device is None:
+            return {"error": f"Device {device_id} not found"}
+        changes: dict[str, Any] = {}
+        if name is not None:
+            changes["name_by_user"] = name
+        if area_id is not None:
+            changes["area_id"] = area_id
+        if disabled_by is not None:
+            changes["disabled_by"] = disabled_by if disabled_by else None
+        registry.async_update_device(device_id, **changes)
+        return {"ok": True, "device_id": device_id, "action": "updated"}
+    except ImportError:
+        return {"error": "device_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device registry update failed: {exc}"}
+
+
+async def _device_registry_remove(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Remove device from registry."""
+    try:
+        from homeassistant.helpers.device_registry import async_get
+        registry = async_get(hass)
+        registry.async_remove_device(device_id)
+        return {"ok": True, "device_id": device_id, "action": "removed"}
+    except ImportError:
+        return {"error": "device_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device registry remove failed: {exc}"}
+
+
+async def _repairs_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List active repair issues."""
+    try:
+        from homeassistant.components.repairs import async_get_issue_registry
+        registry = async_get_issue_registry(hass)
+        issues = [
+            {"domain": i.domain, "issue_id": i.issue_id, "severity": i.severity}
+            for i in registry.issues.values()
+        ]
+        return {"ok": True, "issues": issues[:100]}
+    except ImportError:
+        return {"error": "repairs component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Repairs list failed: {exc}"}
+
+
+async def _repairs_fix(
+    hass: HomeAssistant, domain: str, issue_id: str,
+) -> dict[str, Any]:
+    """Start a repair fix flow."""
+    try:
+        from homeassistant.components.repairs import (
+            async_create_fix_flow,
+        )
+        result = await async_create_fix_flow(hass, domain, issue_id)
+        return {"ok": True, "domain": domain, "issue_id": issue_id, "result": str(result)[:500]}
+    except ImportError:
+        return {"error": "repairs component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Repairs fix failed: {exc}"}
+
+
+async def _analytics_preferences(hass: HomeAssistant) -> dict[str, Any]:
+    """Get analytics preferences."""
+    try:
+        from homeassistant.components.analytics import async_get_analytics
+        analytics = async_get_analytics(hass)
+        return {"ok": True, "preferences": analytics.preferences}
+    except ImportError:
+        return {"error": "analytics component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Analytics preferences failed: {exc}"}
+
+
+async def _hardware_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get hardware information."""
+    try:
+        from homeassistant.components.hardware import async_get_hardware_info
+        info = await async_get_hardware_info(hass)
+        return {"ok": True, "hardware": str(info)[:2000]}
+    except ImportError:
+        return {"error": "hardware component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Hardware info failed: {exc}"}
+
+
+async def _diagnostics_download(
+    hass: HomeAssistant, domain: str, entry_id: str | None = None,
+) -> dict[str, Any]:
+    """Download diagnostics data for an integration."""
+    try:
+        from homeassistant.components.diagnostics import (
+            async_get_config_entry_diagnostics,
+        )
+        if entry_id is None:
+            return {"error": "entry_id is required for diagnostics"}
+        data = await async_get_config_entry_diagnostics(hass, domain, entry_id)
+        return {"ok": True, "diagnostics": str(data)[:2000]}
+    except ImportError:
+        return {"error": "diagnostics component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Diagnostics download failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 35: fan speed, notify persistent, thread, backup mgmt, conversation
 #           reload, logger, automation enable/disable
 # ---------------------------------------------------------------------------
@@ -12848,6 +13199,98 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 36 dispatch ---
+        if name == "trace_get":
+            return await _trace_get(
+                hass, args.get("domain", ""), args.get("item_id", ""),
+                args.get("run_id", ""),
+            )
+        if name == "trace_list":
+            return await _trace_list(
+                hass, args.get("domain", ""), args.get("item_id"),
+            )
+        if name == "trace_contexts":
+            return await _trace_contexts(
+                hass, args.get("domain", ""), args.get("item_id", ""),
+            )
+        if name == "blueprint_import":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _blueprint_import(
+                hass, args.get("domain", ""), args.get("url", ""),
+            )
+        if name == "blueprint_list":
+            return await _blueprint_list(hass, args.get("domain", ""))
+        if name == "config_flow_list":
+            return await _config_flow_list(hass)
+        if name == "config_flow_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _config_flow_create(hass, args.get("handler", ""))
+        if name == "config_flow_progress":
+            return await _config_flow_progress(
+                hass, args.get("flow_id", ""),
+            )
+        if name == "system_options_update":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _system_options_update(
+                hass, args.get("entry_id", ""),
+                args.get("disable_new_entities"),
+                args.get("disable_polling"),
+            )
+        if name == "entity_registry_update":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_registry_update(
+                hass, args.get("entity_id", ""),
+                args.get("name"), args.get("icon"),
+                args.get("disabled_by"),
+            )
+        if name == "entity_registry_remove":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_registry_remove(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "entity_registry_get":
+            return await _entity_registry_get(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "entity_registry_list_by_domain":
+            return await _entity_registry_list_by_domain(
+                hass, args.get("domain", ""),
+            )
+        if name == "device_registry_update":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _device_registry_update(
+                hass, args.get("device_id", ""),
+                args.get("name"), args.get("area_id"),
+                args.get("disabled_by"),
+            )
+        if name == "device_registry_remove":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _device_registry_remove(
+                hass, args.get("device_id", ""),
+            )
+        if name == "repairs_list":
+            return await _repairs_list(hass)
+        if name == "repairs_fix":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _repairs_fix(
+                hass, args.get("domain", ""), args.get("issue_id", ""),
+            )
+        if name == "analytics_preferences":
+            return await _analytics_preferences(hass)
+        if name == "hardware_info":
+            return await _hardware_info(hass)
+        if name == "diagnostics_download":
+            return await _diagnostics_download(
+                hass, args.get("domain", ""), args.get("entry_id"),
+            )
         # --- Wave 35 dispatch ---
         if name == "fan_increase_speed":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -18220,6 +18663,264 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 36 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "trace_get",
+            "description": "Get a specific automation/script trace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string", "description": "automation/script"},
+                    "item_id": {"type": "string"},
+                    "run_id": {"type": "string"},
+                },
+                "required": ["domain", "item_id", "run_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trace_list",
+            "description": "List traces for automation/script.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "item_id": {"type": "string"},
+                },
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trace_contexts",
+            "description": "Get trace contexts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "item_id": {"type": "string"},
+                },
+                "required": ["domain", "item_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "blueprint_import",
+            "description": "Import a blueprint from URL.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "url": {"type": "string"},
+                },
+                "required": ["domain", "url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "blueprint_list",
+            "description": "List blueprints for a domain.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_flow_list",
+            "description": "List active config flows.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_flow_create",
+            "description": "Start a new config flow for a handler.",
+            "parameters": {
+                "type": "object",
+                "properties": {"handler": {"type": "string"}},
+                "required": ["handler"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_flow_progress",
+            "description": "Get progress of a config flow.",
+            "parameters": {
+                "type": "object",
+                "properties": {"flow_id": {"type": "string"}},
+                "required": ["flow_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_options_update",
+            "description": "Update system options for a config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entry_id": {"type": "string"},
+                    "disable_new_entities": {"type": "boolean"},
+                    "disable_polling": {"type": "boolean"},
+                },
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_registry_update",
+            "description": "Update entity registry entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "icon": {"type": "string"},
+                    "disabled_by": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_registry_remove",
+            "description": "Remove entity from registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_registry_get",
+            "description": "Get entity registry entry details.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_registry_list_by_domain",
+            "description": "List entity registry entries by domain.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_registry_update",
+            "description": "Update device registry entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "area_id": {"type": "string"},
+                    "disabled_by": {"type": "string"},
+                },
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_registry_remove",
+            "description": "Remove device from registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "repairs_list",
+            "description": "List active repair issues.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "repairs_fix",
+            "description": "Start a repair fix flow.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "issue_id": {"type": "string"},
+                },
+                "required": ["domain", "issue_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "analytics_preferences",
+            "description": "Get analytics preferences.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "hardware_info",
+            "description": "Get hardware information.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "diagnostics_download",
+            "description": "Download diagnostics data for an integration.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "entry_id": {"type": "string"},
+                },
+                "required": ["domain"],
             },
         },
     },
