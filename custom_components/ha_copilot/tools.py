@@ -8339,6 +8339,180 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 35: fan speed, notify persistent, thread, backup mgmt, conversation
+#           reload, logger, automation enable/disable
+# ---------------------------------------------------------------------------
+
+
+async def _fan_increase_speed(
+    hass: HomeAssistant, entity_id: str,
+    percentage_step: int | None = None,
+) -> dict[str, Any]:
+    """Increase fan speed."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if percentage_step is not None:
+        data["percentage_step"] = percentage_step
+    try:
+        await hass.services.async_call(
+            "fan", "increase_speed", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Fan increase speed failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "speed_increased"}
+
+
+async def _fan_decrease_speed(
+    hass: HomeAssistant, entity_id: str,
+    percentage_step: int | None = None,
+) -> dict[str, Any]:
+    """Decrease fan speed."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if percentage_step is not None:
+        data["percentage_step"] = percentage_step
+    try:
+        await hass.services.async_call(
+            "fan", "decrease_speed", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Fan decrease speed failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "speed_decreased"}
+
+
+async def _notify_persistent_notification(
+    hass: HomeAssistant, message: str, title: str | None = None,
+) -> dict[str, Any]:
+    """Send a notification via persistent_notification service."""
+    data: dict[str, Any] = {"message": message}
+    if title:
+        data["title"] = title
+    try:
+        await hass.services.async_call(
+            "notify", "persistent_notification", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Notify persistent notification failed: {exc}"}
+    return {"ok": True, "message": message, "action": "notified"}
+
+
+async def _thread_list_datasets(hass: HomeAssistant) -> dict[str, Any]:
+    """List Thread datasets."""
+    try:
+        from homeassistant.components.thread import async_get_store
+        store = await async_get_store(hass)
+        datasets = [
+            {"id": d.id, "source": d.source}
+            for d in store.datasets.values()
+        ]
+        return {"ok": True, "datasets": datasets}
+    except ImportError:
+        return {"error": "thread component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Thread list datasets failed: {exc}"}
+
+
+async def _backup_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List available backups."""
+    try:
+        from homeassistant.components.backup import async_get_manager
+        manager = async_get_manager(hass)
+        backups = await manager.async_get_backups()
+        result = [
+            {"slug": b.slug, "name": b.name, "date": b.date}
+            for b in backups.values()
+        ] if isinstance(backups, dict) else []
+        return {"ok": True, "backups": result[:50]}
+    except ImportError:
+        return {"error": "backup component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup list failed: {exc}"}
+
+
+async def _backup_delete(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Delete a backup."""
+    try:
+        from homeassistant.components.backup import async_get_manager
+        manager = async_get_manager(hass)
+        await manager.async_remove_backup(slug)
+        return {"ok": True, "slug": slug, "action": "deleted"}
+    except ImportError:
+        return {"error": "backup component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup delete failed: {exc}"}
+
+
+async def _backup_restore(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Restore a backup."""
+    try:
+        from homeassistant.components.backup import async_get_manager
+        manager = async_get_manager(hass)
+        await manager.async_restore_backup(slug)
+        return {"ok": True, "slug": slug, "action": "restoring"}
+    except ImportError:
+        return {"error": "backup component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup restore failed: {exc}"}
+
+
+async def _conversation_reload(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload conversation component."""
+    try:
+        await hass.services.async_call(
+            "conversation", "reload", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Conversation reload failed: {exc}"}
+    return {"ok": True, "action": "conversation_reloaded"}
+
+
+async def _logger_set_default_level(
+    hass: HomeAssistant, level: str,
+) -> dict[str, Any]:
+    """Set the default logger level."""
+    try:
+        await hass.services.async_call(
+            "logger", "set_default_level",
+            {"level": level}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logger set default level failed: {exc}"}
+    return {"ok": True, "level": level, "action": "default_level_set"}
+
+
+async def _automation_disable(
+    hass: HomeAssistant, entity_id: str,
+    stop_actions: bool = True,
+) -> dict[str, Any]:
+    """Disable an automation."""
+    try:
+        await hass.services.async_call(
+            "automation", "turn_off",
+            {"entity_id": entity_id, "stop_actions": stop_actions},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation disable failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "disabled"}
+
+
+async def _automation_enable(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Enable an automation."""
+    try:
+        await hass.services.async_call(
+            "automation", "turn_on",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation enable failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "enabled"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 34: conversation, water heater, event, persistent notification custom,
 #           image processing, device automation
 # ---------------------------------------------------------------------------
@@ -12674,6 +12848,60 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 35 dispatch ---
+        if name == "fan_increase_speed":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _fan_increase_speed(
+                hass, args.get("entity_id", ""),
+                args.get("percentage_step"),
+            )
+        if name == "fan_decrease_speed":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _fan_decrease_speed(
+                hass, args.get("entity_id", ""),
+                args.get("percentage_step"),
+            )
+        if name == "notify_persistent_notification":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _notify_persistent_notification(
+                hass, args.get("message", ""), args.get("title"),
+            )
+        if name == "thread_list_datasets":
+            return await _thread_list_datasets(hass)
+        if name == "backup_list":
+            return await _backup_list(hass)
+        if name == "backup_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _backup_delete(hass, args.get("slug", ""))
+        if name == "backup_restore":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _backup_restore(hass, args.get("slug", ""))
+        if name == "conversation_reload":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _conversation_reload(hass)
+        if name == "logger_set_default_level":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _logger_set_default_level(
+                hass, args.get("level", "warning"),
+            )
+        if name == "automation_disable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_disable(
+                hass, args.get("entity_id", ""),
+                bool(args.get("stop_actions", True)),
+            )
+        if name == "automation_enable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_enable(hass, args.get("entity_id", ""))
         # --- Wave 34 dispatch ---
         if name == "conversation_list_agents":
             return await _conversation_list_agents(hass)
@@ -17988,6 +18216,141 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "reset_counter",
             "description": "Reset a counter entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 35 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "fan_increase_speed",
+            "description": "Increase fan speed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "percentage_step": {"type": "integer"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fan_decrease_speed",
+            "description": "Decrease fan speed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "percentage_step": {"type": "integer"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "notify_persistent_notification",
+            "description": "Send notification via persistent_notification service.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "title": {"type": "string"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "thread_list_datasets",
+            "description": "List Thread datasets.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "backup_list",
+            "description": "List available backups.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "backup_delete",
+            "description": "Delete a backup by slug.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "backup_restore",
+            "description": "Restore a backup by slug.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "conversation_reload",
+            "description": "Reload conversation component.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "logger_set_default_level",
+            "description": "Set the default logger level.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "level": {"type": "string", "description": "debug/info/warning/error/critical"},
+                },
+                "required": ["level"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_disable",
+            "description": "Disable an automation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "stop_actions": {"type": "boolean"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_enable",
+            "description": "Enable an automation.",
             "parameters": {
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
