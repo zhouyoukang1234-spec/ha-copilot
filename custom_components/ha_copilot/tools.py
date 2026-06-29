@@ -8339,6 +8339,246 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 28: update, camera, calendar, todo, weather, backup, mqtt, rest, logbook
+# ---------------------------------------------------------------------------
+
+
+async def _update_install(
+    hass: HomeAssistant, entity_id: str,
+    backup: bool = True,
+) -> dict[str, Any]:
+    """Install an available update."""
+    try:
+        await hass.services.async_call(
+            "update", "install",
+            {"entity_id": entity_id, "backup": backup}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Update install failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "installed"}
+
+
+async def _update_skip(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Skip an available update."""
+    try:
+        await hass.services.async_call(
+            "update", "skip", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Update skip failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "skipped"}
+
+
+async def _update_clear_skipped(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Clear a skipped update."""
+    try:
+        await hass.services.async_call(
+            "update", "clear_skipped", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Update clear skipped failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "clear_skipped"}
+
+
+async def _camera_play_stream(
+    hass: HomeAssistant, entity_id: str,
+    media_player: str, format_: str = "hls",
+) -> dict[str, Any]:
+    """Play camera stream on a media player."""
+    try:
+        await hass.services.async_call(
+            "camera", "play_stream",
+            {"entity_id": entity_id, "media_player": media_player,
+             "format": format_}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Camera play stream failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "media_player": media_player}
+
+
+async def _camera_enable_motion(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Enable motion detection on a camera."""
+    try:
+        await hass.services.async_call(
+            "camera", "enable_motion_detection",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Camera enable motion failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "motion_enabled"}
+
+
+async def _camera_disable_motion(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Disable motion detection on a camera."""
+    try:
+        await hass.services.async_call(
+            "camera", "disable_motion_detection",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Camera disable motion failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "motion_disabled"}
+
+
+async def _calendar_create_event(
+    hass: HomeAssistant, entity_id: str,
+    summary: str, start_date_time: str | None = None,
+    end_date_time: str | None = None,
+    description: str | None = None, location: str | None = None,
+) -> dict[str, Any]:
+    """Create a calendar event."""
+    data: dict[str, Any] = {"entity_id": entity_id, "summary": summary}
+    if start_date_time:
+        data["start_date_time"] = start_date_time
+    if end_date_time:
+        data["end_date_time"] = end_date_time
+    if description:
+        data["description"] = description
+    if location:
+        data["location"] = location
+    try:
+        await hass.services.async_call(
+            "calendar", "create_event", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Calendar create event failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "summary": summary}
+
+
+async def _calendar_delete_event(
+    hass: HomeAssistant, entity_id: str, uid: str,
+) -> dict[str, Any]:
+    """Delete a calendar event by UID."""
+    try:
+        await hass.services.async_call(
+            "calendar", "delete_event",
+            {"entity_id": entity_id, "uid": uid}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Calendar delete event failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "uid": uid, "action": "deleted"}
+
+
+async def _calendar_get_events(
+    hass: HomeAssistant, entity_id: str,
+    start_date_time: str, end_date_time: str,
+) -> dict[str, Any]:
+    """Get calendar events in a time range."""
+    try:
+        result = await hass.services.async_call(
+            "calendar", "get_events",
+            {"entity_id": entity_id, "start_date_time": start_date_time,
+             "end_date_time": end_date_time},
+            blocking=True, return_response=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Calendar get events failed: {exc}"}
+    return {"ok": True, "events": result}
+
+
+async def _todo_remove_completed_items(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Remove completed items from a todo list."""
+    try:
+        await hass.services.async_call(
+            "todo", "remove_completed_items",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo remove completed failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "completed_removed"}
+
+
+async def _weather_get_forecasts(
+    hass: HomeAssistant, entity_id: str,
+    forecast_type: str = "daily",
+) -> dict[str, Any]:
+    """Get weather forecasts."""
+    try:
+        result = await hass.services.async_call(
+            "weather", "get_forecasts",
+            {"entity_id": entity_id, "type": forecast_type},
+            blocking=True, return_response=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Weather get forecasts failed: {exc}"}
+    return {"ok": True, "forecasts": result}
+
+
+async def _backup_create(hass: HomeAssistant) -> dict[str, Any]:
+    """Create a Home Assistant backup."""
+    try:
+        await hass.services.async_call("backup", "create", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup create failed: {exc}"}
+    return {"ok": True, "action": "backup_created"}
+
+
+async def _mqtt_publish(
+    hass: HomeAssistant, topic: str, payload: str = "",
+    qos: int = 0, retain: bool = False,
+) -> dict[str, Any]:
+    """Publish an MQTT message."""
+    try:
+        await hass.services.async_call(
+            "mqtt", "publish",
+            {"topic": topic, "payload": payload, "qos": qos, "retain": retain},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"MQTT publish failed: {exc}"}
+    return {"ok": True, "topic": topic, "action": "published"}
+
+
+async def _rest_command_execute(
+    hass: HomeAssistant, command_name: str,
+) -> dict[str, Any]:
+    """Execute a rest_command by name."""
+    try:
+        await hass.services.async_call(
+            "rest_command", command_name, {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"REST command execute failed: {exc}"}
+    return {"ok": True, "command": command_name, "action": "executed"}
+
+
+async def _logbook_get_entries(
+    hass: HomeAssistant, entity_id: str | None = None,
+    start_time: str | None = None, end_time: str | None = None,
+) -> dict[str, Any]:
+    """Get logbook entries via the REST API path."""
+    import aiohttp
+    url = "http://localhost:8123/api/logbook"
+    params: dict[str, str] = {}
+    if entity_id:
+        params["entity"] = entity_id
+    if start_time:
+        url = f"http://localhost:8123/api/logbook/{start_time}"
+    if end_time:
+        params["end_time"] = end_time
+    try:
+        async with aiohttp.ClientSession() as session, session.get(
+            url, params=params, timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return {"ok": True, "entries": data[:50]}
+            return {"error": f"Logbook HTTP {resp.status}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook get entries failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 27: homeassistant_update_entity, system_log_clear/write
 # ---------------------------------------------------------------------------
 
@@ -11302,6 +11542,89 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 28 dispatch ---
+        if name == "update_install":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _update_install(
+                hass, args.get("entity_id", ""),
+                bool(args.get("backup", True)),
+            )
+        if name == "update_skip":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _update_skip(hass, args.get("entity_id", ""))
+        if name == "update_clear_skipped":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _update_clear_skipped(hass, args.get("entity_id", ""))
+        if name == "camera_play_stream":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _camera_play_stream(
+                hass, args.get("entity_id", ""),
+                args.get("media_player", ""), args.get("format", "hls"),
+            )
+        if name == "camera_enable_motion":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _camera_enable_motion(hass, args.get("entity_id", ""))
+        if name == "camera_disable_motion":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _camera_disable_motion(hass, args.get("entity_id", ""))
+        if name == "calendar_create_event":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _calendar_create_event(
+                hass, args.get("entity_id", ""), args.get("summary", ""),
+                args.get("start_date_time"), args.get("end_date_time"),
+                args.get("description"), args.get("location"),
+            )
+        if name == "calendar_delete_event":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _calendar_delete_event(
+                hass, args.get("entity_id", ""), args.get("uid", ""),
+            )
+        if name == "calendar_get_events":
+            return await _calendar_get_events(
+                hass, args.get("entity_id", ""),
+                args.get("start_date_time", ""), args.get("end_date_time", ""),
+            )
+        if name == "todo_remove_completed_items":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _todo_remove_completed_items(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "weather_get_forecasts":
+            return await _weather_get_forecasts(
+                hass, args.get("entity_id", ""),
+                args.get("type", "daily"),
+            )
+        if name == "backup_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _backup_create(hass)
+        if name == "mqtt_publish":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _mqtt_publish(
+                hass, args.get("topic", ""), args.get("payload", ""),
+                int(args.get("qos", 0)), bool(args.get("retain", False)),
+            )
+        if name == "rest_command_execute":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _rest_command_execute(
+                hass, args.get("command_name", ""),
+            )
+        if name == "logbook_get_entries":
+            return await _logbook_get_entries(
+                hass, args.get("entity_id"), args.get("start_time"),
+                args.get("end_time"),
+            )
         # --- Wave 27 dispatch ---
         if name == "homeassistant_update_entity":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -16177,6 +16500,217 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 28 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "update_install",
+            "description": "Install an available update.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "backup": {"type": "boolean"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_skip",
+            "description": "Skip an available update.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_clear_skipped",
+            "description": "Clear a skipped update.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "camera_play_stream",
+            "description": "Play camera stream on a media player.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "media_player": {"type": "string"},
+                    "format": {"type": "string"},
+                },
+                "required": ["entity_id", "media_player"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "camera_enable_motion",
+            "description": "Enable motion detection on a camera.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "camera_disable_motion",
+            "description": "Disable motion detection on a camera.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_create_event",
+            "description": "Create a calendar event.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "start_date_time": {"type": "string"},
+                    "end_date_time": {"type": "string"},
+                    "description": {"type": "string"},
+                    "location": {"type": "string"},
+                },
+                "required": ["entity_id", "summary"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_delete_event",
+            "description": "Delete a calendar event by UID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "uid": {"type": "string"},
+                },
+                "required": ["entity_id", "uid"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_get_events",
+            "description": "Get calendar events in a time range.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "start_date_time": {"type": "string"},
+                    "end_date_time": {"type": "string"},
+                },
+                "required": ["entity_id", "start_date_time", "end_date_time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_remove_completed_items",
+            "description": "Remove completed items from a todo list.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "weather_get_forecasts",
+            "description": "Get weather forecasts (daily/hourly/twice_daily).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "type": {"type": "string", "description": "daily/hourly/twice_daily"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "backup_create",
+            "description": "Create a Home Assistant backup.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mqtt_publish",
+            "description": "Publish an MQTT message.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string"},
+                    "payload": {"type": "string"},
+                    "qos": {"type": "integer"},
+                    "retain": {"type": "boolean"},
+                },
+                "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rest_command_execute",
+            "description": "Execute a rest_command by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command_name": {"type": "string"},
+                },
+                "required": ["command_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "logbook_get_entries",
+            "description": "Get logbook entries for an entity or time range.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "start_time": {"type": "string"},
+                    "end_time": {"type": "string"},
+                },
             },
         },
     },
