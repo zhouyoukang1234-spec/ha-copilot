@@ -22459,6 +22459,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _adguard_stats_check(hass)
         if name == "smart_doorbell_video_check":
             return await _smart_doorbell_video_check(hass)
+        # --- Wave 109 dispatch ---
+        if name == "rain_sensor_check":
+            return await _rain_sensor_check(hass)
+        if name == "snow_depth_sensor":
+            return await _snow_depth_sensor(hass)
+        if name == "fog_detection_sensor":
+            return await _fog_detection_sensor(hass)
+        if name == "pollen_count_check":
+            return await _pollen_count_check(hass)
+        if name == "mold_risk_assessment":
+            return await _mold_risk_assessment(hass)
+        if name == "radon_level_monitor":
+            return await _radon_level_monitor(hass)
+        if name == "formaldehyde_detector":
+            return await _formaldehyde_detector(hass)
+        if name == "tvoc_level_check":
+            return await _tvoc_level_check(hass)
+        if name == "pm25_level_check":
+            return await _pm25_level_check(hass)
+        if name == "pm10_level_check":
+            return await _pm10_level_check(hass)
+        if name == "co2_history_trend":
+            return await _co2_history_trend(hass)
+        if name == "lux_level_check":
+            return await _lux_level_check(hass)
+        if name == "moon_phase_check":
+            return await _moon_phase_check(hass)
+        if name == "tide_info_check":
+            return await _tide_info_check(hass)
+        if name == "barometric_pressure_trend":
+            return await _barometric_pressure_trend(hass)
+        if name == "dew_point_check":
+            return await _dew_point_check(hass)
+        if name == "wind_chill_check":
+            return await _wind_chill_check(hass)
+        if name == "heat_index_check":
+            return await _heat_index_check(hass)
+        if name == "visibility_check":
+            return await _visibility_check(hass)
+        if name == "feels_like_temperature":
+            return await _feels_like_temperature(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -39921,6 +39962,282 @@ async def _smart_doorbell_video_check(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "cameras": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 109 — weather deep: rain, snow, fog, pollen, mold, radon, formaldehyde,
+# TVOC, PM2.5, PM10, CO2 history, lux, moon phase, tide, barometric pressure,
+# dew point, wind chill, heat index, visibility, feels-like temperature
+# ---------------------------------------------------------------------------
+
+
+async def _rain_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check rain sensor."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "moisture":
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if "rain" in name:
+                results.append({"entity_id": s.entity_id, "raining": s.state == "on",
+                                "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "rain" in name and ("rate" in name or "accumulation" in name or "precipitation" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _snow_depth_sensor(hass: HomeAssistant) -> dict[str, Any]:
+    """Check snow depth sensor."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "snow" in name and ("depth" in name or "accumulation" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _fog_detection_sensor(hass: HomeAssistant) -> dict[str, Any]:
+    """Check fog detection sensor."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "fog" in name or "mist" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _pollen_count_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check pollen count."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("pollen", "allergy", "ragweed", "grass_pollen",
+                                      "tree_pollen")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _mold_risk_assessment(hass: HomeAssistant) -> dict[str, Any]:
+    """Assess mold risk based on humidity."""
+    high_humidity = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "humidity":
+            try:
+                val = float(s.state)
+                if val > 70:
+                    high_humidity.append({"entity_id": s.entity_id, "humidity": val,
+                                          "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    risk = "high" if len(high_humidity) > 0 else "low"
+    return {"ok": True, "risk": risk, "high_humidity_zones": len(high_humidity),
+            "zones": high_humidity}
+
+
+async def _radon_level_monitor(hass: HomeAssistant) -> dict[str, Any]:
+    """Check radon level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "radon" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _formaldehyde_detector(hass: HomeAssistant) -> dict[str, Any]:
+    """Check formaldehyde level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "formaldehyde" in name or "hcho" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _tvoc_level_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check TVOC level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc == "volatile_organic_compounds" or "tvoc" in name or "voc" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _pm25_level_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check PM2.5 level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc == "pm25" or "pm2.5" in name or "pm25" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _pm10_level_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check PM10 level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc == "pm10" or "pm10" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _co2_history_trend(hass: HomeAssistant) -> dict[str, Any]:
+    """Check CO2 history trend."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "carbon_dioxide":
+            try:
+                results.append({"entity_id": s.entity_id, "co2_ppm": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    if results:
+        avg = round(sum(r["co2_ppm"] for r in results) / len(results), 1)
+        mx = max(r["co2_ppm"] for r in results)
+    else:
+        avg = mx = 0
+    return {"ok": True, "count": len(results), "average_ppm": avg, "max_ppm": mx,
+            "sensors": results}
+
+
+async def _lux_level_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check lux level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "illuminance":
+            try:
+                results.append({"entity_id": s.entity_id, "lux": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _moon_phase_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check moon phase."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "moon" in name and ("phase" in name or s.entity_id.startswith("sensor.moon")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _tide_info_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check tide information."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "tide" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _barometric_pressure_trend(hass: HomeAssistant) -> dict[str, Any]:
+    """Check barometric pressure trend."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") in ("atmospheric_pressure", "pressure"):
+            try:
+                results.append({"entity_id": s.entity_id, "pressure": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    if results:
+        avg = round(sum(r["pressure"] for r in results) / len(results), 1)
+    else:
+        avg = 0
+    return {"ok": True, "count": len(results), "average": avg, "sensors": results}
+
+
+async def _dew_point_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check dew point."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "dew_point" in name or "dewpoint" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _wind_chill_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check wind chill."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "wind_chill" in name or "windchill" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _heat_index_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check heat index."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "heat_index" in name or "heatindex" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _visibility_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check visibility."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "visibility" in name and s.attributes.get("device_class") != "connectivity":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _feels_like_temperature(hass: HomeAssistant) -> dict[str, Any]:
+    """Check feels-like temperature."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "feels_like" in name or "apparent_temperature" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -52406,4 +52723,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "pihole_stats_check", "description": "Check Pi-hole stats.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "adguard_stats_check", "description": "Check AdGuard stats.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "smart_doorbell_video_check", "description": "Check doorbell video.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 109 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "rain_sensor_check", "description": "Check rain sensor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "snow_depth_sensor", "description": "Check snow depth.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "fog_detection_sensor", "description": "Check fog sensor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pollen_count_check", "description": "Check pollen count.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mold_risk_assessment", "description": "Assess mold risk.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "radon_level_monitor", "description": "Check radon level.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "formaldehyde_detector", "description": "Check formaldehyde.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "tvoc_level_check", "description": "Check TVOC level.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pm25_level_check", "description": "Check PM2.5 level.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pm10_level_check", "description": "Check PM10 level.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "co2_history_trend", "description": "Check CO2 trend.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "lux_level_check", "description": "Check lux level.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "moon_phase_check", "description": "Check moon phase.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "tide_info_check", "description": "Check tide info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "barometric_pressure_trend", "description": "Check barometric pressure.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "dew_point_check", "description": "Check dew point.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "wind_chill_check", "description": "Check wind chill.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "heat_index_check", "description": "Check heat index.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "visibility_check", "description": "Check visibility.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "feels_like_temperature", "description": "Check feels-like temp.", "parameters": {"type": "object", "properties": {}}}},
 ]
