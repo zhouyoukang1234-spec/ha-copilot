@@ -21322,6 +21322,55 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _area_light_summary(hass)
         if name == "climate_mode_distribution":
             return await _climate_mode_distribution(hass)
+        # --- Wave 82 dispatch ---
+        if name == "schedule_create_weekly":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _schedule_create_weekly(hass, args.get("name", ""), args.get("days", []), args.get("time_from", ""), args.get("time_to", ""))
+        if name == "schedule_get_next_event":
+            return await _schedule_get_next_event(hass, args.get("entity_id", ""))
+        if name == "network_interface_list":
+            return await _network_interface_list(hass)
+        if name == "network_wifi_info":
+            return await _network_wifi_info(hass)
+        if name == "storage_usage_report":
+            return await _storage_usage_report(hass)
+        if name == "backup_schedule_info":
+            return await _backup_schedule_info(hass)
+        if name == "camera_snapshot_list":
+            return await _camera_snapshot_list(hass)
+        if name == "camera_motion_detected":
+            return await _camera_motion_detected(hass)
+        if name == "media_player_queue":
+            return await _media_player_queue(hass, args.get("entity_id", ""))
+        if name == "media_player_now_playing_all":
+            return await _media_player_now_playing_all(hass)
+        if name == "person_presence_summary":
+            return await _person_presence_summary(hass)
+        if name == "person_location_history":
+            return await _person_location_history(hass, args.get("entity_id", ""))
+        if name == "tag_scan_history":
+            return await _tag_scan_history(hass)
+        if name == "counter_list_all":
+            return await _counter_list_all(hass)
+        if name == "timer_list_all":
+            return await _timer_list_all(hass)
+        if name == "input_helper_summary":
+            return await _input_helper_summary(hass)
+        if name == "weather_hourly_forecast":
+            return await _weather_hourly_forecast(hass, args.get("entity_id", ""))
+        if name == "weather_daily_forecast":
+            return await _weather_daily_forecast(hass, args.get("entity_id", ""))
+        if name == "notification_channel_list":
+            return await _notification_channel_list(hass)
+        if name == "notification_history":
+            return await _notification_history(hass)
+        if name == "system_log_errors":
+            return await _system_log_errors(hass)
+        if name == "system_log_warnings":
+            return await _system_log_warnings(hass)
+        if name == "addon_resource_usage":
+            return await _addon_resource_usage(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -30285,6 +30334,390 @@ async def _climate_mode_distribution(hass: HomeAssistant) -> dict[str, Any]:
         })
     return {"ok": True, "total": len(details), "distribution": modes,
             "details": details}
+
+
+# ---------------------------------------------------------------------------
+# Wave 82 — scheduling, network, storage, camera, media, presence,
+# tags, counters/timers, input helpers, weather forecast, notifications,
+# system log, addon resources
+# ---------------------------------------------------------------------------
+
+
+async def _schedule_create_weekly(
+    hass: HomeAssistant, name: str, days: list[str],
+    time_from: str, time_to: str,
+) -> dict[str, Any]:
+    """Create a weekly schedule helper."""
+    try:
+        await hass.services.async_call("schedule", "reload", {})
+    except Exception:  # noqa: BLE001
+        pass
+    import yaml
+    config_dir = hass.config.config_dir
+    path = os.path.join(config_dir, "schedules.yaml")
+    slug = name.lower().replace(" ", "_")
+    config = {slug: {"name": name, "icon": "mdi:calendar-clock"}}
+    for day in days:
+        config[slug][day.lower()] = [{"from": time_from, "to": time_to}]
+
+    def _write():
+        existing = {}
+        if os.path.exists(path):
+            with open(path) as fh:
+                data = yaml.safe_load(fh)
+                if isinstance(data, dict):
+                    existing = data
+        existing.update(config)
+        with open(path, "w") as fh:
+            yaml.safe_dump(existing, fh, default_flow_style=False, allow_unicode=True)
+        return len(existing)
+
+    try:
+        count = await hass.async_add_executor_job(_write)
+        return {"ok": True, "name": name, "slug": slug, "days": days,
+                "total_schedules": count}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Schedule create failed: {exc}"}
+
+
+async def _schedule_get_next_event(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get next scheduled event for a schedule entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Schedule entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "next_event": attrs.get("next_event"),
+            "friendly_name": attrs.get("friendly_name")}
+
+
+async def _network_interface_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List network interfaces from the system."""
+    import socket
+    hostname = socket.gethostname()
+    try:
+        ip_addr = socket.gethostbyname(hostname)
+    except socket.gaierror:
+        ip_addr = "unknown"
+    return {"ok": True, "hostname": hostname, "ip_address": ip_addr,
+            "note": "For full network info, use the HA network integration"}
+
+
+async def _network_wifi_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get WiFi connectivity info."""
+    network = hass.data.get("network", {})
+    if isinstance(network, dict) and network:
+        return {"ok": True, "network_data": {k: str(v)[:200] for k, v in list(network.items())[:10]}}
+    return {"ok": True, "note": "WiFi info not available through HA data. Use network integration."}
+
+
+async def _storage_usage_report(hass: HomeAssistant) -> dict[str, Any]:
+    """Report storage usage for HA config directory."""
+    config_dir = hass.config.config_dir
+
+    def _check():
+        total_size = 0
+        file_count = 0
+        for dirpath, _dirnames, filenames in os.walk(config_dir):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                try:
+                    total_size += os.path.getsize(fp)
+                    file_count += 1
+                except OSError:
+                    pass
+        return total_size, file_count
+
+    try:
+        total_size, file_count = await hass.async_add_executor_job(_check)
+        return {"ok": True, "config_dir": config_dir,
+                "total_size_mb": round(total_size / (1024 * 1024), 2),
+                "file_count": file_count}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Storage check failed: {exc}"}
+
+
+async def _backup_schedule_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get backup schedule configuration info."""
+    backup_data = hass.data.get("backup", {})
+    if isinstance(backup_data, dict) and backup_data:
+        return {"ok": True, "backup_config": {k: str(v)[:200] for k, v in list(backup_data.items())[:10]}}
+    return {"ok": True, "note": "No backup schedule data found in hass.data"}
+
+
+async def _camera_snapshot_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all camera entities with snapshot info."""
+    results = []
+    for state in hass.states.async_all("camera"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "entity_picture": attrs.get("entity_picture"),
+            "access_token": attrs.get("access_token"),
+            "brand": attrs.get("brand"),
+            "model": attrs.get("model_name"),
+            "friendly_name": attrs.get("friendly_name"),
+        })
+    return {"ok": True, "count": len(results), "cameras": results}
+
+
+async def _camera_motion_detected(hass: HomeAssistant) -> dict[str, Any]:
+    """Check for motion-related camera states."""
+    cameras = hass.states.async_all("camera")
+    motion_sensors = [s for s in hass.states.async_all("binary_sensor")
+                      if s.attributes.get("device_class") == "motion"]
+    active_motion = [s for s in motion_sensors if s.state == "on"]
+    return {"ok": True, "cameras_total": len(cameras),
+            "motion_sensors": len(motion_sensors),
+            "active_motion": len(active_motion),
+            "active_details": [{"entity_id": s.entity_id,
+                                "friendly_name": s.attributes.get("friendly_name")}
+                               for s in active_motion]}
+
+
+async def _media_player_queue(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get media player queue/playlist info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Media player '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "media_title": attrs.get("media_title"),
+            "media_artist": attrs.get("media_artist"),
+            "media_album": attrs.get("media_album_name"),
+            "media_content_type": attrs.get("media_content_type"),
+            "media_duration": attrs.get("media_duration"),
+            "media_position": attrs.get("media_position"),
+            "source": attrs.get("source"),
+            "source_list": attrs.get("source_list", [])}
+
+
+async def _media_player_now_playing_all(hass: HomeAssistant) -> dict[str, Any]:
+    """Get now playing info for all active media players."""
+    results = []
+    for state in hass.states.async_all("media_player"):
+        if state.state == "playing":
+            attrs = dict(state.attributes)
+            results.append({
+                "entity_id": state.entity_id,
+                "media_title": attrs.get("media_title"),
+                "media_artist": attrs.get("media_artist"),
+                "source": attrs.get("source"),
+                "volume": attrs.get("volume_level"),
+            })
+    return {"ok": True, "playing_count": len(results), "players": results}
+
+
+async def _person_presence_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Get presence summary for all persons."""
+    results = []
+    home_count = 0
+    for state in hass.states.async_all("person"):
+        is_home = state.state.lower() == "home"
+        if is_home:
+            home_count += 1
+        results.append({
+            "entity_id": state.entity_id,
+            "friendly_name": state.attributes.get("friendly_name"),
+            "state": state.state,
+            "is_home": is_home,
+            "last_changed": str(state.last_changed),
+        })
+    return {"ok": True, "total_persons": len(results), "home": home_count,
+            "away": len(results) - home_count, "persons": results}
+
+
+async def _person_location_history(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get person location info with tracker details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Person '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {"ok": True, "entity_id": entity_id, "state": state.state,
+            "latitude": attrs.get("latitude"),
+            "longitude": attrs.get("longitude"),
+            "gps_accuracy": attrs.get("gps_accuracy"),
+            "source": attrs.get("source"),
+            "last_changed": str(state.last_changed),
+            "friendly_name": attrs.get("friendly_name")}
+
+
+async def _tag_scan_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Get NFC/tag scan info."""
+    tag_data = hass.data.get("tag", {})
+    if isinstance(tag_data, dict) and tag_data:
+        tags = []
+        for tag_id, info in list(tag_data.items())[:20]:
+            tags.append({"tag_id": str(tag_id), "info": str(info)[:200]})
+        return {"ok": True, "count": len(tags), "tags": tags}
+    return {"ok": True, "note": "No tag data available", "count": 0}
+
+
+async def _counter_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all counter entities."""
+    results = []
+    for state in hass.states.async_all("counter"):
+        results.append({
+            "entity_id": state.entity_id,
+            "value": state.state,
+            "friendly_name": state.attributes.get("friendly_name"),
+            "initial": state.attributes.get("initial"),
+            "step": state.attributes.get("step"),
+            "minimum": state.attributes.get("minimum"),
+            "maximum": state.attributes.get("maximum"),
+        })
+    return {"ok": True, "count": len(results), "counters": results}
+
+
+async def _timer_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all timer entities."""
+    results = []
+    for state in hass.states.async_all("timer"):
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": state.attributes.get("friendly_name"),
+            "duration": state.attributes.get("duration"),
+            "remaining": state.attributes.get("remaining"),
+            "finishes_at": state.attributes.get("finishes_at"),
+        })
+    return {"ok": True, "count": len(results), "timers": results}
+
+
+async def _input_helper_summary(hass: HomeAssistant) -> dict[str, Any]:
+    """Summarize all input helper entities."""
+    domains = ["input_boolean", "input_number", "input_select",
+               "input_text", "input_datetime", "input_button"]
+    summary: dict[str, int] = {}
+    details = []
+    for domain in domains:
+        entities = hass.states.async_all(domain)
+        summary[domain] = len(entities)
+        for state in entities[:5]:
+            details.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "total": sum(summary.values()), "by_domain": summary,
+            "sample_entities": details}
+
+
+async def _weather_hourly_forecast(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get hourly weather forecast."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Weather entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    forecast = attrs.get("forecast", [])
+    hourly = forecast[:12] if isinstance(forecast, list) else []
+    return {"ok": True, "entity_id": entity_id, "current": state.state,
+            "temperature": attrs.get("temperature"),
+            "humidity": attrs.get("humidity"),
+            "hourly_count": len(hourly), "hourly": hourly}
+
+
+async def _weather_daily_forecast(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get daily weather forecast."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Weather entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    forecast = attrs.get("forecast", [])
+    daily = forecast[:7] if isinstance(forecast, list) else []
+    return {"ok": True, "entity_id": entity_id, "current": state.state,
+            "temperature": attrs.get("temperature"),
+            "humidity": attrs.get("humidity"),
+            "daily_count": len(daily), "daily": daily}
+
+
+async def _notification_channel_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List available notification services."""
+    services = hass.services.async_services()
+    notify_services = services.get("notify", {})
+    channels = []
+    for svc_name in sorted(notify_services.keys()):
+        channels.append({"service": f"notify.{svc_name}"})
+    return {"ok": True, "count": len(channels), "channels": channels}
+
+
+async def _notification_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Get persistent notification history."""
+    results = []
+    for state in hass.states.async_all("persistent_notification"):
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "title": state.attributes.get("title"),
+            "message": state.attributes.get("message"),
+            "created_at": str(state.last_changed),
+        })
+    return {"ok": True, "count": len(results), "notifications": results}
+
+
+async def _system_log_errors(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system log errors."""
+    log_records = hass.data.get("system_log", {})
+    if isinstance(log_records, dict):
+        records = log_records.get("records", [])
+        if isinstance(records, list):
+            errors = [r for r in records if isinstance(r, dict) and r.get("level") == "ERROR"]
+            return {"ok": True, "error_count": len(errors),
+                    "errors": [{"message": str(r.get("message", ""))[:200],
+                                "source": r.get("source"),
+                                "timestamp": str(r.get("timestamp", ""))}
+                               for r in errors[:20]]}
+    return {"ok": True, "error_count": 0, "note": "No system log data accessible"}
+
+
+async def _system_log_warnings(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system log warnings."""
+    log_records = hass.data.get("system_log", {})
+    if isinstance(log_records, dict):
+        records = log_records.get("records", [])
+        if isinstance(records, list):
+            warnings = [r for r in records if isinstance(r, dict) and r.get("level") == "WARNING"]
+            return {"ok": True, "warning_count": len(warnings),
+                    "warnings": [{"message": str(r.get("message", ""))[:200],
+                                  "source": r.get("source"),
+                                  "timestamp": str(r.get("timestamp", ""))}
+                                 for r in warnings[:20]]}
+    return {"ok": True, "warning_count": 0, "note": "No system log data accessible"}
+
+
+async def _addon_resource_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Get addon resource usage info (Supervisor)."""
+    try:
+        from homeassistant.components.hassio import get_addons_info
+        addons = await get_addons_info(hass)
+        if isinstance(addons, dict):
+            result = []
+            for addon in addons.get("addons", [])[:20]:
+                result.append({
+                    "name": addon.get("name"),
+                    "slug": addon.get("slug"),
+                    "state": addon.get("state"),
+                    "version": addon.get("version"),
+                    "cpu_percent": addon.get("cpu_percent"),
+                    "memory_percent": addon.get("memory_percent"),
+                })
+            return {"ok": True, "addon_count": len(result), "addons": result}
+        return {"ok": True, "note": "Addon data format unexpected"}
+    except ImportError:
+        return {"ok": True, "note": "Supervisor/hassio not available (not HAOS)"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon resource check failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -42192,4 +42625,28 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "area_device_count", "description": "Count devices per area.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "area_light_summary", "description": "Summarize light states per area.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "climate_mode_distribution", "description": "Get distribution of HVAC modes.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 82 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "schedule_create_weekly", "description": "Create a weekly schedule helper. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "days": {"type": "array", "items": {"type": "string"}}, "time_from": {"type": "string"}, "time_to": {"type": "string"}}, "required": ["name", "days", "time_from", "time_to"]}}},
+    {"type": "function", "function": {"name": "schedule_get_next_event", "description": "Get next scheduled event.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "network_interface_list", "description": "List network interfaces.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "network_wifi_info", "description": "Get WiFi connectivity info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "storage_usage_report", "description": "Report HA config directory storage usage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "backup_schedule_info", "description": "Get backup schedule configuration.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "camera_snapshot_list", "description": "List all cameras with snapshot info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "camera_motion_detected", "description": "Check for active motion near cameras.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "media_player_queue", "description": "Get media player queue/playlist info.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "media_player_now_playing_all", "description": "Get now playing info for all active media players.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "person_presence_summary", "description": "Get presence summary for all persons.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "person_location_history", "description": "Get person location with GPS details.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "tag_scan_history", "description": "Get NFC/tag scan info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "counter_list_all", "description": "List all counter entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "timer_list_all", "description": "List all timer entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "input_helper_summary", "description": "Summarize all input helper entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "weather_hourly_forecast", "description": "Get hourly weather forecast.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "weather_daily_forecast", "description": "Get daily weather forecast.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "notification_channel_list", "description": "List available notification services.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "notification_history", "description": "Get persistent notification history.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_log_errors", "description": "Get system log errors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_log_warnings", "description": "Get system log warnings.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "addon_resource_usage", "description": "Get addon resource usage (Supervisor).", "parameters": {"type": "object", "properties": {}}}},
 ]
