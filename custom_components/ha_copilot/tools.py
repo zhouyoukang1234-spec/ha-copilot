@@ -8339,6 +8339,178 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 44: siren, select, number, button, date/time/datetime entities,
+#           text entity, lawn mower, valve, water heater
+# ---------------------------------------------------------------------------
+
+
+async def _siren_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all siren entities."""
+    try:
+        states = hass.states.async_all("siren")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "sirens": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Siren list failed: {exc}"}
+
+
+async def _select_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all select entities."""
+    try:
+        states = hass.states.async_all("select")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "options": s.attributes.get("options", [])}
+            for s in states
+        ]
+        return {"ok": True, "selects": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Select list failed: {exc}"}
+
+
+async def _number_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all number entities."""
+    try:
+        states = hass.states.async_all("number")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "min": s.attributes.get("min"), "max": s.attributes.get("max"),
+             "step": s.attributes.get("step")}
+            for s in states
+        ]
+        return {"ok": True, "numbers": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Number list failed: {exc}"}
+
+
+async def _button_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all button entities."""
+    try:
+        states = hass.states.async_all("button")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "buttons": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Button list failed: {exc}"}
+
+
+async def _date_entity_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all date entities."""
+    try:
+        states = hass.states.async_all("date")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "dates": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Date entity list failed: {exc}"}
+
+
+async def _time_entity_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all time entities."""
+    try:
+        states = hass.states.async_all("time")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "times": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Time entity list failed: {exc}"}
+
+
+async def _datetime_entity_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all datetime entities."""
+    try:
+        states = hass.states.async_all("datetime")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "datetimes": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Datetime entity list failed: {exc}"}
+
+
+async def _text_entity_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all text entities."""
+    try:
+        states = hass.states.async_all("text")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "texts": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Text entity list failed: {exc}"}
+
+
+async def _text_entity_set_value(
+    hass: HomeAssistant, entity_id: str, value: str,
+) -> dict[str, Any]:
+    """Set a text entity value."""
+    try:
+        await hass.services.async_call(
+            "text", "set_value",
+            {"entity_id": entity_id, "value": value},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Text entity set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _lawn_mower_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all lawn mower entities."""
+    try:
+        states = hass.states.async_all("lawn_mower")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "lawn_mowers": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Lawn mower list failed: {exc}"}
+
+
+async def _valve_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all valve entities."""
+    try:
+        states = hass.states.async_all("valve")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "current_position": s.attributes.get("current_position")}
+            for s in states
+        ]
+        return {"ok": True, "valves": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Valve list failed: {exc}"}
+
+
+async def _water_heater_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all water heater entities."""
+    try:
+        states = hass.states.async_all("water_heater")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "temperature": s.attributes.get("temperature"),
+             "target_temp_high": s.attributes.get("target_temp_high"),
+             "target_temp_low": s.attributes.get("target_temp_low"),
+             "operation_list": s.attributes.get("operation_list", [])}
+            for s in states
+        ]
+        return {"ok": True, "water_heaters": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Water heater list failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 43: thread/matter, assist pipeline, TTS, STT, update entity
 # ---------------------------------------------------------------------------
 
@@ -14889,6 +15061,35 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 44 dispatch ---
+        if name == "siren_list":
+            return await _siren_list(hass)
+        if name == "select_list":
+            return await _select_list(hass)
+        if name == "number_list":
+            return await _number_list(hass)
+        if name == "button_list":
+            return await _button_list(hass)
+        if name == "date_entity_list":
+            return await _date_entity_list(hass)
+        if name == "time_entity_list":
+            return await _time_entity_list(hass)
+        if name == "datetime_entity_list":
+            return await _datetime_entity_list(hass)
+        if name == "text_entity_list":
+            return await _text_entity_list(hass)
+        if name == "text_entity_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _text_entity_set_value(
+                hass, args.get("entity_id", ""), args.get("value", ""),
+            )
+        if name == "lawn_mower_list":
+            return await _lawn_mower_list(hass)
+        if name == "valve_list":
+            return await _valve_list(hass)
+        if name == "water_heater_list":
+            return await _water_heater_list(hass)
         # --- Wave 43 dispatch ---
         if name == "thread_list_routers":
             return await _thread_list_routers(hass)
@@ -20714,6 +20915,110 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 44 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "siren_list",
+            "description": "List all siren entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_list",
+            "description": "List all select entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "number_list",
+            "description": "List all number entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "button_list",
+            "description": "List all button entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "date_entity_list",
+            "description": "List all date entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "time_entity_list",
+            "description": "List all time entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "datetime_entity_list",
+            "description": "List all datetime entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "text_entity_list",
+            "description": "List all text entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "text_entity_set_value",
+            "description": "Set a text entity value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "string"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lawn_mower_list",
+            "description": "List all lawn mower entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "valve_list",
+            "description": "List all valve entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "water_heater_list",
+            "description": "List all water heater entities.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 43 TOOL_SPECS ---
