@@ -4925,6 +4925,96 @@ async def _list_entity_domains(hass: HomeAssistant) -> dict[str, Any]:
             "domains": [{"domain": d, "entities": c} for d, c in sorted_domains]}
 
 
+async def _list_automations(hass: HomeAssistant) -> dict[str, Any]:
+    """List all automations with their state, alias, and last triggered time."""
+    automations = []
+    for state in hass.states.async_all("automation"):
+        attrs = state.attributes
+        automations.append({
+            "entity_id": state.entity_id,
+            "alias": attrs.get("friendly_name", ""),
+            "state": state.state,
+            "last_triggered": attrs.get("last_triggered"),
+        })
+    return {"ok": True, "count": len(automations), "automations": automations}
+
+
+async def _get_device_info(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Get detailed information about a specific device."""
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+
+    device = dev_reg.async_get(device_id)
+    if not device:
+        return {"error": f"Device '{device_id}' not found"}
+
+    entities = []
+    for entry in ent_reg.entities.values():
+        if entry.device_id == device_id:
+            state = hass.states.get(entry.entity_id)
+            entities.append({
+                "entity_id": entry.entity_id,
+                "domain": entry.domain,
+                "name": entry.name or entry.original_name,
+                "state": state.state if state else None,
+            })
+
+    info: dict[str, Any] = {
+        "ok": True,
+        "device_id": device.id,
+        "name": device.name,
+        "name_by_user": device.name_by_user,
+        "model": device.model,
+        "manufacturer": device.manufacturer,
+        "sw_version": device.sw_version,
+        "hw_version": device.hw_version,
+        "area_id": device.area_id,
+        "config_entries": list(device.config_entries),
+        "connections": [list(c) for c in (device.connections or set())],
+        "identifiers": [list(i) for i in (device.identifiers or set())],
+        "via_device_id": device.via_device_id,
+        "disabled_by": str(device.disabled_by) if device.disabled_by else None,
+        "entities": entities,
+        "entity_count": len(entities),
+    }
+    return info
+
+
+async def _run_script(
+    hass: HomeAssistant, entity_id: str,
+    variables: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Execute a script by entity_id with optional variables."""
+    try:
+        svc_data: dict[str, Any] = {"entity_id": entity_id}
+        if variables:
+            svc_data["variables"] = variables
+        await hass.services.async_call(
+            "script", "turn_on", svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Run script failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id}
+
+
+async def _test_condition(
+    hass: HomeAssistant, condition: dict[str, Any],
+) -> dict[str, Any]:
+    """Test if an automation condition evaluates to true or false."""
+    try:
+        from homeassistant.helpers.condition import async_from_config
+
+        test = await async_from_config(hass, condition)
+        result = test(hass)
+        return {"ok": True, "result": result, "condition": condition}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Condition test failed: {exc}"}
+
+
 # ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
@@ -6306,6 +6396,18 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             )
         if name == "list_entity_domains":
             return await _list_entity_domains(hass)
+        if name == "list_automations":
+            return await _list_automations(hass)
+        if name == "get_device_info":
+            return await _get_device_info(hass, args.get("device_id", ""))
+        if name == "run_script":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _run_script(
+                hass, args.get("entity_id", ""), args.get("variables"),
+            )
+        if name == "test_condition":
+            return await _test_condition(hass, args.get("condition", {}))
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -7936,6 +8038,55 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "list_entity_domains",
             "description": "List all active entity domains with entity counts.",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_automations",
+            "description": "List all automations with state, alias, and last triggered time.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_device_info",
+            "description": "Get detailed information about a specific device (model, manufacturer, entities, connections).",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_script",
+            "description": "Execute a script by entity_id with optional variables.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "variables": {"type": "object", "description": "Key-value variables to pass to the script"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "test_condition",
+            "description": "Test if an automation condition evaluates to true or false against current state.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "condition": {"type": "object", "description": "HA condition config (e.g. {condition: state, entity_id: ..., state: on})"},
+                },
+                "required": ["condition"],
+            },
         },
     },
     {
