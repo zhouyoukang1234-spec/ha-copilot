@@ -36,6 +36,17 @@ from homeassistant.util import slugify as _slugify
 
 from .const import CONF_ALLOW_WRITE
 
+_QUERY_SEP_RE = re.compile(r"[\s/\-_]+")
+
+
+def _query_words(q: str) -> list[str]:
+    """Normalize and split a user query into search words.
+
+    Splits on whitespace, ``/``, ``-``, and ``_`` so that queries like
+    ``"fibaro/fgs-213"`` are treated as ``["fibaro", "fgs", "213"]``.
+    """
+    return [w for w in _QUERY_SEP_RE.split(q.lower()) if w]
+
 
 class _BlueprintLoader(yaml.SafeLoader):
     """SafeLoader that tolerates HA's custom tags (``!input``, ``!include`` …).
@@ -521,7 +532,7 @@ async def search_zigbee_devices(
     if not devices:
         return {"error": "zigbee device database unavailable or empty"}
 
-    words = [w for w in q.lower().split() if w]
+    words = _query_words(q)
 
     def _haystack(d: dict[str, Any]) -> str:
         parts = [
@@ -686,7 +697,7 @@ async def search_tasmota_devices(
     if not devices:
         return {"error": "tasmota template database unavailable or empty"}
 
-    words = [w for w in q.lower().split() if w]
+    words = _query_words(q)
 
     def _hay(d: dict[str, Any]) -> str:
         return " ".join(
@@ -788,7 +799,7 @@ async def search_esphome_devices(
     if not slugs:
         return {"error": "esphome device index unavailable or empty"}
 
-    words = [w for w in q.lower().split() if w]
+    words = _query_words(q)
     matched = [s for s in slugs if all(w in s.lower().replace("-", " ") for w in words)]
     matched.sort(key=lambda s: len(s))  # shorter slug = closer match
 
@@ -946,7 +957,7 @@ async def search_zwave_devices(
     if not index:
         return {"error": "zwave device index unavailable or empty"}
 
-    words = [w for w in q.lower().split() if w]
+    words = _query_words(q)
 
     # Strict AND match (search_text includes brand aliases for renamed companies)
     matched: list[dict[str, Any]] = []
@@ -1034,7 +1045,7 @@ async def search_ha_integrations(
     if not index:
         return {"error": "home assistant integration catalog unavailable"}
 
-    words = [w for w in q.lower().split() if w]
+    words = _query_words(q)
     scored: list[tuple[int, str, dict[str, Any]]] = []
     for key, meta in index.items():
         if not isinstance(meta, dict):
@@ -1193,7 +1204,7 @@ async def search_ha_addons(
     if not catalog:
         return {"error": "add-on stores unavailable"}
 
-    words = [w for w in q.lower().split() if w]
+    words = _query_words(q)
     scored: list[tuple[int, dict[str, Any]]] = []
     for a in catalog:
         strong_hay = f"{a['slug']} {a['name']}".lower()
