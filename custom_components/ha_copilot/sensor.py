@@ -35,7 +35,7 @@ async def async_setup_entry(
         name="HA-Copilot",
         manufacturer="HA-Copilot",
         model="Capability Layer",
-        sw_version="0.3.0",
+        sw_version="0.4.0",
     )
     async_add_entities(
         [
@@ -134,7 +134,7 @@ class CopilotServiceCountSensor(SensorEntity):
     @property
     def native_value(self) -> int:
         """Return total service count (run_tool + 12 resource services)."""
-        return 13
+        return 14
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
