@@ -22213,6 +22213,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _person_zone_history(hass)
         if name == "integration_update_available":
             return await _integration_update_available(hass)
+        # --- Wave 103 dispatch ---
+        if name == "vacuum_room_cleaning_history":
+            return await _vacuum_room_cleaning_history(hass)
+        if name == "vacuum_error_code_lookup":
+            return await _vacuum_error_code_lookup(hass)
+        if name == "thermostat_schedule_check":
+            return await _thermostat_schedule_check(hass)
+        if name == "thermostat_away_mode_check":
+            return await _thermostat_away_mode_check(hass)
+        if name == "pm25_sensor_check":
+            return await _pm25_sensor_check(hass)
+        if name == "co2_level_check":
+            return await _co2_level_check(hass)
+        if name == "voc_level_check":
+            return await _voc_level_check(hass)
+        if name == "smart_plug_energy_daily":
+            return await _smart_plug_energy_daily(hass)
+        if name == "zigbee_mesh_quality":
+            return await _zigbee_mesh_quality(hass)
+        if name == "bluetooth_proxy_coverage":
+            return await _bluetooth_proxy_coverage(hass)
+        if name == "light_effect_active_check":
+            return await _light_effect_active_check(hass)
+        if name == "climate_zone_temperature_diff":
+            return await _climate_zone_temperature_diff(hass)
+        if name == "media_player_queue_check":
+            return await _media_player_queue_check(hass)
+        if name == "alarm_panel_zone_status":
+            return await _alarm_panel_zone_status(hass)
+        if name == "area_entity_count":
+            return await _area_entity_count(hass)
+        if name == "device_health_dashboard":
+            return await _device_health_dashboard(hass)
+        if name == "entity_attribute_search":
+            return await _entity_attribute_search(hass, args)
+        if name == "system_log_error_count":
+            return await _system_log_error_count(hass)
+        if name == "washing_machine_vibration_check":
+            return await _washing_machine_vibration_check(hass)
+        if name == "fridge_door_open_alert":
+            return await _fridge_door_open_alert(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -38006,6 +38047,292 @@ async def _integration_update_available(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "pending_updates": len(results), "updates": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 103 — vacuum room/error, thermostat schedule/away, PM2.5, CO2, VOC,
+# plug energy, zigbee mesh, BT proxy, light effect, climate diff, media queue,
+# alarm panel, area entity, device health, entity attribute search, system log,
+# washing machine, fridge
+# ---------------------------------------------------------------------------
+
+
+async def _vacuum_room_cleaning_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Check vacuum room cleaning history."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("vacuum", "roborock")) and \
+           any(kw in name for kw in ("room", "segment", "zone", "last_clean")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _vacuum_error_code_lookup(hass: HomeAssistant) -> dict[str, Any]:
+    """Look up vacuum error codes."""
+    results = []
+    for s in hass.states.async_all("vacuum"):
+        status = s.attributes.get("status", "")
+        error = s.state == "error" or "error" in str(status).lower()
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "status": status, "has_error": error,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "vacuums": results}
+
+
+async def _thermostat_schedule_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check thermostat schedules."""
+    results = []
+    for s in hass.states.async_all("climate"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "preset_mode": s.attributes.get("preset_mode"),
+                        "preset_modes": s.attributes.get("preset_modes"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    schedule_automations = []
+    for s in hass.states.async_all("automation"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("thermostat", "climate", "heat_schedule", "cool_schedule")):
+            schedule_automations.append({"entity_id": s.entity_id, "state": s.state})
+    return {"ok": True, "thermostats": len(results), "schedule_automations": len(schedule_automations),
+            "thermostat_list": results, "automation_list": schedule_automations}
+
+
+async def _thermostat_away_mode_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check thermostat away mode settings."""
+    results = []
+    for s in hass.states.async_all("climate"):
+        preset = s.attributes.get("preset_mode")
+        away = preset in ("away", "eco") if preset else False
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "preset_mode": preset, "is_away": away,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    away_count = sum(1 for r in results if r["is_away"])
+    return {"ok": True, "count": len(results), "away_count": away_count,
+            "thermostats": results}
+
+
+async def _pm25_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check PM2.5 sensor readings."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if dc == "pm25" or "pm2.5" in name or "pm25" in name:
+            try:
+                results.append({"entity_id": s.entity_id, "value": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "high": float(s.state) > 35,
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _co2_level_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check CO2 level readings."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc == "carbon_dioxide":
+            try:
+                val = float(s.state)
+                results.append({"entity_id": s.entity_id, "ppm": val,
+                                "high": val > 1000,
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _voc_level_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check VOC level readings."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc == "volatile_organic_compounds" or "voc" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _smart_plug_energy_daily(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart plug daily energy."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if s.attributes.get("device_class") == "energy" and \
+           any(kw in name for kw in ("plug", "outlet", "socket")):
+            try:
+                results.append({"entity_id": s.entity_id, "energy_kwh": float(s.state),
+                                "unit": s.attributes.get("unit_of_measurement"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    results.sort(key=lambda x: x["energy_kwh"], reverse=True)
+    return {"ok": True, "count": len(results), "plugs": results}
+
+
+async def _zigbee_mesh_quality(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Zigbee mesh quality."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("zigbee" in name or "zha" in name) and \
+           any(kw in name for kw in ("lqi", "rssi", "link_quality", "signal")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    entries = hass.config_entries.async_entries("zha")
+    return {"ok": True, "sensor_count": len(results), "zha_entries": len(entries),
+            "sensors": results[:20]}
+
+
+async def _bluetooth_proxy_coverage(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Bluetooth proxy coverage."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("bluetooth", "ble", "bt_proxy")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    entries = hass.config_entries.async_entries("bluetooth")
+    return {"ok": True, "sensor_count": len(results), "bt_entries": len(entries),
+            "sensors": results[:20]}
+
+
+async def _light_effect_active_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check lights with active effects."""
+    results = []
+    for s in hass.states.async_all("light"):
+        if s.state == "on":
+            effect = s.attributes.get("effect")
+            if effect and effect != "none":
+                results.append({"entity_id": s.entity_id, "effect": effect,
+                                "effect_list": s.attributes.get("effect_list"),
+                                "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "lights": results}
+
+
+async def _climate_zone_temperature_diff(hass: HomeAssistant) -> dict[str, Any]:
+    """Check temperature differences between climate zones."""
+    temps = []
+    for s in hass.states.async_all("climate"):
+        ct = s.attributes.get("current_temperature")
+        if ct is not None:
+            try:
+                temps.append({"entity_id": s.entity_id, "temperature": float(ct),
+                              "friendly_name": s.attributes.get("friendly_name")})
+            except (ValueError, TypeError):
+                pass
+    if len(temps) >= 2:
+        temps.sort(key=lambda x: x["temperature"])
+        diff = round(temps[-1]["temperature"] - temps[0]["temperature"], 1)
+    else:
+        diff = 0
+    return {"ok": True, "zone_count": len(temps), "max_diff": diff, "zones": temps}
+
+
+async def _media_player_queue_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check media player queue status."""
+    results = []
+    for s in hass.states.async_all("media_player"):
+        if s.state in ("playing", "paused"):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "media_title": s.attributes.get("media_title"),
+                            "media_artist": s.attributes.get("media_artist"),
+                            "media_duration": s.attributes.get("media_duration"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "active": len(results), "players": results}
+
+
+async def _alarm_panel_zone_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check alarm panel zone status."""
+    results = []
+    for s in hass.states.async_all("alarm_control_panel"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "code_arm_required": s.attributes.get("code_arm_required"),
+                        "supported_features": s.attributes.get("supported_features"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "panels": results}
+
+
+async def _area_entity_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Count entities per area."""
+    areas: dict[str, int] = {}
+    for s in hass.states.async_all():
+        area = s.attributes.get("area_id") or "unassigned"
+        areas[area] = areas.get(area, 0) + 1
+    ranking = sorted(areas.items(), key=lambda x: x[1], reverse=True)
+    return {"ok": True, "area_count": len(ranking),
+            "areas": [{"area": a, "entities": c} for a, c in ranking]}
+
+
+async def _device_health_dashboard(hass: HomeAssistant) -> dict[str, Any]:
+    """Generate device health dashboard."""
+    unavailable = unknown = total = 0
+    for s in hass.states.async_all():
+        total += 1
+        if s.state == "unavailable":
+            unavailable += 1
+        elif s.state == "unknown":
+            unknown += 1
+    healthy = total - unavailable - unknown
+    return {"ok": True, "total": total, "healthy": healthy,
+            "unavailable": unavailable, "unknown": unknown,
+            "health_pct": round(healthy / total * 100, 1) if total else 100}
+
+
+async def _entity_attribute_search(hass: HomeAssistant, args: dict[str, Any]) -> dict[str, Any]:
+    """Search entities by attribute value."""
+    attr_name = args.get("attribute", "")
+    search_value = args.get("value", "")
+    results = []
+    for s in hass.states.async_all():
+        val = s.attributes.get(attr_name)
+        if val is not None:
+            if not search_value or str(search_value).lower() in str(val).lower():
+                results.append({"entity_id": s.entity_id,
+                                attr_name: val,
+                                "state": s.state})
+    return {"ok": True, "count": len(results), "matches": results[:20]}
+
+
+async def _system_log_error_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Check system log error count."""
+    log_data = hass.data.get("system_log", {})
+    records = getattr(log_data, "records", []) if log_data else []
+    return {"ok": True, "log_available": bool(log_data),
+            "record_count": len(records)}
+
+
+async def _washing_machine_vibration_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check washing machine vibration sensors."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "washing" in name and any(kw in name for kw in ("vibration", "power", "current")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _fridge_door_open_alert(hass: HomeAssistant) -> dict[str, Any]:
+    """Check fridge door open alerts."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("fridge", "refrigerator", "freezer")) and \
+           s.attributes.get("device_class") in ("door", "opening"):
+            results.append({"entity_id": s.entity_id,
+                            "open": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results),
+            "open_count": sum(1 for r in results if r["open"]),
+            "sensors": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -50365,4 +50692,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "schedule_helper_status", "description": "Check schedule helpers.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "person_zone_history", "description": "Check person zones.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "integration_update_available", "description": "Check updates available.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 103 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "vacuum_room_cleaning_history", "description": "Vacuum room history.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "vacuum_error_code_lookup", "description": "Vacuum error codes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thermostat_schedule_check", "description": "Check thermostat schedule.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thermostat_away_mode_check", "description": "Check away mode.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pm25_sensor_check", "description": "Check PM2.5 levels.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "co2_level_check", "description": "Check CO2 levels.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "voc_level_check", "description": "Check VOC levels.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_plug_energy_daily", "description": "Plug daily energy.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zigbee_mesh_quality", "description": "Check Zigbee mesh.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "bluetooth_proxy_coverage", "description": "Check BT coverage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "light_effect_active_check", "description": "Check light effects.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "climate_zone_temperature_diff", "description": "Climate temp diff.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "media_player_queue_check", "description": "Check media queue.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "alarm_panel_zone_status", "description": "Check alarm zones.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "area_entity_count", "description": "Count area entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_health_dashboard", "description": "Device health overview.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_attribute_search", "description": "Search entity attributes.", "parameters": {"type": "object", "properties": {"attribute": {"type": "string", "description": "Attribute name."}, "value": {"type": "string", "description": "Value to search."}}}}},
+    {"type": "function", "function": {"name": "system_log_error_count", "description": "Count system errors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "washing_machine_vibration_check", "description": "Check washer vibration.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "fridge_door_open_alert", "description": "Check fridge door.", "parameters": {"type": "object", "properties": {}}}},
 ]
