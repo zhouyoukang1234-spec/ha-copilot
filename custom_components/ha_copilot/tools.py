@@ -8339,6 +8339,175 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 53: automation/script traces, config entry list, entity deep,
+#           energy prefs, conversation agents
+# ---------------------------------------------------------------------------
+
+
+async def _automation_trace_list(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List automation traces."""
+    try:
+        from homeassistant.components.automation import async_get_trace
+        traces = await async_get_trace(hass, entity_id)
+        result = [
+            {"run_id": t.get("run_id", ""),
+             "state": t.get("state", ""),
+             "timestamp": str(t.get("timestamp", {}).get("start", ""))}
+            for t in (traces or [])[:20]
+        ]
+        return {"ok": True, "entity_id": entity_id, "traces": result}
+    except (ImportError, AttributeError):
+        return {"error": "automation trace not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation trace list failed: {exc}"}
+
+
+async def _automation_trace_get(
+    hass: HomeAssistant, entity_id: str, run_id: str,
+) -> dict[str, Any]:
+    """Get a specific automation trace."""
+    try:
+        from homeassistant.components.automation import async_get_trace
+        traces = await async_get_trace(hass, entity_id)
+        for t in (traces or []):
+            if t.get("run_id") == run_id:
+                return {"ok": True, "entity_id": entity_id, "run_id": run_id,
+                        "trace": t}
+        return {"error": f"Trace {run_id} not found for {entity_id}"}
+    except (ImportError, AttributeError):
+        return {"error": "automation trace not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation trace get failed: {exc}"}
+
+
+async def _script_trace_list(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List script traces."""
+    try:
+        from homeassistant.components.script import async_get_trace
+        traces = await async_get_trace(hass, entity_id)
+        result = [
+            {"run_id": t.get("run_id", ""),
+             "state": t.get("state", ""),
+             "timestamp": str(t.get("timestamp", {}).get("start", ""))}
+            for t in (traces or [])[:20]
+        ]
+        return {"ok": True, "entity_id": entity_id, "traces": result}
+    except (ImportError, AttributeError):
+        return {"error": "script trace not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script trace list failed: {exc}"}
+
+
+async def _script_trace_get(
+    hass: HomeAssistant, entity_id: str, run_id: str,
+) -> dict[str, Any]:
+    """Get a specific script trace."""
+    try:
+        from homeassistant.components.script import async_get_trace
+        traces = await async_get_trace(hass, entity_id)
+        for t in (traces or []):
+            if t.get("run_id") == run_id:
+                return {"ok": True, "entity_id": entity_id, "run_id": run_id,
+                        "trace": t}
+        return {"error": f"Trace {run_id} not found for {entity_id}"}
+    except (ImportError, AttributeError):
+        return {"error": "script trace not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script trace get failed: {exc}"}
+
+
+async def _config_entry_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all config entries."""
+    try:
+        entries = hass.config_entries.async_entries()
+        result = [
+            {"entry_id": e.entry_id, "domain": e.domain, "title": e.title,
+             "state": str(e.state), "source": e.source}
+            for e in entries[:50]
+        ]
+        return {"ok": True, "entries": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config entry list failed: {exc}"}
+
+
+async def _entity_get_attributes(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get all attributes for an entity."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        attrs = dict(state.attributes)
+        serializable = {}
+        for k, v in attrs.items():
+            try:
+                import json
+                json.dumps(v)
+                serializable[k] = v
+            except (TypeError, ValueError):
+                serializable[k] = str(v)
+        return {"ok": True, "entity_id": entity_id, "state": state.state,
+                "attributes": serializable}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity get attributes failed: {exc}"}
+
+
+async def _entity_get_context(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get context info for the last state change of an entity."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        ctx = state.context
+        return {
+            "ok": True, "entity_id": entity_id,
+            "context_id": ctx.id if ctx else None,
+            "parent_id": ctx.parent_id if ctx else None,
+            "user_id": ctx.user_id if ctx else None,
+            "last_changed": str(state.last_changed),
+            "last_updated": str(state.last_updated),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity get context failed: {exc}"}
+
+
+async def _energy_get_prefs(hass: HomeAssistant) -> dict[str, Any]:
+    """Get energy preferences."""
+    try:
+        from homeassistant.components.energy import async_get_manager
+        manager = await async_get_manager(hass)
+        prefs = manager.data
+        return {"ok": True, "prefs": prefs}
+    except ImportError:
+        return {"error": "energy component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Energy get prefs failed: {exc}"}
+
+
+async def _conversation_agent_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List conversation agents."""
+    try:
+        from homeassistant.components.conversation import async_get_agent_info
+        agents = async_get_agent_info(hass)
+        result = [
+            {"id": a.id, "name": a.name}
+            for a in agents
+        ]
+        return {"ok": True, "agents": result}
+    except ImportError:
+        return {"error": "conversation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Conversation agent list failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 52: bluetooth, USB, DHCP, SSDP, ZeroConf, entity filters,
 #           label assign/remove, floor set areas
 # ---------------------------------------------------------------------------
@@ -16177,6 +16346,29 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 53 dispatch ---
+        if name == "automation_trace_list":
+            return await _automation_trace_list(hass, args.get("entity_id", ""))
+        if name == "automation_trace_get":
+            return await _automation_trace_get(
+                hass, args.get("entity_id", ""), args.get("run_id", ""),
+            )
+        if name == "script_trace_list":
+            return await _script_trace_list(hass, args.get("entity_id", ""))
+        if name == "script_trace_get":
+            return await _script_trace_get(
+                hass, args.get("entity_id", ""), args.get("run_id", ""),
+            )
+        if name == "config_entry_list":
+            return await _config_entry_list(hass)
+        if name == "entity_get_attributes":
+            return await _entity_get_attributes(hass, args.get("entity_id", ""))
+        if name == "entity_get_context":
+            return await _entity_get_context(hass, args.get("entity_id", ""))
+        if name == "energy_get_prefs":
+            return await _energy_get_prefs(hass)
+        if name == "conversation_agent_list":
+            return await _conversation_agent_list(hass)
         # --- Wave 52 dispatch ---
         if name == "bluetooth_list_devices":
             return await _bluetooth_list_devices(hass)
@@ -22302,6 +22494,109 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 53 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_trace_list",
+            "description": "List automation traces.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_trace_get",
+            "description": "Get a specific automation trace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "run_id": {"type": "string"},
+                },
+                "required": ["entity_id", "run_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_trace_list",
+            "description": "List script traces.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_trace_get",
+            "description": "Get a specific script trace.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "run_id": {"type": "string"},
+                },
+                "required": ["entity_id", "run_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_list",
+            "description": "List all config entries.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_get_attributes",
+            "description": "Get all attributes for an entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_get_context",
+            "description": "Get context info for the last state change of an entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "energy_get_prefs",
+            "description": "Get energy preferences.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "conversation_agent_list",
+            "description": "List conversation agents.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 52 TOOL_SPECS ---
