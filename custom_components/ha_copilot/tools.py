@@ -8339,6 +8339,91 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 21: shopping list, media player source/sound mode, climate humidity
+# ---------------------------------------------------------------------------
+
+
+async def _add_shopping_list_item(
+    hass: HomeAssistant, name: str,
+) -> dict[str, Any]:
+    """Add an item to the shopping list."""
+    try:
+        await hass.services.async_call(
+            "shopping_list", "add_item", {"name": name}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Add shopping list item failed: {exc}"}
+    return {"ok": True, "name": name, "action": "added"}
+
+
+async def _complete_shopping_list_item(
+    hass: HomeAssistant, name: str,
+) -> dict[str, Any]:
+    """Mark a shopping list item as complete."""
+    try:
+        await hass.services.async_call(
+            "shopping_list", "complete_item", {"name": name}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Complete shopping list item failed: {exc}"}
+    return {"ok": True, "name": name, "action": "completed"}
+
+
+async def _get_shopping_list(hass: HomeAssistant) -> dict[str, Any]:
+    """Get all shopping list items."""
+    try:
+        data = hass.data.get("shopping_list")
+        if data is not None and hasattr(data, "items"):
+            items = [{"name": i.get("name", ""), "complete": i.get("complete", False)} for i in data.items]
+            return {"ok": True, "items": items}
+        return {"ok": True, "items": [], "note": "shopping_list not loaded or empty"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Get shopping list failed: {exc}"}
+
+
+async def _media_player_select_source(
+    hass: HomeAssistant, entity_id: str, source: str,
+) -> dict[str, Any]:
+    """Select input source on a media player."""
+    try:
+        await hass.services.async_call(
+            "media_player", "select_source",
+            {"entity_id": entity_id, "source": source}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player select source failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "source": source}
+
+
+async def _media_player_select_sound_mode(
+    hass: HomeAssistant, entity_id: str, sound_mode: str,
+) -> dict[str, Any]:
+    """Select sound mode on a media player."""
+    try:
+        await hass.services.async_call(
+            "media_player", "select_sound_mode",
+            {"entity_id": entity_id, "sound_mode": sound_mode}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player select sound mode failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "sound_mode": sound_mode}
+
+
+async def _climate_set_humidity(
+    hass: HomeAssistant, entity_id: str, humidity: int,
+) -> dict[str, Any]:
+    """Set climate target humidity."""
+    try:
+        await hass.services.async_call(
+            "climate", "set_humidity",
+            {"entity_id": entity_id, "humidity": humidity}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate set humidity failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "humidity": humidity}
+
+
+# ---------------------------------------------------------------------------
 # Wave 20: input_text, device_tracker, input_datetime, schedule,
 #           persistent_notification, network
 # ---------------------------------------------------------------------------
@@ -10556,6 +10641,35 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 21 dispatch ---
+        if name == "add_shopping_list_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _add_shopping_list_item(hass, args.get("name", ""))
+        if name == "complete_shopping_list_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _complete_shopping_list_item(hass, args.get("name", ""))
+        if name == "get_shopping_list":
+            return await _get_shopping_list(hass)
+        if name == "media_player_select_source":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_select_source(
+                hass, args.get("entity_id", ""), args.get("source", ""),
+            )
+        if name == "media_player_select_sound_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_select_sound_mode(
+                hass, args.get("entity_id", ""), args.get("sound_mode", ""),
+            )
+        if name == "climate_set_humidity":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_set_humidity(
+                hass, args.get("entity_id", ""), int(args.get("humidity", 50)),
+            )
         # --- Wave 20 dispatch ---
         if name == "input_text_set_value":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -15146,6 +15260,87 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 21 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "add_shopping_list_item",
+            "description": "Add an item to the shopping list.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_shopping_list_item",
+            "description": "Mark a shopping list item as complete.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_shopping_list",
+            "description": "Get all shopping list items.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_select_source",
+            "description": "Select input source on a media player.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "source": {"type": "string"},
+                },
+                "required": ["entity_id", "source"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_select_sound_mode",
+            "description": "Select sound mode on a media player.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "sound_mode": {"type": "string"},
+                },
+                "required": ["entity_id", "sound_mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_set_humidity",
+            "description": "Set climate target humidity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "humidity": {"type": "integer", "description": "0-100"},
+                },
+                "required": ["entity_id", "humidity"],
             },
         },
     },
