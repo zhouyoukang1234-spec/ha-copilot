@@ -21011,6 +21011,59 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _statistics_list_ids(hass)
         if name == "statistics_get_sum":
             return await _statistics_get_sum(hass, args.get("statistic_id", ""), args.get("hours", 24))
+        # --- Wave 75 dispatch ---
+        if name == "zha_list_groups":
+            return await _zha_list_groups(hass)
+        if name == "zha_get_network_map":
+            return await _zha_get_network_map(hass)
+        if name == "zwave_list_nodes":
+            return await _zwave_list_nodes(hass)
+        if name == "zwave_get_node_info":
+            return await _zwave_get_node_info(hass, args.get("entity_id", ""))
+        if name == "matter_list_devices":
+            return await _matter_list_devices(hass)
+        if name == "homekit_list_accessories":
+            return await _homekit_list_accessories(hass)
+        if name == "logbook_get_recent":
+            return await _logbook_get_recent(hass, args.get("hours", 24), args.get("limit", 50))
+        if name == "logbook_filter_entity":
+            return await _logbook_filter_entity(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "entity_hide":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_hide(hass, args.get("entity_id", ""))
+        if name == "entity_unhide":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_unhide(hass, args.get("entity_id", ""))
+        if name == "area_list_with_counts":
+            return await _area_list_with_counts(hass)
+        if name == "light_color_temp_info":
+            return await _light_color_temp_info(hass, args.get("entity_id", ""))
+        if name == "light_list_color_capable":
+            return await _light_list_color_capable(hass)
+        if name == "sensor_list_by_device_class":
+            return await _sensor_list_by_device_class(hass, args.get("device_class", ""))
+        if name == "binary_sensor_list_by_device_class":
+            return await _binary_sensor_list_by_device_class(hass, args.get("device_class", ""))
+        if name == "climate_list_all_detailed":
+            return await _climate_list_all_detailed(hass)
+        if name == "switch_list_with_power":
+            return await _switch_list_with_power(hass)
+        if name == "cover_list_with_position":
+            return await _cover_list_with_position(hass)
+        if name == "lock_list_with_status":
+            return await _lock_list_with_status(hass)
+        if name == "person_get_location":
+            return await _person_get_location(hass, args.get("entity_id", ""))
+        if name == "counter_get_value":
+            return await _counter_get_value(hass, args.get("entity_id", ""))
+        if name == "timer_get_status":
+            return await _timer_get_status(hass, args.get("entity_id", ""))
+        if name == "integration_list_loaded":
+            return await _integration_list_loaded(hass)
+        if name == "integration_get_entry_details":
+            return await _integration_get_entry_details(hass, args.get("domain", ""))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -27151,6 +27204,465 @@ async def _statistics_get_sum(
         return {"error": "recorder statistics not available"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Statistics get sum failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 75 — ZHA groups/network, Z-Wave nodes, Matter, HomeKit, logbook,
+# entity hide/unhide, area counts, light color, sensor/binary by class,
+# climate detailed, switch power, cover position, lock status, person
+# location, counter, timer, integration details
+# ---------------------------------------------------------------------------
+
+
+async def _zha_list_groups(hass: HomeAssistant) -> dict[str, Any]:
+    """List ZHA device groups."""
+    zha_data = hass.data.get("zha", {})
+    groups = []
+    if isinstance(zha_data, dict):
+        gateway = zha_data.get("gateway")
+        if gateway and hasattr(gateway, "groups"):
+            for gid, group in gateway.groups.items():
+                groups.append({
+                    "group_id": gid,
+                    "name": getattr(group, "name", str(gid)),
+                    "members": len(getattr(group, "members", [])),
+                })
+    return {"ok": True, "count": len(groups), "groups": groups}
+
+
+async def _zha_get_network_map(hass: HomeAssistant) -> dict[str, Any]:
+    """Get ZHA network topology map."""
+    zha_data = hass.data.get("zha", {})
+    devices = []
+    if isinstance(zha_data, dict):
+        gateway = zha_data.get("gateway")
+        if gateway and hasattr(gateway, "devices"):
+            for ieee, dev in gateway.devices.items():
+                devices.append({
+                    "ieee": str(ieee),
+                    "name": getattr(dev, "name", ""),
+                    "nwk": getattr(dev, "nwk", None),
+                    "device_type": getattr(dev, "device_type", ""),
+                    "manufacturer": getattr(dev, "manufacturer", ""),
+                    "model": getattr(dev, "model", ""),
+                    "lqi": getattr(dev, "lqi", None),
+                    "rssi": getattr(dev, "rssi", None),
+                })
+    return {"ok": True, "device_count": len(devices), "devices": devices[:100]}
+
+
+async def _zwave_list_nodes(hass: HomeAssistant) -> dict[str, Any]:
+    """List Z-Wave JS nodes."""
+    nodes = []
+    for state in hass.states.async_all():
+        if "zwave" in state.entity_id.lower():
+            attrs = dict(state.attributes)
+            nodes.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "node_id": attrs.get("node_id"),
+                "friendly_name": attrs.get("friendly_name"),
+            })
+    zw_data = hass.data.get("zwave_js", {})
+    if isinstance(zw_data, dict):
+        for client in zw_data.values():
+            if hasattr(client, "driver") and hasattr(client.driver, "controller"):
+                ctrl = client.driver.controller
+                if hasattr(ctrl, "nodes"):
+                    for nid, node in ctrl.nodes.items():
+                        nodes.append({
+                            "node_id": nid,
+                            "name": getattr(node, "name", ""),
+                            "manufacturer": getattr(node, "manufacturer", ""),
+                            "product": getattr(node, "product", ""),
+                            "status": getattr(node, "status", ""),
+                        })
+    return {"ok": True, "count": len(nodes), "nodes": nodes[:100]}
+
+
+async def _zwave_get_node_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get Z-Wave node info from entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "node_id": attrs.get("node_id"),
+        "value_id": attrs.get("value_id"),
+        "friendly_name": attrs.get("friendly_name"),
+        "device_class": attrs.get("device_class"),
+    }
+
+
+async def _matter_list_devices(hass: HomeAssistant) -> dict[str, Any]:
+    """List Matter devices."""
+    matter_data = hass.data.get("matter", {})
+    devices = []
+    if isinstance(matter_data, dict):
+        adapter = matter_data.get("adapter")
+        if adapter and hasattr(adapter, "matter_devices"):
+            for dev in adapter.matter_devices:
+                devices.append({
+                    "name": getattr(dev, "name", ""),
+                    "vendor_id": getattr(dev, "vendor_id", None),
+                    "product_id": getattr(dev, "product_id", None),
+                })
+    matter_entities = [s for s in hass.states.async_all() if "matter" in s.entity_id.lower()]
+    for s in matter_entities[:20]:
+        devices.append({"entity_id": s.entity_id, "state": s.state})
+    return {"ok": True, "count": len(devices), "devices": devices}
+
+
+async def _homekit_list_accessories(hass: HomeAssistant) -> dict[str, Any]:
+    """List HomeKit accessories."""
+    hk_entities = [s for s in hass.states.async_all() if "homekit" in s.entity_id.lower()]
+    results = []
+    for s in hk_entities:
+        results.append({
+            "entity_id": s.entity_id,
+            "state": s.state,
+            "friendly_name": s.attributes.get("friendly_name"),
+        })
+    return {"ok": True, "count": len(results), "accessories": results}
+
+
+async def _logbook_get_recent(
+    hass: HomeAssistant, hours: int = 24, limit: int = 50,
+) -> dict[str, Any]:
+    """Get recent logbook entries."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.logbook import async_log_entries
+        entries = await async_log_entries(hass, start, end, None, None, None, limit)
+        results = []
+        for entry in entries[:limit]:
+            if isinstance(entry, dict):
+                results.append(entry)
+            else:
+                results.append({"entry": str(entry)[:200]})
+        return {"ok": True, "hours": hours, "count": len(results), "entries": results}
+    except ImportError:
+        return {"ok": True, "note": "logbook component not available", "entries": []}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook get recent failed: {exc}"}
+
+
+async def _logbook_filter_entity(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get logbook entries filtered by entity."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.logbook import async_log_entries
+        entries = await async_log_entries(hass, start, end, entity_id, None, None, 50)
+        results = []
+        for entry in entries[:50]:
+            if isinstance(entry, dict):
+                results.append(entry)
+            else:
+                results.append({"entry": str(entry)[:200]})
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "count": len(results), "entries": results}
+    except ImportError:
+        return {"ok": True, "entity_id": entity_id,
+                "note": "logbook component not available", "entries": []}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook filter entity failed: {exc}"}
+
+
+async def _entity_hide(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Hide an entity from the UI."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not in registry"}
+    try:
+        reg.async_update_entity(entity_id, hidden_by=er.RegistryEntryHider.USER)
+        return {"ok": True, "entity_id": entity_id, "hidden": True}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity hide failed: {exc}"}
+
+
+async def _entity_unhide(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Unhide an entity in the UI."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not in registry"}
+    try:
+        reg.async_update_entity(entity_id, hidden_by=None)
+        return {"ok": True, "entity_id": entity_id, "hidden": False}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity unhide failed: {exc}"}
+
+
+async def _area_list_with_counts(hass: HomeAssistant) -> dict[str, Any]:
+    """List areas with entity and device counts."""
+    area_reg = ar.async_get(hass)
+    ent_reg = er.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    results = []
+    for area in area_reg.async_list_areas():
+        ent_count = sum(
+            1 for e in ent_reg.entities.values() if e.area_id == area.id
+        )
+        dev_count = sum(
+            1 for d in dev_reg.devices.values() if d.area_id == area.id
+        )
+        results.append({
+            "area_id": area.id,
+            "name": area.name,
+            "icon": area.icon,
+            "entity_count": ent_count,
+            "device_count": dev_count,
+        })
+    return {"ok": True, "count": len(results), "areas": results}
+
+
+async def _light_color_temp_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get light color temperature details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Light '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "color_temp": attrs.get("color_temp"),
+        "min_mireds": attrs.get("min_mireds"),
+        "max_mireds": attrs.get("max_mireds"),
+        "color_mode": attrs.get("color_mode"),
+        "supported_color_modes": attrs.get("supported_color_modes", []),
+        "rgb_color": attrs.get("rgb_color"),
+        "hs_color": attrs.get("hs_color"),
+        "xy_color": attrs.get("xy_color"),
+        "brightness": attrs.get("brightness"),
+    }
+
+
+async def _light_list_color_capable(hass: HomeAssistant) -> dict[str, Any]:
+    """List lights that support color control."""
+    results = []
+    for state in hass.states.async_all("light"):
+        attrs = dict(state.attributes)
+        modes = attrs.get("supported_color_modes", [])
+        if any(m in modes for m in ("rgb", "rgbw", "rgbww", "hs", "xy")):
+            results.append({
+                "entity_id": state.entity_id,
+                "friendly_name": attrs.get("friendly_name"),
+                "color_modes": modes,
+                "state": state.state,
+                "rgb_color": attrs.get("rgb_color"),
+            })
+    return {"ok": True, "count": len(results), "lights": results}
+
+
+async def _sensor_list_by_device_class(
+    hass: HomeAssistant, device_class: str,
+) -> dict[str, Any]:
+    """List sensors filtered by device class."""
+    results = []
+    for state in hass.states.async_all("sensor"):
+        if state.attributes.get("device_class") == device_class:
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "unit": state.attributes.get("unit_of_measurement"),
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "device_class": device_class, "count": len(results),
+            "sensors": results}
+
+
+async def _binary_sensor_list_by_device_class(
+    hass: HomeAssistant, device_class: str,
+) -> dict[str, Any]:
+    """List binary sensors filtered by device class."""
+    results = []
+    for state in hass.states.async_all("binary_sensor"):
+        if state.attributes.get("device_class") == device_class:
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "device_class": device_class, "count": len(results),
+            "sensors": results}
+
+
+async def _climate_list_all_detailed(hass: HomeAssistant) -> dict[str, Any]:
+    """List all climate entities with detailed attributes."""
+    results = []
+    for state in hass.states.async_all("climate"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "current_temperature": attrs.get("current_temperature"),
+            "target_temperature": attrs.get("temperature"),
+            "hvac_action": attrs.get("hvac_action"),
+            "hvac_modes": attrs.get("hvac_modes", []),
+            "preset_mode": attrs.get("preset_mode"),
+            "fan_mode": attrs.get("fan_mode"),
+            "humidity": attrs.get("current_humidity"),
+        })
+    return {"ok": True, "count": len(results), "climates": results}
+
+
+async def _switch_list_with_power(hass: HomeAssistant) -> dict[str, Any]:
+    """List switches with power consumption info."""
+    results = []
+    for state in hass.states.async_all("switch"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "current_power_w": attrs.get("current_power_w"),
+            "today_energy_kwh": attrs.get("today_energy_kwh"),
+        })
+    return {"ok": True, "count": len(results), "switches": results}
+
+
+async def _cover_list_with_position(hass: HomeAssistant) -> dict[str, Any]:
+    """List covers with current position."""
+    results = []
+    for state in hass.states.async_all("cover"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "current_position": attrs.get("current_position"),
+            "current_tilt_position": attrs.get("current_tilt_position"),
+            "device_class": attrs.get("device_class"),
+        })
+    return {"ok": True, "count": len(results), "covers": results}
+
+
+async def _lock_list_with_status(hass: HomeAssistant) -> dict[str, Any]:
+    """List locks with detailed status."""
+    results = []
+    for state in hass.states.async_all("lock"):
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "is_locked": state.state == "locked",
+            "changed_by": attrs.get("changed_by"),
+            "code_format": attrs.get("code_format"),
+        })
+    return {"ok": True, "count": len(results), "locks": results}
+
+
+async def _person_get_location(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get person entity location details."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Person '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "latitude": attrs.get("latitude"),
+        "longitude": attrs.get("longitude"),
+        "gps_accuracy": attrs.get("gps_accuracy"),
+        "source": attrs.get("source"),
+        "friendly_name": attrs.get("friendly_name"),
+        "user_id": attrs.get("user_id"),
+    }
+
+
+async def _counter_get_value(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get counter entity value and config."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Counter '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    try:
+        val = int(state.state)
+    except (ValueError, TypeError):
+        val = state.state
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "value": val,
+        "initial": attrs.get("initial"),
+        "step": attrs.get("step"),
+        "minimum": attrs.get("minimum"),
+        "maximum": attrs.get("maximum"),
+    }
+
+
+async def _timer_get_status(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get timer entity status."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Timer '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "duration": attrs.get("duration"),
+        "remaining": attrs.get("remaining"),
+        "finishes_at": str(attrs.get("finishes_at", "")),
+    }
+
+
+async def _integration_list_loaded(hass: HomeAssistant) -> dict[str, Any]:
+    """List all loaded integrations."""
+    entries = hass.config_entries.async_entries()
+    integrations: dict[str, int] = {}
+    for entry in entries:
+        integrations[entry.domain] = integrations.get(entry.domain, 0) + 1
+    return {
+        "ok": True,
+        "total_entries": len(entries),
+        "unique_domains": len(integrations),
+        "integrations": dict(sorted(integrations.items(), key=lambda x: x[1], reverse=True)),
+    }
+
+
+async def _integration_get_entry_details(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Get detailed config entry info for a domain."""
+    entries = hass.config_entries.async_entries(domain)
+    results = []
+    for entry in entries:
+        results.append({
+            "entry_id": entry.entry_id,
+            "title": entry.title,
+            "state": str(entry.state),
+            "source": entry.source,
+            "domain": entry.domain,
+            "unique_id": entry.unique_id,
+        })
+    return {"ok": True, "domain": domain, "count": len(results),
+            "entries": results}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -38907,4 +39419,29 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "api_status", "description": "Get HA API status (version, entity count, state).", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "statistics_list_ids", "description": "List available recorder statistics IDs.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "statistics_get_sum", "description": "Get sum statistics for a statistic ID over time.", "parameters": {"type": "object", "properties": {"statistic_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["statistic_id"]}}},
+    # --- Wave 75 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "zha_list_groups", "description": "List ZHA (Zigbee) device groups.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zha_get_network_map", "description": "Get ZHA network topology map with device details.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zwave_list_nodes", "description": "List Z-Wave JS nodes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zwave_get_node_info", "description": "Get Z-Wave node info from entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "matter_list_devices", "description": "List Matter protocol devices.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "homekit_list_accessories", "description": "List HomeKit accessories.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "logbook_get_recent", "description": "Get recent logbook entries.", "parameters": {"type": "object", "properties": {"hours": {"type": "integer", "default": 24}, "limit": {"type": "integer", "default": 50}}}}},
+    {"type": "function", "function": {"name": "logbook_filter_entity", "description": "Get logbook entries filtered by entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "entity_hide", "description": "Hide entity from the UI. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "entity_unhide", "description": "Unhide entity in the UI. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "area_list_with_counts", "description": "List areas with entity and device counts.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "light_color_temp_info", "description": "Get light color temperature and color mode details.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "light_list_color_capable", "description": "List lights that support color control.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "sensor_list_by_device_class", "description": "List sensors filtered by device class.", "parameters": {"type": "object", "properties": {"device_class": {"type": "string"}}, "required": ["device_class"]}}},
+    {"type": "function", "function": {"name": "binary_sensor_list_by_device_class", "description": "List binary sensors filtered by device class.", "parameters": {"type": "object", "properties": {"device_class": {"type": "string"}}, "required": ["device_class"]}}},
+    {"type": "function", "function": {"name": "climate_list_all_detailed", "description": "List all climate entities with detailed attributes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "switch_list_with_power", "description": "List switches with power consumption info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "cover_list_with_position", "description": "List covers with current position.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "lock_list_with_status", "description": "List locks with detailed status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "person_get_location", "description": "Get person entity location details.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "counter_get_value", "description": "Get counter entity value and config.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "timer_get_status", "description": "Get timer entity status (state, duration, remaining).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "integration_list_loaded", "description": "List all loaded integrations with entry counts.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_get_entry_details", "description": "Get detailed config entries for an integration domain.", "parameters": {"type": "object", "properties": {"domain": {"type": "string"}}, "required": ["domain"]}}},
 ]
