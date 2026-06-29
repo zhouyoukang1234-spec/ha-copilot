@@ -3481,6 +3481,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await resources.search_ha_addons(
                 hass, args.get("query", ""), int(args.get("limit", 10))
             )
+        if name == "search_zwave_devices":
+            return await resources.search_zwave_devices(
+                hass, args.get("query", ""), int(args.get("limit", 10))
+            )
         if name == "list_repo_blueprints":
             repo = args.get("repo") or args.get("full_name") or args.get("url")
             if not repo:
@@ -3586,6 +3590,7 @@ _READ_ONLY_TOOLS = frozenset({
     "search_blueprints",
     "discover_resources",
     "search_zigbee_devices",
+    "search_zwave_devices",
     "search_tasmota_devices",
     "search_esphome_devices",
     "search_ha_integrations",
@@ -5188,6 +5193,17 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "query": {"type": "string", "description": "a need, e.g. 'mqtt' or 'zigbee2mqtt'."},
                 "limit": {"type": "integer", "description": "max add-ons to return (default 10)."},
+            }, "required": ["query"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_zwave_devices",
+            "description": "Search the community Z-Wave device database (zwave-js/node-zwave-js, ~2375 devices). Type a brand/model ('aeotec', 'fibaro fgs213', 'zooz zen25') and get matching Z-Wave certified devices with manufacturer, model, and a link to the device config file (parameters/associations). This is the Z-Wave analog of search_zigbee_devices. Read-only.",
+            "parameters": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "brand or model, e.g. 'aeotec' or 'fibaro fgs213'."},
+                "limit": {"type": "integer", "description": "max devices to return (default 10)."},
             }, "required": ["query"]},
         },
     },

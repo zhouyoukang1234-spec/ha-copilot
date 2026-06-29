@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from typing import Any
 
@@ -380,16 +381,19 @@ async def discover_resources(
                 "'low battery notification')"
             )
         }
-    hacs, github, blueprints, zigbee, tasmota, esphome, native, addons = await asyncio.gather(
-        search_community_resources(hass, q, "all", limit),
-        search_github(hass, q, "stars", limit),
-        search_blueprints(hass, q, limit),
-        search_zigbee_devices(hass, q, limit),
-        search_tasmota_devices(hass, q, limit),
-        search_esphome_devices(hass, q, min(limit, 4)),
-        search_ha_integrations(hass, q, limit),
-        search_ha_addons(hass, q, limit),
-        return_exceptions=True,
+    hacs, github, blueprints, zigbee, tasmota, esphome, native, addons, zwave = (
+        await asyncio.gather(
+            search_community_resources(hass, q, "all", limit),
+            search_github(hass, q, "stars", limit),
+            search_blueprints(hass, q, limit),
+            search_zigbee_devices(hass, q, limit),
+            search_tasmota_devices(hass, q, limit),
+            search_esphome_devices(hass, q, min(limit, 4)),
+            search_ha_integrations(hass, q, limit),
+            search_ha_addons(hass, q, limit),
+            search_zwave_devices(hass, q, limit),
+            return_exceptions=True,
+        )
     )
     errors: list[str] = []
 
@@ -410,6 +414,7 @@ async def discover_resources(
     esphome_r = _section("esphome", esphome)
     native_r = _section("ha_integrations", native)
     addons_r = _section("addons", addons)
+    zwave_r = _section("zwave", zwave)
 
     # Fused top list: dedupe by repo full_name, keep the highest-starred, tag
     # each with which source(s) surfaced it.
@@ -446,13 +451,14 @@ async def discover_resources(
         "ha_integrations": native_r,
         "addons": addons_r,
         "zigbee": zigbee_r,
+        "zwave": zwave_r,
         "tasmota": tasmota_r,
         "esphome": esphome_r,
         "note": (
             "ha_integrations are built into Home Assistant (no HACS needed); "
             "install HACS items as a custom repository by url; for a blueprint "
-            "call list_repo_blueprints then import_blueprint. zigbee entries "
-            "show whether the hardware is supported (zigbee2mqtt_supported/zha); "
+            "call list_repo_blueprints then import_blueprint. zigbee/zwave "
+            "entries show whether the hardware is supported; "
             "tasmota/esphome entries carry a ready firmware config/page."
         ),
     }
@@ -818,6 +824,161 @@ async def search_esphome_devices(
         "note": (
             "board is the ESP chip family; made_for_esphome=true devices ship "
             "ESPHome-ready. Open url for the importable ESPHome config."
+        ),
+    }
+
+
+# Community Z-Wave device database (zwave-js/node-zwave-js). A git-tree index
+# combined with manufacturers.json gives brand+model for ~2375 devices without
+# fetching individual files. Free, uses the GitHub API (token optional).
+_ZWAVE_REPO = "zwave-js/node-zwave-js"
+_ZWAVE_DEVICES_PREFIX = "packages/config/config/devices/"
+_ZWAVE_MFR_PATH = "packages/config/config/manufacturers.json"
+_ZWAVE_TTL = 6 * 3600
+_zwave_cache: dict[str, Any] = {"index": None, "ts": 0.0}
+
+_JSONC_COMMENT_RE = re.compile(
+    r'("(?:[^"\\]|\\.)*")|//[^\n]*|/\*.*?\*/',
+    re.DOTALL,
+)
+
+
+def _strip_jsonc(text: str) -> str:
+    """Strip JS-style comments (// and /* */) from JSONC text, preserving strings."""
+    def _repl(m: re.Match) -> str:  # type: ignore[type-arg]
+        return m.group(1) if m.group(1) else ""
+    text = _JSONC_COMMENT_RE.sub(_repl, text)
+    # trailing commas before } or ]
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    return text
+
+
+async def _fetch_zwave_index(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Build a brand+model index for Z-Wave devices from the git tree.
+
+    Two API calls: one for the repo tree (device paths) and one for
+    manufacturers.json (hex-id → brand name). Returns a list of dicts with
+    manufacturer, model (filename stem), and device_path (for enrichment).
+    """
+    now = time.time()
+    cached = _zwave_cache.get("index")
+    if cached is not None and (now - _zwave_cache.get("ts", 0.0)) < _ZWAVE_TTL:
+        return cached
+
+    tree_url = f"{_GITHUB_API}/repos/{_ZWAVE_REPO}/git/trees/master?recursive=1"
+    tree_data = await _fetch_json(hass, tree_url, timeout=30.0)
+    entries = tree_data.get("tree", []) if isinstance(tree_data, dict) else []
+
+    # Parse device file paths: packages/config/config/devices/0x0086/ZW090.json
+    device_files: list[tuple[str, str, str]] = []  # (hex_id, model, path)
+    for node in entries:
+        path = node.get("path", "")
+        if (
+            path.startswith(_ZWAVE_DEVICES_PREFIX)
+            and path.endswith(".json")
+            and node.get("type") == "blob"
+        ):
+            parts = path[len(_ZWAVE_DEVICES_PREFIX):].split("/")
+            if len(parts) == 2 and parts[0].startswith("0x"):
+                hex_id = parts[0]
+                model = parts[1].rsplit(".", 1)[0]
+                device_files.append((hex_id, model, path))
+
+    # Fetch manufacturers.json (JSONC with comments)
+    mfr_url = (
+        f"{_RAW_BASE}/{_ZWAVE_REPO}/master/{_ZWAVE_MFR_PATH}"
+    )
+    mfr_text = await _fetch_text(hass, mfr_url, timeout=20.0)
+    try:
+        mfr_map = json.loads(_strip_jsonc(mfr_text))
+    except Exception:  # noqa: BLE001
+        mfr_map = {}
+
+    # Build index
+    index: list[dict[str, Any]] = []
+    for hex_id, model, path in device_files:
+        brand = mfr_map.get(hex_id, hex_id)
+        index.append({
+            "manufacturer": brand,
+            "manufacturer_id": hex_id,
+            "model": model,
+            "path": path,
+        })
+
+    if index:
+        _zwave_cache.update({"index": index, "ts": now})
+    return index
+
+
+async def search_zwave_devices(
+    hass: HomeAssistant,
+    query: str,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Search the community Z-Wave device database (zwave-js).
+
+    A non-expert types a brand/model ("aeotec", "fibaro fgs213", "zooz zen25")
+    and gets matching Z-Wave devices with their manufacturer, model label, and
+    a link to the device config. This is the Z-Wave analog of the Zigbee
+    device lookup. Read-only.
+    """
+    q = (query or "").strip()
+    if not q:
+        return {"error": "provide a device brand or model (e.g. 'aeotec' or 'fibaro fgs213')"}
+    try:
+        index = await _fetch_zwave_index(hass)
+    except Exception as err:  # noqa: BLE001
+        return {"error": f"{type(err).__name__}: {err}"}
+    if not index:
+        return {"error": "zwave device index unavailable or empty"}
+
+    words = [w for w in q.lower().split() if w]
+
+    # Strict AND match
+    matched: list[dict[str, Any]] = []
+    for dev in index:
+        text = f"{dev['manufacturer']} {dev['model']}".lower().replace("-", " ").replace("_", " ")
+        if all(w in text for w in words):
+            matched.append(dev)
+
+    relaxed = False
+    if not matched and len(words) > 1:
+        # Relaxed OR fallback (require >=1 word in manufacturer or model)
+        scored: list[tuple[int, dict[str, Any]]] = []
+        for dev in index:
+            text = f"{dev['manufacturer']} {dev['model']}".lower().replace("-", " ").replace("_", " ")
+            hits = sum(1 for w in words if w in text)
+            if hits > 0:
+                scored.append((hits, dev))
+        scored.sort(key=lambda p: p[0], reverse=True)
+        matched = [d for _, d in scored]
+        relaxed = True
+
+    results: list[dict[str, Any]] = []
+    for dev in matched[:limit]:
+        results.append({
+            "manufacturer": dev["manufacturer"],
+            "manufacturer_id": dev["manufacturer_id"],
+            "model": dev["model"],
+            "label": dev["model"].replace("-", " ").replace("_", " "),
+            "url": (
+                f"https://github.com/{_ZWAVE_REPO}/tree/master/"
+                f"{dev['path']}"
+            ),
+        })
+    return {
+        "ok": True,
+        "query": q,
+        "count": len(results),
+        "total_matched": len(matched),
+        "relaxed": relaxed,
+        "catalog_size": len(index),
+        "results": results,
+        "source": "zwave-js/node-zwave-js device database",
+        "note": (
+            "Each result is a Z-Wave certified device recognized by zwave-js "
+            "(used by HA's Z-Wave JS integration). url points to the device "
+            "config file with parameters/associations."
         ),
     }
 
