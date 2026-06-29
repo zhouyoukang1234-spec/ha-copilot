@@ -8339,6 +8339,252 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 45: registry operations, repair issues, integration setup/remove,
+#           helper create/delete
+# ---------------------------------------------------------------------------
+
+
+async def _entity_disable(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Disable an entity in the registry."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+            RegistryEntryDisabler,
+        )
+        registry = async_get_entity_registry(hass)
+        entry = registry.async_get(entity_id)
+        if entry is None:
+            return {"error": f"Entity {entity_id} not in registry"}
+        registry.async_update_entity(
+            entity_id, disabled_by=RegistryEntryDisabler.USER,
+        )
+        return {"ok": True, "entity_id": entity_id, "action": "disabled"}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity disable failed: {exc}"}
+
+
+async def _entity_enable(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Enable an entity in the registry."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        registry = async_get_entity_registry(hass)
+        entry = registry.async_get(entity_id)
+        if entry is None:
+            return {"error": f"Entity {entity_id} not in registry"}
+        registry.async_update_entity(entity_id, disabled_by=None)
+        return {"ok": True, "entity_id": entity_id, "action": "enabled"}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity enable failed: {exc}"}
+
+
+async def _entity_set_name(
+    hass: HomeAssistant, entity_id: str, name: str,
+) -> dict[str, Any]:
+    """Set entity friendly name in the registry."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        registry = async_get_entity_registry(hass)
+        entry = registry.async_get(entity_id)
+        if entry is None:
+            return {"error": f"Entity {entity_id} not in registry"}
+        registry.async_update_entity(entity_id, name=name)
+        return {"ok": True, "entity_id": entity_id, "name": name}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity set name failed: {exc}"}
+
+
+async def _device_set_name(
+    hass: HomeAssistant, device_id: str, name: str,
+) -> dict[str, Any]:
+    """Set device name in the registry."""
+    try:
+        from homeassistant.helpers.device_registry import async_get
+        registry = async_get(hass)
+        device = registry.async_get(device_id)
+        if device is None:
+            return {"error": f"Device {device_id} not found"}
+        registry.async_update_device(device_id, name_by_user=name)
+        return {"ok": True, "device_id": device_id, "name": name}
+    except ImportError:
+        return {"error": "device_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device set name failed: {exc}"}
+
+
+async def _device_set_area(
+    hass: HomeAssistant, device_id: str, area_id: str,
+) -> dict[str, Any]:
+    """Assign a device to an area."""
+    try:
+        from homeassistant.helpers.device_registry import async_get
+        registry = async_get(hass)
+        device = registry.async_get(device_id)
+        if device is None:
+            return {"error": f"Device {device_id} not found"}
+        registry.async_update_device(device_id, area_id=area_id)
+        return {"ok": True, "device_id": device_id, "area_id": area_id}
+    except ImportError:
+        return {"error": "device_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device set area failed: {exc}"}
+
+
+async def _area_set_name(
+    hass: HomeAssistant, area_id: str, name: str,
+) -> dict[str, Any]:
+    """Rename an area."""
+    try:
+        from homeassistant.helpers.area_registry import async_get
+        registry = async_get(hass)
+        area = registry.async_get_area(area_id)
+        if area is None:
+            return {"error": f"Area {area_id} not found"}
+        registry.async_update(area_id, name=name)
+        return {"ok": True, "area_id": area_id, "name": name}
+    except ImportError:
+        return {"error": "area_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area set name failed: {exc}"}
+
+
+async def _repair_list_issues(hass: HomeAssistant) -> dict[str, Any]:
+    """List repair issues."""
+    try:
+        from homeassistant.components.repairs import async_get_issue_registry
+        registry = async_get_issue_registry(hass)
+        issues = [
+            {"domain": i.domain, "issue_id": i.issue_id,
+             "severity": i.severity, "dismissed": i.dismissed_version is not None}
+            for i in registry.issues.values()
+        ]
+        return {"ok": True, "issues": issues[:50]}
+    except ImportError:
+        return {"error": "repairs component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Repair list issues failed: {exc}"}
+
+
+async def _repair_dismiss_issue(
+    hass: HomeAssistant, domain: str, issue_id: str,
+) -> dict[str, Any]:
+    """Dismiss a repair issue."""
+    try:
+        from homeassistant.components.repairs import async_dismiss_issue
+        async_dismiss_issue(hass, domain, issue_id)
+        return {"ok": True, "domain": domain, "issue_id": issue_id, "action": "dismissed"}
+    except ImportError:
+        return {"error": "repairs component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Repair dismiss issue failed: {exc}"}
+
+
+async def _integration_setup(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Set up an integration via config flow."""
+    try:
+        result = await hass.config_entries.flow.async_init(
+            domain, context={"source": "user"},
+        )
+        return {
+            "ok": True, "domain": domain,
+            "flow_id": result.get("flow_id", ""),
+            "type": result.get("type", ""),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Integration setup failed: {exc}"}
+
+
+async def _integration_remove(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Remove a config entry."""
+    try:
+        result = await hass.config_entries.async_remove(entry_id)
+        return {"ok": True, "entry_id": entry_id, "require_restart": result.get("require_restart", False)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Integration remove failed: {exc}"}
+
+
+async def _helper_create_input_boolean(
+    hass: HomeAssistant, name: str,
+    icon: str | None = None,
+) -> dict[str, Any]:
+    """Create an input_boolean helper."""
+    try:
+        data: dict[str, Any] = {"name": name}
+        if icon:
+            data["icon"] = icon
+        await hass.services.async_call(
+            "input_boolean", "create", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Helper create input_boolean failed: {exc}"}
+    return {"ok": True, "name": name, "type": "input_boolean"}
+
+
+async def _helper_create_input_number(
+    hass: HomeAssistant, name: str,
+    min_val: float = 0, max_val: float = 100,
+    step: float = 1,
+) -> dict[str, Any]:
+    """Create an input_number helper."""
+    try:
+        await hass.services.async_call(
+            "input_number", "create",
+            {"name": name, "min": min_val, "max": max_val, "step": step},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Helper create input_number failed: {exc}"}
+    return {"ok": True, "name": name, "type": "input_number"}
+
+
+async def _helper_create_input_text(
+    hass: HomeAssistant, name: str,
+    min_len: int = 0, max_len: int = 255,
+) -> dict[str, Any]:
+    """Create an input_text helper."""
+    try:
+        await hass.services.async_call(
+            "input_text", "create",
+            {"name": name, "min": min_len, "max": max_len},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Helper create input_text failed: {exc}"}
+    return {"ok": True, "name": name, "type": "input_text"}
+
+
+async def _helper_delete(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Delete a helper entity."""
+    try:
+        domain = entity_id.split(".")[0]
+        await hass.services.async_call(
+            domain, "delete", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Helper delete failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "deleted"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 44: siren, select, number, button, date/time/datetime entities,
 #           text entity, lawn mower, valve, water heater
 # ---------------------------------------------------------------------------
@@ -15061,6 +15307,82 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 45 dispatch ---
+        if name == "entity_disable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_disable(hass, args.get("entity_id", ""))
+        if name == "entity_enable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_enable(hass, args.get("entity_id", ""))
+        if name == "entity_set_name":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_set_name(
+                hass, args.get("entity_id", ""), args.get("name", ""),
+            )
+        if name == "device_set_name":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _device_set_name(
+                hass, args.get("device_id", ""), args.get("name", ""),
+            )
+        if name == "device_set_area":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _device_set_area(
+                hass, args.get("device_id", ""), args.get("area_id", ""),
+            )
+        if name == "area_set_name":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _area_set_name(
+                hass, args.get("area_id", ""), args.get("name", ""),
+            )
+        if name == "repair_list_issues":
+            return await _repair_list_issues(hass)
+        if name == "repair_dismiss_issue":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _repair_dismiss_issue(
+                hass, args.get("domain", ""), args.get("issue_id", ""),
+            )
+        if name == "integration_setup":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _integration_setup(hass, args.get("domain", ""))
+        if name == "integration_remove":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _integration_remove(hass, args.get("entry_id", ""))
+        if name == "helper_create_input_boolean":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _helper_create_input_boolean(
+                hass, args.get("name", ""), args.get("icon"),
+            )
+        if name == "helper_create_input_number":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _helper_create_input_number(
+                hass, args.get("name", ""),
+                float(args.get("min", 0)),
+                float(args.get("max", 100)),
+                float(args.get("step", 1)),
+            )
+        if name == "helper_create_input_text":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _helper_create_input_text(
+                hass, args.get("name", ""),
+                int(args.get("min", 0)),
+                int(args.get("max", 255)),
+            )
+        if name == "helper_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _helper_delete(hass, args.get("entity_id", ""))
         # --- Wave 44 dispatch ---
         if name == "siren_list":
             return await _siren_list(hass)
@@ -20910,6 +21232,198 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "reset_counter",
             "description": "Reset a counter entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 45 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_disable",
+            "description": "Disable an entity in the registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_enable",
+            "description": "Enable an entity in the registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_set_name",
+            "description": "Set entity friendly name in the registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "name": {"type": "string"},
+                },
+                "required": ["entity_id", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_set_name",
+            "description": "Set device name in the registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device_id": {"type": "string"},
+                    "name": {"type": "string"},
+                },
+                "required": ["device_id", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_set_area",
+            "description": "Assign a device to an area.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device_id": {"type": "string"},
+                    "area_id": {"type": "string"},
+                },
+                "required": ["device_id", "area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_set_name",
+            "description": "Rename an area.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "area_id": {"type": "string"},
+                    "name": {"type": "string"},
+                },
+                "required": ["area_id", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "repair_list_issues",
+            "description": "List repair issues.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "repair_dismiss_issue",
+            "description": "Dismiss a repair issue.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "issue_id": {"type": "string"},
+                },
+                "required": ["domain", "issue_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_setup",
+            "description": "Set up an integration via config flow.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_remove",
+            "description": "Remove a config entry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "helper_create_input_boolean",
+            "description": "Create an input_boolean helper.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "icon": {"type": "string"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "helper_create_input_number",
+            "description": "Create an input_number helper.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "min": {"type": "number"},
+                    "max": {"type": "number"},
+                    "step": {"type": "number"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "helper_create_input_text",
+            "description": "Create an input_text helper.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "min": {"type": "integer"},
+                    "max": {"type": "integer"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "helper_delete",
+            "description": "Delete a helper entity.",
             "parameters": {
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
