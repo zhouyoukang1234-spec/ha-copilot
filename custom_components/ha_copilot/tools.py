@@ -8339,6 +8339,240 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 33: input_datetime extras, alarm extras, media source browse, STT,
+#           script reload, check config, statistics adjust, utility meter,
+#           select extras
+# ---------------------------------------------------------------------------
+
+
+async def _input_datetime_set_date(
+    hass: HomeAssistant, entity_id: str, date: str,
+) -> dict[str, Any]:
+    """Set the date of an input_datetime entity."""
+    try:
+        await hass.services.async_call(
+            "input_datetime", "set_datetime",
+            {"entity_id": entity_id, "date": date}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input datetime set date failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "date": date}
+
+
+async def _input_datetime_set_time(
+    hass: HomeAssistant, entity_id: str, time_val: str,
+) -> dict[str, Any]:
+    """Set the time of an input_datetime entity."""
+    try:
+        await hass.services.async_call(
+            "input_datetime", "set_datetime",
+            {"entity_id": entity_id, "time": time_val}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input datetime set time failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "time": time_val}
+
+
+async def _alarm_arm_custom_bypass(
+    hass: HomeAssistant, entity_id: str, code: str | None = None,
+) -> dict[str, Any]:
+    """Arm alarm with custom bypass."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if code:
+        data["code"] = code
+    try:
+        await hass.services.async_call(
+            "alarm_control_panel", "alarm_arm_custom_bypass",
+            data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Alarm arm custom bypass failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "armed_custom_bypass"}
+
+
+async def _alarm_arm_vacation(
+    hass: HomeAssistant, entity_id: str, code: str | None = None,
+) -> dict[str, Any]:
+    """Arm alarm in vacation mode."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if code:
+        data["code"] = code
+    try:
+        await hass.services.async_call(
+            "alarm_control_panel", "alarm_arm_vacation",
+            data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Alarm arm vacation failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "armed_vacation"}
+
+
+async def _media_source_browse(
+    hass: HomeAssistant, media_content_id: str | None = None,
+) -> dict[str, Any]:
+    """Browse media sources."""
+    try:
+        from homeassistant.components.media_source import async_browse_media
+        result = await async_browse_media(hass, media_content_id)
+        children = []
+        if hasattr(result, "children") and result.children:
+            children = [
+                {"title": c.title, "media_content_id": c.media_content_id}
+                for c in result.children[:50]
+            ]
+        return {
+            "ok": True, "title": result.title,
+            "children": children,
+        }
+    except ImportError:
+        return {"error": "media_source not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media source browse failed: {exc}"}
+
+
+async def _stt_listen(
+    hass: HomeAssistant, stt_engine: str | None = None,
+) -> dict[str, Any]:
+    """Get available STT engines."""
+    try:
+        from homeassistant.components.stt import async_get_provider
+        provider = async_get_provider(hass, stt_engine)
+        if provider is None:
+            return {"error": f"STT engine {stt_engine} not found"}
+        return {
+            "ok": True, "engine": stt_engine,
+            "supported_languages": getattr(provider, "supported_languages", [])[:20],
+        }
+    except ImportError:
+        return {"error": "stt not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"STT listen failed: {exc}"}
+
+
+async def _script_reload(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload scripts from YAML."""
+    try:
+        await hass.services.async_call("script", "reload", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script reload failed: {exc}"}
+    return {"ok": True, "action": "scripts_reloaded"}
+
+
+async def _homeassistant_check_config(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Home Assistant configuration validity."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "check_config", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Check config failed: {exc}"}
+    return {"ok": True, "action": "config_valid"}
+
+
+async def _statistics_adjust_sum(
+    hass: HomeAssistant, statistic_id: str,
+    start_time: str, adjustment: float,
+) -> dict[str, Any]:
+    """Adjust sum statistics."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            async_adjust_statistics,
+        )
+        from datetime import datetime as dt
+        s = dt.fromisoformat(start_time)
+        await async_adjust_statistics(hass, statistic_id, s, adjustment, "sum")
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Statistics adjust sum failed: {exc}"}
+    return {"ok": True, "statistic_id": statistic_id, "adjustment": adjustment}
+
+
+async def _utility_meter_calibrate(
+    hass: HomeAssistant, entity_id: str, value: float,
+) -> dict[str, Any]:
+    """Calibrate a utility meter."""
+    try:
+        await hass.services.async_call(
+            "utility_meter", "calibrate",
+            {"entity_id": entity_id, "value": value}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Utility meter calibrate failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _utility_meter_reset(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Reset a utility meter."""
+    try:
+        await hass.services.async_call(
+            "utility_meter", "reset",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Utility meter reset failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+
+
+async def _select_select_first(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Select the first option."""
+    try:
+        await hass.services.async_call(
+            "select", "select_first",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Select first failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "first_selected"}
+
+
+async def _select_select_last(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Select the last option."""
+    try:
+        await hass.services.async_call(
+            "select", "select_last",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Select last failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "last_selected"}
+
+
+async def _select_select_next(
+    hass: HomeAssistant, entity_id: str, cycle: bool = True,
+) -> dict[str, Any]:
+    """Select the next option."""
+    try:
+        await hass.services.async_call(
+            "select", "select_next",
+            {"entity_id": entity_id, "cycle": cycle}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Select next failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "next_selected"}
+
+
+async def _select_select_previous(
+    hass: HomeAssistant, entity_id: str, cycle: bool = True,
+) -> dict[str, Any]:
+    """Select the previous option."""
+    try:
+        await hass.services.async_call(
+            "select", "select_previous",
+            {"entity_id": entity_id, "cycle": cycle}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Select previous failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "previous_selected"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 32: energy, recorder, cloud, system, schedule, integration, template,
 #           shell, notify, config entries, area/label/floor/category registries
 # ---------------------------------------------------------------------------
@@ -12279,6 +12513,84 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 33 dispatch ---
+        if name == "input_datetime_set_date":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_datetime_set_date(
+                hass, args.get("entity_id", ""), args.get("date", ""),
+            )
+        if name == "input_datetime_set_time":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_datetime_set_time(
+                hass, args.get("entity_id", ""), args.get("time", ""),
+            )
+        if name == "alarm_arm_custom_bypass":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _alarm_arm_custom_bypass(
+                hass, args.get("entity_id", ""), args.get("code"),
+            )
+        if name == "alarm_arm_vacation":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _alarm_arm_vacation(
+                hass, args.get("entity_id", ""), args.get("code"),
+            )
+        if name == "media_source_browse":
+            return await _media_source_browse(
+                hass, args.get("media_content_id"),
+            )
+        if name == "stt_listen":
+            return await _stt_listen(hass, args.get("stt_engine"))
+        if name == "script_reload":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _script_reload(hass)
+        if name == "homeassistant_check_config":
+            return await _homeassistant_check_config(hass)
+        if name == "statistics_adjust_sum":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _statistics_adjust_sum(
+                hass, args.get("statistic_id", ""),
+                args.get("start_time", ""),
+                float(args.get("adjustment", 0)),
+            )
+        if name == "utility_meter_calibrate":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _utility_meter_calibrate(
+                hass, args.get("entity_id", ""),
+                float(args.get("value", 0)),
+            )
+        if name == "utility_meter_reset":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _utility_meter_reset(hass, args.get("entity_id", ""))
+        if name == "select_select_first":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _select_select_first(hass, args.get("entity_id", ""))
+        if name == "select_select_last":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _select_select_last(hass, args.get("entity_id", ""))
+        if name == "select_select_next":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _select_select_next(
+                hass, args.get("entity_id", ""),
+                bool(args.get("cycle", True)),
+            )
+        if name == "select_select_previous":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _select_select_previous(
+                hass, args.get("entity_id", ""),
+                bool(args.get("cycle", True)),
+            )
         # --- Wave 32 dispatch ---
         if name == "energy_get_solar_forecast":
             return await _energy_get_solar_forecast(hass)
@@ -17472,6 +17784,206 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 33 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "input_datetime_set_date",
+            "description": "Set the date of an input_datetime entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "date": {"type": "string", "description": "YYYY-MM-DD"},
+                },
+                "required": ["entity_id", "date"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_datetime_set_time",
+            "description": "Set the time of an input_datetime entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "time": {"type": "string", "description": "HH:MM:SS"},
+                },
+                "required": ["entity_id", "time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "alarm_arm_custom_bypass",
+            "description": "Arm alarm with custom bypass.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "code": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "alarm_arm_vacation",
+            "description": "Arm alarm in vacation mode.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "code": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_source_browse",
+            "description": "Browse media sources.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "media_content_id": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stt_listen",
+            "description": "Get available STT engines/info.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "stt_engine": {"type": "string"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_reload",
+            "description": "Reload scripts from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "homeassistant_check_config",
+            "description": "Check Home Assistant configuration validity.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "statistics_adjust_sum",
+            "description": "Adjust sum statistics.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_id": {"type": "string"},
+                    "start_time": {"type": "string"},
+                    "adjustment": {"type": "number"},
+                },
+                "required": ["statistic_id", "start_time", "adjustment"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "utility_meter_calibrate",
+            "description": "Calibrate a utility meter.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "number"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "utility_meter_reset",
+            "description": "Reset a utility meter.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_select_first",
+            "description": "Select the first option.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_select_last",
+            "description": "Select the last option.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_select_next",
+            "description": "Select the next option.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "cycle": {"type": "boolean"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_select_previous",
+            "description": "Select the previous option.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "cycle": {"type": "boolean"},
+                },
                 "required": ["entity_id"],
             },
         },
