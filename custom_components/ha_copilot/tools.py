@@ -8339,6 +8339,238 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 52: bluetooth, USB, DHCP, SSDP, ZeroConf, entity filters,
+#           label assign/remove, floor set areas
+# ---------------------------------------------------------------------------
+
+
+async def _bluetooth_list_devices(hass: HomeAssistant) -> dict[str, Any]:
+    """List discovered Bluetooth devices."""
+    try:
+        from homeassistant.components.bluetooth import async_discovered_service_info
+        infos = async_discovered_service_info(hass)
+        result = [
+            {"address": i.address, "name": i.name or "",
+             "rssi": i.rssi}
+            for i in list(infos)[:50]
+        ]
+        return {"ok": True, "devices": result}
+    except ImportError:
+        return {"error": "bluetooth component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Bluetooth list devices failed: {exc}"}
+
+
+async def _bluetooth_scanner_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Bluetooth scanner status."""
+    try:
+        from homeassistant.components.bluetooth import async_scanner_count
+        count = async_scanner_count(hass)
+        return {"ok": True, "scanner_count": count}
+    except ImportError:
+        return {"error": "bluetooth component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Bluetooth scanner status failed: {exc}"}
+
+
+async def _usb_list_devices(hass: HomeAssistant) -> dict[str, Any]:
+    """List USB devices."""
+    try:
+        from homeassistant.components.usb import async_get_usb
+        usb_list = async_get_usb(hass)
+        result = [
+            {"vid": u.get("vid", ""), "pid": u.get("pid", ""),
+             "serial_number": u.get("serial_number", ""),
+             "manufacturer": u.get("manufacturer", ""),
+             "description": u.get("description", "")}
+            for u in usb_list[:30]
+        ]
+        return {"ok": True, "devices": result}
+    except ImportError:
+        return {"error": "usb component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"USB list devices failed: {exc}"}
+
+
+async def _dhcp_list_discoveries(hass: HomeAssistant) -> dict[str, Any]:
+    """List DHCP discoveries."""
+    try:
+        from homeassistant.components.dhcp import async_get_dhcp
+        dhcp_list = async_get_dhcp(hass)
+        result = [
+            {"domain": d.get("domain", ""), "hostname": d.get("hostname", ""),
+             "macaddress": d.get("macaddress", "")}
+            for d in dhcp_list[:30]
+        ]
+        return {"ok": True, "discoveries": result}
+    except ImportError:
+        return {"error": "dhcp component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"DHCP list discoveries failed: {exc}"}
+
+
+async def _ssdp_list_discoveries(hass: HomeAssistant) -> dict[str, Any]:
+    """List SSDP discoveries."""
+    try:
+        from homeassistant.components.ssdp import async_get_ssdp
+        ssdp_list = async_get_ssdp(hass)
+        result = []
+        for domain, matchers in ssdp_list.items():
+            for m in matchers:
+                result.append({"domain": domain, "st": m.get("st", "")})
+        return {"ok": True, "discoveries": result[:30]}
+    except ImportError:
+        return {"error": "ssdp component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"SSDP list discoveries failed: {exc}"}
+
+
+async def _zeroconf_list_discoveries(hass: HomeAssistant) -> dict[str, Any]:
+    """List Zeroconf discoveries."""
+    try:
+        from homeassistant.components.zeroconf import async_get_zeroconf
+        zc_list = async_get_zeroconf(hass)
+        result = []
+        for stype, matchers in zc_list.items():
+            for m in matchers:
+                result.append({"type": stype, "domain": m.get("domain", "")})
+        return {"ok": True, "discoveries": result[:30]}
+    except ImportError:
+        return {"error": "zeroconf component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Zeroconf list discoveries failed: {exc}"}
+
+
+async def _entity_filter_by_area(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Filter entities by area."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        er = async_get_entity_registry(hass)
+        entities = [
+            {"entity_id": e.entity_id, "name": e.name or e.original_name or "",
+             "platform": e.platform}
+            for e in er.entities.values()
+            if e.area_id == area_id
+        ]
+        return {"ok": True, "area_id": area_id, "entities": entities[:50]}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity filter by area failed: {exc}"}
+
+
+async def _entity_filter_by_device(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Filter entities by device."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        er = async_get_entity_registry(hass)
+        entities = [
+            {"entity_id": e.entity_id, "name": e.name or e.original_name or "",
+             "platform": e.platform}
+            for e in er.entities.values()
+            if e.device_id == device_id
+        ]
+        return {"ok": True, "device_id": device_id, "entities": entities[:50]}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity filter by device failed: {exc}"}
+
+
+async def _entity_filter_by_integration(
+    hass: HomeAssistant, integration: str,
+) -> dict[str, Any]:
+    """Filter entities by integration (platform)."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        er = async_get_entity_registry(hass)
+        entities = [
+            {"entity_id": e.entity_id, "name": e.name or e.original_name or "",
+             "domain": e.domain}
+            for e in er.entities.values()
+            if e.platform == integration
+        ]
+        return {"ok": True, "integration": integration,
+                "entities": entities[:50]}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity filter by integration failed: {exc}"}
+
+
+async def _label_assign_entity(
+    hass: HomeAssistant, entity_id: str, label_id: str,
+) -> dict[str, Any]:
+    """Assign a label to an entity."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        er = async_get_entity_registry(hass)
+        entry = er.async_get(entity_id)
+        if entry is None:
+            return {"error": f"Entity {entity_id} not in registry"}
+        labels = set(entry.labels or set())
+        labels.add(label_id)
+        er.async_update_entity(entity_id, labels=labels)
+        return {"ok": True, "entity_id": entity_id, "label_id": label_id,
+                "action": "assigned"}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Label assign entity failed: {exc}"}
+
+
+async def _label_remove_entity(
+    hass: HomeAssistant, entity_id: str, label_id: str,
+) -> dict[str, Any]:
+    """Remove a label from an entity."""
+    try:
+        from homeassistant.helpers.entity_registry import (
+            async_get as async_get_entity_registry,
+        )
+        er = async_get_entity_registry(hass)
+        entry = er.async_get(entity_id)
+        if entry is None:
+            return {"error": f"Entity {entity_id} not in registry"}
+        labels = set(entry.labels or set())
+        labels.discard(label_id)
+        er.async_update_entity(entity_id, labels=labels)
+        return {"ok": True, "entity_id": entity_id, "label_id": label_id,
+                "action": "removed"}
+    except ImportError:
+        return {"error": "entity_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Label remove entity failed: {exc}"}
+
+
+async def _floor_set_areas(
+    hass: HomeAssistant, floor_id: str, area_ids: list[str],
+) -> dict[str, Any]:
+    """Set areas for a floor."""
+    try:
+        from homeassistant.helpers.area_registry import async_get as async_get_area_registry
+        ar = async_get_area_registry(hass)
+        for area_id in area_ids:
+            ar.async_update(area_id, floor_id=floor_id)
+        return {"ok": True, "floor_id": floor_id, "area_ids": area_ids}
+    except ImportError:
+        return {"error": "area_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Floor set areas failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 51: notify persistent, group create/set entities, zone remove,
 #           frontend reload themes, system log list
 # ---------------------------------------------------------------------------
@@ -15945,6 +16177,48 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 52 dispatch ---
+        if name == "bluetooth_list_devices":
+            return await _bluetooth_list_devices(hass)
+        if name == "bluetooth_scanner_status":
+            return await _bluetooth_scanner_status(hass)
+        if name == "usb_list_devices":
+            return await _usb_list_devices(hass)
+        if name == "dhcp_list_discoveries":
+            return await _dhcp_list_discoveries(hass)
+        if name == "ssdp_list_discoveries":
+            return await _ssdp_list_discoveries(hass)
+        if name == "zeroconf_list_discoveries":
+            return await _zeroconf_list_discoveries(hass)
+        if name == "entity_filter_by_area":
+            return await _entity_filter_by_area(hass, args.get("area_id", ""))
+        if name == "entity_filter_by_device":
+            return await _entity_filter_by_device(hass, args.get("device_id", ""))
+        if name == "entity_filter_by_integration":
+            return await _entity_filter_by_integration(
+                hass, args.get("integration", ""),
+            )
+        if name == "label_assign_entity":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _label_assign_entity(
+                hass, args.get("entity_id", ""),
+                args.get("label_id", ""),
+            )
+        if name == "label_remove_entity":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _label_remove_entity(
+                hass, args.get("entity_id", ""),
+                args.get("label_id", ""),
+            )
+        if name == "floor_set_areas":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _floor_set_areas(
+                hass, args.get("floor_id", ""),
+                args.get("area_ids", []),
+            )
         # --- Wave 51 dispatch ---
         if name == "notify_persistent":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -22027,6 +22301,136 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 52 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "bluetooth_list_devices",
+            "description": "List discovered Bluetooth devices.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "bluetooth_scanner_status",
+            "description": "Get Bluetooth scanner status.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "usb_list_devices",
+            "description": "List USB devices.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dhcp_list_discoveries",
+            "description": "List DHCP discoveries.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ssdp_list_discoveries",
+            "description": "List SSDP discoveries.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zeroconf_list_discoveries",
+            "description": "List Zeroconf discoveries.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_filter_by_area",
+            "description": "Filter entities by area.",
+            "parameters": {
+                "type": "object",
+                "properties": {"area_id": {"type": "string"}},
+                "required": ["area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_filter_by_device",
+            "description": "Filter entities by device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_filter_by_integration",
+            "description": "Filter entities by integration (platform).",
+            "parameters": {
+                "type": "object",
+                "properties": {"integration": {"type": "string"}},
+                "required": ["integration"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "label_assign_entity",
+            "description": "Assign a label to an entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "label_id": {"type": "string"},
+                },
+                "required": ["entity_id", "label_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "label_remove_entity",
+            "description": "Remove a label from an entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "label_id": {"type": "string"},
+                },
+                "required": ["entity_id", "label_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "floor_set_areas",
+            "description": "Set areas for a floor.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "floor_id": {"type": "string"},
+                    "area_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["floor_id", "area_ids"],
             },
         },
     },
