@@ -8339,6 +8339,213 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 54: state advanced, service call with response, webhook unregister,
+#           addon management, system metrics
+# ---------------------------------------------------------------------------
+
+
+async def _state_changed_recent(
+    hass: HomeAssistant, minutes: int = 5,
+) -> dict[str, Any]:
+    """List entities whose state changed in the last N minutes."""
+    try:
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        result = []
+        for state in hass.states.async_all():
+            if state.last_changed >= cutoff:
+                result.append({
+                    "entity_id": state.entity_id,
+                    "state": state.state,
+                    "last_changed": str(state.last_changed),
+                })
+        return {"ok": True, "minutes": minutes, "entities": result[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"State changed recent failed: {exc}"}
+
+
+async def _state_last_changed(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get when an entity last changed state."""
+    try:
+        state = hass.states.get(entity_id)
+        if state is None:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "state": state.state,
+            "last_changed": str(state.last_changed),
+            "last_updated": str(state.last_updated),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"State last changed failed: {exc}"}
+
+
+async def _service_call_with_response(
+    hass: HomeAssistant, domain: str, service: str,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Call a service and return the response data."""
+    try:
+        response = await hass.services.async_call(
+            domain, service, data or {}, blocking=True, return_response=True,
+        )
+        return {"ok": True, "domain": domain, "service": service,
+                "response": response}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Service call with response failed: {exc}"}
+
+
+async def _webhook_unregister(
+    hass: HomeAssistant, webhook_id: str,
+) -> dict[str, Any]:
+    """Unregister a webhook."""
+    try:
+        from homeassistant.components.webhook import async_unregister
+        async_unregister(hass, webhook_id)
+        return {"ok": True, "webhook_id": webhook_id, "action": "unregistered"}
+    except ImportError:
+        return {"error": "webhook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Webhook unregister failed: {exc}"}
+
+
+async def _addon_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List HA OS addons."""
+    try:
+        from homeassistant.components.hassio.handler import HassIO
+        hassio: HassIO = hass.data.get("hassio")
+        if hassio is None:
+            return {"error": "hassio not available (not HA OS)"}
+        result = await hassio.send_command("/addons", method="get")
+        addons = result.get("data", {}).get("addons", [])
+        return {"ok": True, "addons": [
+            {"slug": a.get("slug", ""), "name": a.get("name", ""),
+             "state": a.get("state", ""), "version": a.get("version", "")}
+            for a in addons[:30]
+        ]}
+    except ImportError:
+        return {"error": "hassio component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon list failed: {exc}"}
+
+
+async def _addon_info(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Get info about a specific addon."""
+    try:
+        from homeassistant.components.hassio.handler import HassIO
+        hassio: HassIO = hass.data.get("hassio")
+        if hassio is None:
+            return {"error": "hassio not available (not HA OS)"}
+        result = await hassio.send_command(f"/addons/{slug}/info", method="get")
+        return {"ok": True, "slug": slug, "info": result.get("data", {})}
+    except ImportError:
+        return {"error": "hassio component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon info failed: {exc}"}
+
+
+async def _addon_start(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Start an addon."""
+    try:
+        from homeassistant.components.hassio.handler import HassIO
+        hassio: HassIO = hass.data.get("hassio")
+        if hassio is None:
+            return {"error": "hassio not available (not HA OS)"}
+        await hassio.send_command(f"/addons/{slug}/start", method="post")
+        return {"ok": True, "slug": slug, "action": "started"}
+    except ImportError:
+        return {"error": "hassio component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon start failed: {exc}"}
+
+
+async def _addon_stop(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Stop an addon."""
+    try:
+        from homeassistant.components.hassio.handler import HassIO
+        hassio: HassIO = hass.data.get("hassio")
+        if hassio is None:
+            return {"error": "hassio not available (not HA OS)"}
+        await hassio.send_command(f"/addons/{slug}/stop", method="post")
+        return {"ok": True, "slug": slug, "action": "stopped"}
+    except ImportError:
+        return {"error": "hassio component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon stop failed: {exc}"}
+
+
+async def _addon_restart(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Restart an addon."""
+    try:
+        from homeassistant.components.hassio.handler import HassIO
+        hassio: HassIO = hass.data.get("hassio")
+        if hassio is None:
+            return {"error": "hassio not available (not HA OS)"}
+        await hassio.send_command(f"/addons/{slug}/restart", method="post")
+        return {"ok": True, "slug": slug, "action": "restarted"}
+    except ImportError:
+        return {"error": "hassio component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon restart failed: {exc}"}
+
+
+async def _system_cpu_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system CPU usage."""
+    try:
+        import psutil
+        cpu = await hass.async_add_executor_job(psutil.cpu_percent, 1)
+        return {"ok": True, "cpu_percent": cpu}
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System CPU usage failed: {exc}"}
+
+
+async def _system_memory_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system memory usage."""
+    try:
+        import psutil
+        mem = await hass.async_add_executor_job(lambda: psutil.virtual_memory()._asdict())
+        return {"ok": True, "memory": {
+            "total_mb": round(mem["total"] / 1048576, 1),
+            "available_mb": round(mem["available"] / 1048576, 1),
+            "percent": mem["percent"],
+        }}
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System memory usage failed: {exc}"}
+
+
+async def _system_disk_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system disk usage."""
+    try:
+        import psutil
+        disk = await hass.async_add_executor_job(
+            lambda: psutil.disk_usage("/")._asdict(),
+        )
+        return {"ok": True, "disk": {
+            "total_gb": round(disk["total"] / 1073741824, 2),
+            "free_gb": round(disk["free"] / 1073741824, 2),
+            "percent": disk["percent"],
+        }}
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System disk usage failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 53: automation/script traces, config entry list, entity deep,
 #           energy prefs, conversation agents
 # ---------------------------------------------------------------------------
@@ -16346,6 +16553,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 54 dispatch ---
+        if name == "state_changed_recent":
+            return await _state_changed_recent(
+                hass, int(args.get("minutes", 5)),
+            )
+        if name == "state_last_changed":
+            return await _state_last_changed(hass, args.get("entity_id", ""))
+        if name == "service_call_with_response":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _service_call_with_response(
+                hass, args.get("domain", ""),
+                args.get("service", ""),
+                args.get("data"),
+            )
+        if name == "webhook_unregister":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _webhook_unregister(hass, args.get("webhook_id", ""))
+        if name == "addon_list":
+            return await _addon_list(hass)
+        if name == "addon_info":
+            return await _addon_info(hass, args.get("slug", ""))
+        if name == "addon_start":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _addon_start(hass, args.get("slug", ""))
+        if name == "addon_stop":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _addon_stop(hass, args.get("slug", ""))
+        if name == "addon_restart":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _addon_restart(hass, args.get("slug", ""))
+        if name == "system_cpu_usage":
+            return await _system_cpu_usage(hass)
+        if name == "system_memory_usage":
+            return await _system_memory_usage(hass)
+        if name == "system_disk_usage":
+            return await _system_disk_usage(hass)
         # --- Wave 53 dispatch ---
         if name == "automation_trace_list":
             return await _automation_trace_list(hass, args.get("entity_id", ""))
@@ -22494,6 +22742,138 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 54 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "state_changed_recent",
+            "description": "List entities whose state changed in the last N minutes.",
+            "parameters": {
+                "type": "object",
+                "properties": {"minutes": {"type": "integer", "description": "Minutes to look back (default 5)"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "state_last_changed",
+            "description": "Get when an entity last changed state.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "service_call_with_response",
+            "description": "Call a service and return the response data.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "service": {"type": "string"},
+                    "data": {"type": "object"},
+                },
+                "required": ["domain", "service"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "webhook_unregister",
+            "description": "Unregister a webhook.",
+            "parameters": {
+                "type": "object",
+                "properties": {"webhook_id": {"type": "string"}},
+                "required": ["webhook_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "addon_list",
+            "description": "List HA OS addons.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "addon_info",
+            "description": "Get info about a specific addon.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "addon_start",
+            "description": "Start an addon.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "addon_stop",
+            "description": "Stop an addon.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "addon_restart",
+            "description": "Restart an addon.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_cpu_usage",
+            "description": "Get system CPU usage.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_memory_usage",
+            "description": "Get system memory usage.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_disk_usage",
+            "description": "Get system disk usage.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 53 TOOL_SPECS ---
