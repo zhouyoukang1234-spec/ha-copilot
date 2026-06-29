@@ -8339,6 +8339,329 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 39: state history, template sensors, auth mgmt, webhook, MQTT extras,
+#           REST command, supervisor, core state, input boolean list,
+#           system metrics, persistent notification list
+# ---------------------------------------------------------------------------
+
+
+async def _state_history_period(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get state history for an entity over a period."""
+    try:
+        from homeassistant.util import dt as dt_util
+        from datetime import timedelta
+        from homeassistant.components.recorder.history import state_changes_during_period
+        now = dt_util.utcnow()
+        start = now - timedelta(hours=hours)
+        states = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, now, entity_id,
+        )
+        result = []
+        for eid, st_list in states.items():
+            for s in st_list[:50]:
+                result.append({
+                    "state": s.state,
+                    "last_changed": str(s.last_changed),
+                })
+        return {"ok": True, "entity_id": entity_id, "history": result[:50]}
+    except ImportError:
+        return {"error": "recorder history not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"State history period failed: {exc}"}
+
+
+async def _template_list_sensors(hass: HomeAssistant) -> dict[str, Any]:
+    """List template sensor entities."""
+    try:
+        states = hass.states.async_all("sensor")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+            if "template" in (s.attributes.get("attribution", "") or "").lower()
+            or s.entity_id.startswith("sensor.template_")
+        ]
+        return {"ok": True, "sensors": result[:100]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Template list sensors failed: {exc}"}
+
+
+async def _auth_list_users(hass: HomeAssistant) -> dict[str, Any]:
+    """List all auth users."""
+    try:
+        users = await hass.auth.async_get_users()
+        result = [
+            {"id": u.id, "name": u.name, "is_active": u.is_active,
+             "system_generated": u.system_generated,
+             "is_owner": u.is_owner}
+            for u in users
+        ]
+        return {"ok": True, "users": result[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Auth list users failed: {exc}"}
+
+
+async def _auth_create_user(
+    hass: HomeAssistant, name: str,
+    group_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create a new auth user."""
+    try:
+        user = await hass.auth.async_create_user(
+            name, group_ids=group_ids or [],
+        )
+        return {"ok": True, "user_id": user.id, "name": user.name}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Auth create user failed: {exc}"}
+
+
+async def _auth_delete_user(
+    hass: HomeAssistant, user_id: str,
+) -> dict[str, Any]:
+    """Delete an auth user."""
+    try:
+        user = await hass.auth.async_get_user(user_id)
+        if user is None:
+            return {"error": f"User {user_id} not found"}
+        await hass.auth.async_remove_user(user)
+        return {"ok": True, "user_id": user_id, "action": "deleted"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Auth delete user failed: {exc}"}
+
+
+async def _auth_change_password(
+    hass: HomeAssistant, user_id: str, new_password: str,
+) -> dict[str, Any]:
+    """Change user password."""
+    try:
+        user = await hass.auth.async_get_user(user_id)
+        if user is None:
+            return {"error": f"User {user_id} not found"}
+        for cred in user.credentials:
+            if cred.auth_provider_type == "homeassistant":
+                provider = hass.auth.auth_providers[0]
+                await provider.async_change_password(
+                    cred.data["username"], new_password,
+                )
+                return {"ok": True, "user_id": user_id, "action": "password_changed"}
+        return {"error": "No homeassistant auth provider credential found"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Auth change password failed: {exc}"}
+
+
+async def _webhook_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List registered webhooks."""
+    try:
+        from homeassistant.components.webhook import async_get_entries
+        entries = async_get_entries(hass)
+        result = [
+            {"webhook_id": e.webhook_id, "domain": e.domain,
+             "local_only": e.local_only}
+            for e in entries[:50]
+        ]
+        return {"ok": True, "webhooks": result}
+    except ImportError:
+        return {"error": "webhook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Webhook list failed: {exc}"}
+
+
+async def _webhook_register(
+    hass: HomeAssistant, domain: str, name: str,
+    webhook_id: str | None = None,
+) -> dict[str, Any]:
+    """Register a webhook."""
+    try:
+        from homeassistant.components.webhook import async_register
+        wid = webhook_id or f"ha_copilot_{domain}_{name}"
+
+        async def _handler(hass_inner, webhook_id_inner, request):
+            return None
+
+        async_register(hass, domain, name, wid, _handler)
+        return {"ok": True, "webhook_id": wid, "action": "registered"}
+    except ImportError:
+        return {"error": "webhook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Webhook register failed: {exc}"}
+
+
+async def _webhook_remove(
+    hass: HomeAssistant, webhook_id: str,
+) -> dict[str, Any]:
+    """Remove a webhook."""
+    try:
+        from homeassistant.components.webhook import async_unregister
+        async_unregister(hass, webhook_id)
+        return {"ok": True, "webhook_id": webhook_id, "action": "removed"}
+    except ImportError:
+        return {"error": "webhook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Webhook remove failed: {exc}"}
+
+
+async def _mqtt_subscribe(
+    hass: HomeAssistant, topic: str,
+) -> dict[str, Any]:
+    """Subscribe to an MQTT topic (returns last message)."""
+    try:
+        await hass.services.async_call(
+            "mqtt", "dump", {"topic": topic, "duration": 1}, blocking=True,
+        )
+        return {"ok": True, "topic": topic, "action": "subscribed"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"MQTT subscribe failed: {exc}"}
+
+
+async def _mqtt_dump(
+    hass: HomeAssistant, topic: str, duration: int = 5,
+) -> dict[str, Any]:
+    """Dump MQTT messages on a topic for a duration."""
+    try:
+        await hass.services.async_call(
+            "mqtt", "dump", {"topic": topic, "duration": duration},
+            blocking=True,
+        )
+        return {"ok": True, "topic": topic, "duration": duration}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"MQTT dump failed: {exc}"}
+
+
+async def _rest_command_call(
+    hass: HomeAssistant, command_name: str,
+) -> dict[str, Any]:
+    """Call a configured rest_command."""
+    try:
+        await hass.services.async_call(
+            "rest_command", command_name, {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"REST command call failed: {exc}"}
+    return {"ok": True, "command": command_name, "action": "called"}
+
+
+async def _supervisor_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get HA Supervisor info."""
+    try:
+        from homeassistant.components.hassio import async_get_supervisor_info
+        info = await async_get_supervisor_info(hass)
+        return {"ok": True, "info": info}
+    except ImportError:
+        return {"error": "hassio/supervisor not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Supervisor info failed: {exc}"}
+
+
+async def _supervisor_addon_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List supervisor add-ons."""
+    try:
+        from homeassistant.components.hassio import async_get_addon_info
+        info = await async_get_addon_info(hass)
+        return {"ok": True, "addons": info}
+    except ImportError:
+        return {"error": "hassio/supervisor not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Supervisor addon list failed: {exc}"}
+
+
+async def _supervisor_addon_start(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Start a supervisor add-on."""
+    try:
+        await hass.services.async_call(
+            "hassio", "addon_start", {"addon": slug}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Supervisor addon start failed: {exc}"}
+    return {"ok": True, "slug": slug, "action": "started"}
+
+
+async def _supervisor_addon_stop(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Stop a supervisor add-on."""
+    try:
+        await hass.services.async_call(
+            "hassio", "addon_stop", {"addon": slug}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Supervisor addon stop failed: {exc}"}
+    return {"ok": True, "slug": slug, "action": "stopped"}
+
+
+async def _core_state_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get core HA state information."""
+    try:
+        return {
+            "ok": True,
+            "version": hass.config.version,
+            "config_dir": hass.config.config_dir,
+            "time_zone": str(hass.config.time_zone)
+            if hasattr(hass.config, "time_zone") else "unknown",
+            "latitude": getattr(hass.config, "latitude", None),
+            "longitude": getattr(hass.config, "longitude", None),
+            "elevation": getattr(hass.config, "elevation", None),
+            "unit_system": str(getattr(hass.config, "units", ""))
+            if hasattr(hass.config, "units") else "unknown",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Core state info failed: {exc}"}
+
+
+async def _input_boolean_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all input_boolean entities."""
+    try:
+        states = hass.states.async_all("input_boolean")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "booleans": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input boolean list failed: {exc}"}
+
+
+async def _system_metrics(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system resource metrics."""
+    try:
+        import psutil
+        cpu = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+        return {
+            "ok": True,
+            "cpu_percent": cpu,
+            "memory_total_mb": round(mem.total / 1024 / 1024),
+            "memory_used_mb": round(mem.used / 1024 / 1024),
+            "memory_percent": mem.percent,
+            "disk_total_gb": round(disk.total / 1024 / 1024 / 1024, 1),
+            "disk_used_gb": round(disk.used / 1024 / 1024 / 1024, 1),
+            "disk_percent": disk.percent,
+        }
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System metrics failed: {exc}"}
+
+
+async def _persistent_notification_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all persistent notifications."""
+    try:
+        states = hass.states.async_all("persistent_notification")
+        result = [
+            {"entity_id": s.entity_id, "state": s.state,
+             "message": s.attributes.get("message", ""),
+             "title": s.attributes.get("title", "")}
+            for s in states
+        ]
+        return {"ok": True, "notifications": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Persistent notification list failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 38: wake word, assist satellite, media player browse, scene snapshot,
 #           input select first/last, automation context, script vars, system
 #           location, config entry get/list, area get, integration manifests,
@@ -13732,6 +14055,85 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 39 dispatch ---
+        if name == "state_history_period":
+            return await _state_history_period(
+                hass, args.get("entity_id", ""),
+                int(args.get("hours", 24)),
+            )
+        if name == "template_list_sensors":
+            return await _template_list_sensors(hass)
+        if name == "auth_list_users":
+            return await _auth_list_users(hass)
+        if name == "auth_create_user":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _auth_create_user(
+                hass, args.get("name", ""), args.get("group_ids"),
+            )
+        if name == "auth_delete_user":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _auth_delete_user(hass, args.get("user_id", ""))
+        if name == "auth_change_password":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _auth_change_password(
+                hass, args.get("user_id", ""), args.get("new_password", ""),
+            )
+        if name == "webhook_list":
+            return await _webhook_list(hass)
+        if name == "webhook_register":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _webhook_register(
+                hass, args.get("domain", ""), args.get("name", ""),
+                args.get("webhook_id"),
+            )
+        if name == "webhook_remove":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _webhook_remove(hass, args.get("webhook_id", ""))
+        if name == "mqtt_subscribe":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _mqtt_subscribe(hass, args.get("topic", ""))
+        if name == "mqtt_dump":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _mqtt_dump(
+                hass, args.get("topic", ""), int(args.get("duration", 5)),
+            )
+        if name == "rest_command_call":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _rest_command_call(
+                hass, args.get("command_name", ""),
+            )
+        if name == "supervisor_info":
+            return await _supervisor_info(hass)
+        if name == "supervisor_addon_list":
+            return await _supervisor_addon_list(hass)
+        if name == "supervisor_addon_start":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _supervisor_addon_start(
+                hass, args.get("slug", ""),
+            )
+        if name == "supervisor_addon_stop":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _supervisor_addon_stop(
+                hass, args.get("slug", ""),
+            )
+        if name == "core_state_info":
+            return await _core_state_info(hass)
+        if name == "input_boolean_list":
+            return await _input_boolean_list(hass)
+        if name == "system_metrics":
+            return await _system_metrics(hass)
+        if name == "persistent_notification_list":
+            return await _persistent_notification_list(hass)
         # --- Wave 38 dispatch ---
         if name == "wake_word_list":
             return await _wake_word_list(hass)
@@ -19321,6 +19723,227 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 39 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "state_history_period",
+            "description": "Get state history for an entity over a period.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "hours": {"type": "integer", "description": "Hours to look back (default 24)"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "template_list_sensors",
+            "description": "List template sensor entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "auth_list_users",
+            "description": "List all auth users.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "auth_create_user",
+            "description": "Create a new auth user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "group_ids": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "auth_delete_user",
+            "description": "Delete an auth user.",
+            "parameters": {
+                "type": "object",
+                "properties": {"user_id": {"type": "string"}},
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "auth_change_password",
+            "description": "Change user password.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "new_password": {"type": "string"},
+                },
+                "required": ["user_id", "new_password"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "webhook_list",
+            "description": "List registered webhooks.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "webhook_register",
+            "description": "Register a webhook.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "name": {"type": "string"},
+                    "webhook_id": {"type": "string"},
+                },
+                "required": ["domain", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "webhook_remove",
+            "description": "Remove a webhook.",
+            "parameters": {
+                "type": "object",
+                "properties": {"webhook_id": {"type": "string"}},
+                "required": ["webhook_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mqtt_subscribe",
+            "description": "Subscribe to an MQTT topic.",
+            "parameters": {
+                "type": "object",
+                "properties": {"topic": {"type": "string"}},
+                "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mqtt_dump",
+            "description": "Dump MQTT messages on a topic for a duration.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string"},
+                    "duration": {"type": "integer"},
+                },
+                "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rest_command_call",
+            "description": "Call a configured rest_command.",
+            "parameters": {
+                "type": "object",
+                "properties": {"command_name": {"type": "string"}},
+                "required": ["command_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "supervisor_info",
+            "description": "Get HA Supervisor info.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "supervisor_addon_list",
+            "description": "List supervisor add-ons.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "supervisor_addon_start",
+            "description": "Start a supervisor add-on.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "supervisor_addon_stop",
+            "description": "Stop a supervisor add-on.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "core_state_info",
+            "description": "Get core HA state information.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_boolean_list",
+            "description": "List all input_boolean entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_metrics",
+            "description": "Get system resource metrics (CPU, memory, disk).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "persistent_notification_list",
+            "description": "List all persistent notifications.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 38 TOOL_SPECS ---
