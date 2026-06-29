@@ -8339,6 +8339,138 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 56: matter nodes, update entity, backup download, storage info,
+#           core info/check, supervisor stats
+# ---------------------------------------------------------------------------
+
+
+async def _matter_list_nodes(hass: HomeAssistant) -> dict[str, Any]:
+    """List Matter nodes."""
+    try:
+        from homeassistant.components.matter import get_matter
+        matter = get_matter(hass)
+        nodes = matter.get_nodes()
+        result = [
+            {"node_id": n.node_id, "name": getattr(n, "name", ""),
+             "available": getattr(n, "available", True)}
+            for n in nodes[:30]
+        ]
+        return {"ok": True, "nodes": result}
+    except ImportError:
+        return {"error": "matter component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Matter list nodes failed: {exc}"}
+
+
+async def _update_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all update entities."""
+    try:
+        states = hass.states.async_all("update")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "installed_version": s.attributes.get("installed_version"),
+             "latest_version": s.attributes.get("latest_version"),
+             "in_progress": s.attributes.get("in_progress", False)}
+            for s in states
+        ]
+        return {"ok": True, "updates": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Update list failed: {exc}"}
+
+
+async def _backup_download(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Get download info for a backup."""
+    try:
+        from homeassistant.components.hassio.handler import HassIO
+        hassio: HassIO = hass.data.get("hassio")
+        if hassio is None:
+            return {"error": "hassio not available"}
+        result = await hassio.send_command(
+            f"/backups/{slug}/info", method="get",
+        )
+        info = result.get("data", {})
+        return {"ok": True, "slug": slug, "name": info.get("name", ""),
+                "date": info.get("date", ""), "size": info.get("size", 0)}
+    except ImportError:
+        return {"error": "hassio component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup download failed: {exc}"}
+
+
+async def _storage_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get storage info from HA config dir."""
+    try:
+        import os
+        config_dir = hass.config.config_dir
+        total = 0
+        for dirpath, _dirnames, filenames in os.walk(config_dir):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                try:
+                    total += os.path.getsize(fp)
+                except OSError:
+                    pass
+        return {"ok": True, "config_dir": config_dir,
+                "size_mb": round(total / 1048576, 2)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Storage info failed: {exc}"}
+
+
+async def _core_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get HA core information."""
+    try:
+        return {
+            "ok": True,
+            "version": hass.config.version,
+            "config_dir": hass.config.config_dir,
+            "time_zone": str(hass.config.time_zone)
+            if hasattr(hass.config, "time_zone") else "unknown",
+            "unit_system": str(hass.config.units.name)
+            if hasattr(hass.config, "units") else "unknown",
+            "location_name": getattr(hass.config, "location_name", ""),
+            "latitude": getattr(hass.config, "latitude", 0),
+            "longitude": getattr(hass.config, "longitude", 0),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Core info failed: {exc}"}
+
+
+async def _core_check_config(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HA configuration validity."""
+    try:
+        from homeassistant.config import async_check_ha_config_file
+        errors = await async_check_ha_config_file(hass)
+        if errors:
+            return {"ok": True, "valid": False,
+                    "errors": [str(e) for e in errors[:10]]}
+        return {"ok": True, "valid": True, "errors": []}
+    except ImportError:
+        return {"error": "config check not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Core check config failed: {exc}"}
+
+
+async def _supervisor_stats(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Supervisor statistics."""
+    try:
+        from homeassistant.components.hassio.handler import HassIO
+        hassio: HassIO = hass.data.get("hassio")
+        if hassio is None:
+            return {"error": "hassio not available (not HA OS)"}
+        result = await hassio.send_command("/supervisor/stats", method="get")
+        stats = result.get("data", {})
+        return {"ok": True, "cpu_percent": stats.get("cpu_percent", 0),
+                "memory_usage": stats.get("memory_usage", 0),
+                "memory_limit": stats.get("memory_limit", 0)}
+    except ImportError:
+        return {"error": "hassio component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Supervisor stats failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 55: vacuum clean spot, event entity, text, date/time entity,
 #           todo list lists
 # ---------------------------------------------------------------------------
@@ -16665,6 +16797,21 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 56 dispatch ---
+        if name == "matter_list_nodes":
+            return await _matter_list_nodes(hass)
+        if name == "update_list":
+            return await _update_list(hass)
+        if name == "backup_download":
+            return await _backup_download(hass, args.get("slug", ""))
+        if name == "storage_info":
+            return await _storage_info(hass)
+        if name == "core_info":
+            return await _core_info(hass)
+        if name == "core_check_config":
+            return await _core_check_config(hass)
+        if name == "supervisor_stats":
+            return await _supervisor_stats(hass)
         # --- Wave 55 dispatch ---
         if name == "vacuum_clean_spot":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -22879,6 +23026,67 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 56 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "matter_list_nodes",
+            "description": "List Matter nodes.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_list",
+            "description": "List all update entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "backup_download",
+            "description": "Get download info for a backup.",
+            "parameters": {
+                "type": "object",
+                "properties": {"slug": {"type": "string"}},
+                "required": ["slug"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "storage_info",
+            "description": "Get storage info from HA config directory.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "core_info",
+            "description": "Get HA core information.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "core_check_config",
+            "description": "Check HA configuration validity.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "supervisor_stats",
+            "description": "Get Supervisor statistics.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 55 TOOL_SPECS ---
