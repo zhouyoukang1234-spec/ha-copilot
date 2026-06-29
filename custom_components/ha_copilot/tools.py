@@ -21459,6 +21459,49 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _hvac_temperature_differential(hass)
         if name == "presence_zone_population":
             return await _presence_zone_population(hass)
+        # --- Wave 85 dispatch ---
+        if name == "optimization_lighting_schedule":
+            return await _optimization_lighting_schedule(hass)
+        if name == "optimization_heating_schedule":
+            return await _optimization_heating_schedule(hass)
+        if name == "optimization_energy_tariff":
+            return await _optimization_energy_tariff(hass, args.get("peak_rate", 0.20), args.get("off_peak_rate", 0.08))
+        if name == "monitor_entity_availability":
+            return await _monitor_entity_availability(hass)
+        if name == "monitor_integration_status":
+            return await _monitor_integration_status(hass)
+        if name == "monitor_battery_fleet":
+            return await _monitor_battery_fleet(hass)
+        if name == "routine_morning_checklist":
+            return await _routine_morning_checklist(hass)
+        if name == "routine_bedtime_checklist":
+            return await _routine_bedtime_checklist(hass)
+        if name == "routine_away_checklist":
+            return await _routine_away_checklist(hass)
+        if name == "sensor_calibration_check":
+            return await _sensor_calibration_check(hass)
+        if name == "sensor_drift_detection":
+            return await _sensor_drift_detection(hass)
+        if name == "event_bus_listener_count":
+            return await _event_bus_listener_count(hass)
+        if name == "event_type_frequency":
+            return await _event_type_frequency(hass)
+        if name == "maintenance_schedule_check":
+            return await _maintenance_schedule_check(hass)
+        if name == "maintenance_filter_reminder":
+            return await _maintenance_filter_reminder(hass)
+        if name == "connectivity_check_entities":
+            return await _connectivity_check_entities(hass)
+        if name == "connectivity_offline_devices":
+            return await _connectivity_offline_devices(hass)
+        if name == "config_yaml_validation":
+            return await _config_yaml_validation(hass)
+        if name == "config_entry_health":
+            return await _config_entry_health(hass)
+        if name == "dashboard_entity_suggestions":
+            return await _dashboard_entity_suggestions(hass)
+        if name == "dashboard_area_overview":
+            return await _dashboard_area_overview(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -31577,6 +31620,370 @@ async def _presence_zone_population(hass: HomeAssistant) -> dict[str, Any]:
     for zone, entities in sorted(zones.items(), key=lambda x: len(x[1]), reverse=True):
         results.append({"zone": zone, "count": len(entities), "entities": entities})
     return {"ok": True, "zone_count": len(results), "zones": results}
+
+
+# ---------------------------------------------------------------------------
+# Wave 85 — optimization, monitoring, routines, sensor calibration,
+# events, maintenance, connectivity, config validation, dashboard gen
+# ---------------------------------------------------------------------------
+
+
+async def _optimization_lighting_schedule(hass: HomeAssistant) -> dict[str, Any]:
+    """Suggest lighting schedule optimizations."""
+    lights = hass.states.async_all("light")
+    on_lights = [s for s in lights if s.state == "on"]
+    suggestions = []
+    if len(on_lights) > len(lights) * 0.7 and len(lights) > 3:
+        suggestions.append({"type": "reduce", "message": f"{len(on_lights)}/{len(lights)} lights on — consider zones"})
+    for s in on_lights:
+        br = s.attributes.get("brightness", 255) or 255
+        if br > 230:
+            suggestions.append({"type": "dim", "entity_id": s.entity_id, "message": "Full brightness — consider dimming"})
+    return {"ok": True, "total_lights": len(lights), "on": len(on_lights),
+            "suggestion_count": len(suggestions), "suggestions": suggestions[:20]}
+
+
+async def _optimization_heating_schedule(hass: HomeAssistant) -> dict[str, Any]:
+    """Suggest heating schedule optimizations."""
+    suggestions = []
+    for s in hass.states.async_all("climate"):
+        target = s.attributes.get("temperature")
+        current = s.attributes.get("current_temperature")
+        if target and current:
+            try:
+                diff = float(target) - float(current)
+                if diff > 3 and s.state == "heat":
+                    suggestions.append({"entity_id": s.entity_id, "type": "large_gap",
+                                        "message": f"Target {target}° vs current {current}° — consider pre-heating"})
+                if float(target) > 24 and s.state == "heat":
+                    suggestions.append({"entity_id": s.entity_id, "type": "high_target",
+                                        "message": f"Target {target}° is high — consider 20-22°"})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "suggestion_count": len(suggestions), "suggestions": suggestions}
+
+
+async def _optimization_energy_tariff(
+    hass: HomeAssistant, peak_rate: float = 0.20, off_peak_rate: float = 0.08,
+) -> dict[str, Any]:
+    """Analyze energy consumption by tariff periods."""
+    now = datetime.now(timezone.utc)
+    hour = now.hour
+    is_peak = 7 <= hour <= 22
+    current_rate = peak_rate if is_peak else off_peak_rate
+    high_consumers = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "power":
+            try:
+                watts = float(s.state)
+                if watts > 100:
+                    high_consumers.append({
+                        "entity_id": s.entity_id,
+                        "watts": watts,
+                        "hourly_cost": round(watts / 1000 * current_rate, 4),
+                    })
+            except (ValueError, TypeError):
+                pass
+    high_consumers.sort(key=lambda x: x["watts"], reverse=True)
+    return {"ok": True, "current_hour": hour, "is_peak": is_peak,
+            "current_rate": current_rate, "peak_rate": peak_rate,
+            "off_peak_rate": off_peak_rate,
+            "high_consumers": high_consumers[:10]}
+
+
+async def _monitor_entity_availability(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor entity availability status."""
+    all_entities = hass.states.async_all()
+    unavailable = [s for s in all_entities if s.state == "unavailable"]
+    unknown = [s for s in all_entities if s.state == "unknown"]
+    return {"ok": True, "total": len(all_entities),
+            "available": len(all_entities) - len(unavailable) - len(unknown),
+            "unavailable": len(unavailable), "unknown": len(unknown),
+            "unavailable_entities": [s.entity_id for s in unavailable[:20]],
+            "unknown_entities": [s.entity_id for s in unknown[:20]]}
+
+
+async def _monitor_integration_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor integration health status."""
+    entries = hass.config_entries.async_entries()
+    results = {"loaded": 0, "setup_error": 0, "setup_retry": 0, "not_loaded": 0}
+    issues = []
+    for entry in entries:
+        state = str(getattr(entry, "state", ""))
+        if "loaded" in state.lower():
+            results["loaded"] += 1
+        elif "error" in state.lower():
+            results["setup_error"] += 1
+            issues.append({"domain": getattr(entry, "domain", ""), "state": state})
+        elif "retry" in state.lower():
+            results["setup_retry"] += 1
+            issues.append({"domain": getattr(entry, "domain", ""), "state": state})
+        else:
+            results["not_loaded"] += 1
+    return {"ok": True, "total": len(entries), **results, "issues": issues[:20]}
+
+
+async def _monitor_battery_fleet(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor all battery-powered devices."""
+    batteries = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "battery":
+            try:
+                level = float(s.state)
+                batteries.append({
+                    "entity_id": s.entity_id, "level": level,
+                    "friendly_name": s.attributes.get("friendly_name"),
+                })
+            except (ValueError, TypeError):
+                pass
+    batteries.sort(key=lambda x: x["level"])
+    critical = [b for b in batteries if b["level"] < 10]
+    low = [b for b in batteries if 10 <= b["level"] < 25]
+    return {"ok": True, "total": len(batteries), "critical": len(critical),
+            "low": len(low), "healthy": len(batteries) - len(critical) - len(low),
+            "devices": batteries}
+
+
+async def _routine_morning_checklist(hass: HomeAssistant) -> dict[str, Any]:
+    """Generate morning routine checklist."""
+    checklist = []
+    lights_on = sum(1 for s in hass.states.async_all("light") if s.state == "on")
+    checklist.append({"item": "Lights", "status": f"{lights_on} lights on"})
+    for s in hass.states.async_all("climate"):
+        checklist.append({"item": f"Climate {s.entity_id}", "status": s.state,
+                          "temp": s.attributes.get("current_temperature")})
+    weather = hass.states.get("weather.home") or hass.states.get("weather.forecast_home")
+    if weather:
+        checklist.append({"item": "Weather", "status": weather.state,
+                          "temp": weather.attributes.get("temperature")})
+    locks = hass.states.async_all("lock")
+    unlocked = sum(1 for s in locks if s.state != "locked")
+    checklist.append({"item": "Locks", "status": f"{unlocked} unlocked" if unlocked else "All locked"})
+    return {"ok": True, "checklist": checklist}
+
+
+async def _routine_bedtime_checklist(hass: HomeAssistant) -> dict[str, Any]:
+    """Generate bedtime routine checklist."""
+    checklist = []
+    lights_on = [s for s in hass.states.async_all("light") if s.state == "on"]
+    checklist.append({"item": "Lights to turn off", "count": len(lights_on),
+                      "entities": [s.entity_id for s in lights_on[:5]]})
+    doors_open = [s for s in hass.states.async_all("binary_sensor")
+                  if s.attributes.get("device_class") == "door" and s.state == "on"]
+    checklist.append({"item": "Doors open", "count": len(doors_open)})
+    locks = [s for s in hass.states.async_all("lock") if s.state != "locked"]
+    checklist.append({"item": "Locks to secure", "count": len(locks)})
+    media = [s for s in hass.states.async_all("media_player") if s.state == "playing"]
+    checklist.append({"item": "Media playing", "count": len(media)})
+    return {"ok": True, "checklist": checklist}
+
+
+async def _routine_away_checklist(hass: HomeAssistant) -> dict[str, Any]:
+    """Generate leaving-home checklist."""
+    checklist = []
+    lights = [s for s in hass.states.async_all("light") if s.state == "on"]
+    checklist.append({"item": "Lights on", "count": len(lights), "action": "Turn off"})
+    climate = [s for s in hass.states.async_all("climate") if s.state not in ("off", "auto")]
+    checklist.append({"item": "Climate active", "count": len(climate), "action": "Set away mode"})
+    locks = [s for s in hass.states.async_all("lock") if s.state != "locked"]
+    checklist.append({"item": "Locks unlocked", "count": len(locks), "action": "Lock all"})
+    windows = [s for s in hass.states.async_all("binary_sensor")
+               if s.attributes.get("device_class") == "window" and s.state == "on"]
+    checklist.append({"item": "Windows open", "count": len(windows), "action": "Close"})
+    return {"ok": True, "checklist": checklist}
+
+
+async def _sensor_calibration_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check sensor calibration by comparing similar sensors."""
+    groups: dict[str, list[tuple[str, float]]] = {}
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("temperature", "humidity", "pressure"):
+            try:
+                groups.setdefault(dc, []).append((s.entity_id, float(s.state)))
+            except (ValueError, TypeError):
+                pass
+    issues = []
+    for dc, sensors in groups.items():
+        if len(sensors) < 2:
+            continue
+        vals = [v for _, v in sensors]
+        mean = sum(vals) / len(vals)
+        for eid, val in sensors:
+            deviation = abs(val - mean)
+            if deviation > mean * 0.15 and deviation > 2:
+                issues.append({"entity_id": eid, "device_class": dc,
+                               "value": val, "group_mean": round(mean, 1),
+                               "deviation": round(deviation, 1)})
+    return {"ok": True, "groups_checked": len(groups), "issue_count": len(issues),
+            "issues": issues}
+
+
+async def _sensor_drift_detection(hass: HomeAssistant) -> dict[str, Any]:
+    """Detect sensors that may have drifted from calibration."""
+    now = datetime.now(timezone.utc)
+    stale = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("temperature", "humidity", "pressure", "battery"):
+            hours_since = (now - s.last_updated).total_seconds() / 3600
+            if hours_since > 12:
+                stale.append({
+                    "entity_id": s.entity_id, "device_class": dc,
+                    "hours_stale": round(hours_since, 1),
+                    "last_value": s.state,
+                })
+    stale.sort(key=lambda x: x["hours_stale"], reverse=True)
+    return {"ok": True, "count": len(stale), "stale_sensors": stale[:30]}
+
+
+async def _event_bus_listener_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Get event bus listener count."""
+    listeners = hass.bus.async_listeners()
+    if isinstance(listeners, dict):
+        sorted_listeners = dict(sorted(listeners.items(), key=lambda x: x[1], reverse=True))
+        return {"ok": True, "total_listeners": sum(listeners.values()),
+                "event_types": len(listeners), "listeners": dict(list(sorted_listeners.items())[:30])}
+    return {"ok": True, "note": "Event bus listener data not available"}
+
+
+async def _event_type_frequency(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze event type frequency from listeners."""
+    listeners = hass.bus.async_listeners()
+    if isinstance(listeners, dict):
+        top = sorted(listeners.items(), key=lambda x: x[1], reverse=True)[:20]
+        return {"ok": True, "top_events": [{"event": k, "listeners": v} for k, v in top]}
+    return {"ok": True, "note": "Event frequency data not available"}
+
+
+async def _maintenance_schedule_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check maintenance-related entities."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("filter", "maintenance", "service", "cleaning")):
+            results.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "friendly_name": s.attributes.get("friendly_name"),
+                "last_changed": str(s.last_changed),
+            })
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _maintenance_filter_reminder(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HVAC filter replacement reminders."""
+    reminders = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "filter" in name:
+            reminders.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "problem":
+            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+            if "filter" in name:
+                reminders.append({
+                    "entity_id": s.entity_id, "state": s.state,
+                    "needs_attention": s.state == "on",
+                })
+    return {"ok": True, "count": len(reminders), "filters": reminders}
+
+
+async def _connectivity_check_entities(hass: HomeAssistant) -> dict[str, Any]:
+    """Check connectivity-related entities."""
+    conn_sensors = []
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "connectivity":
+            conn_sensors.append({
+                "entity_id": s.entity_id, "state": s.state,
+                "connected": s.state == "on",
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    offline = sum(1 for c in conn_sensors if not c["connected"])
+    return {"ok": True, "total": len(conn_sensors), "online": len(conn_sensors) - offline,
+            "offline": offline, "sensors": conn_sensors}
+
+
+async def _connectivity_offline_devices(hass: HomeAssistant) -> dict[str, Any]:
+    """Find offline/unavailable devices."""
+    offline = []
+    for s in hass.states.async_all():
+        if s.state == "unavailable":
+            offline.append({
+                "entity_id": s.entity_id,
+                "last_changed": str(s.last_changed),
+                "friendly_name": s.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "offline_count": len(offline), "devices": offline[:50]}
+
+
+async def _config_yaml_validation(hass: HomeAssistant) -> dict[str, Any]:
+    """Validate key YAML config files exist."""
+    config_dir = hass.config.config_dir
+    files_to_check = ["configuration.yaml", "automations.yaml", "scenes.yaml",
+                      "scripts.yaml", "groups.yaml", "customize.yaml"]
+    results = []
+    for fname in files_to_check:
+        path = os.path.join(config_dir, fname)
+        exists = os.path.exists(path)
+        size = os.path.getsize(path) if exists else 0
+        results.append({"file": fname, "exists": exists, "size_bytes": size})
+    return {"ok": True, "config_dir": config_dir, "files": results}
+
+
+async def _config_entry_health(hass: HomeAssistant) -> dict[str, Any]:
+    """Check health of all config entries."""
+    entries = hass.config_entries.async_entries()
+    healthy = 0
+    unhealthy = []
+    for entry in entries:
+        state = str(getattr(entry, "state", ""))
+        if "loaded" in state.lower():
+            healthy += 1
+        else:
+            unhealthy.append({
+                "domain": getattr(entry, "domain", ""),
+                "title": getattr(entry, "title", ""),
+                "state": state,
+            })
+    return {"ok": True, "total": len(entries), "healthy": healthy,
+            "unhealthy": len(unhealthy), "issues": unhealthy}
+
+
+async def _dashboard_entity_suggestions(hass: HomeAssistant) -> dict[str, Any]:
+    """Suggest important entities for dashboard."""
+    suggestions = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("temperature", "humidity", "energy", "power", "battery"):
+            suggestions.append({"entity_id": s.entity_id, "category": dc,
+                                "type": "sensor"})
+    for s in hass.states.async_all("climate"):
+        suggestions.append({"entity_id": s.entity_id, "category": "climate",
+                            "type": "climate"})
+    for s in hass.states.async_all("camera"):
+        suggestions.append({"entity_id": s.entity_id, "category": "security",
+                            "type": "camera"})
+    return {"ok": True, "count": len(suggestions), "suggestions": suggestions[:50]}
+
+
+async def _dashboard_area_overview(hass: HomeAssistant) -> dict[str, Any]:
+    """Generate area-based dashboard overview."""
+    area_reg = ar.async_get(hass)
+    ent_reg = er.async_get(hass)
+    areas = {}
+    for area in area_reg.async_list_areas():
+        areas[area.id] = {"name": area.name, "entities": 0, "domains": {}}
+    for entry in ent_reg.entities.values():
+        aid = entry.area_id
+        if aid and aid in areas:
+            areas[aid]["entities"] += 1
+            domain = entry.entity_id.split(".")[0]
+            areas[aid]["domains"][domain] = areas[aid]["domains"].get(domain, 0) + 1
+    results = sorted(areas.values(), key=lambda x: x["entities"], reverse=True)
+    return {"ok": True, "area_count": len(results), "areas": results}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -43553,4 +43960,26 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "hvac_runtime_estimate", "description": "Estimate HVAC runtime based on state.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "hvac_temperature_differential", "description": "Get temp differential between target and current.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "presence_zone_population", "description": "Get population count per zone.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 85 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "optimization_lighting_schedule", "description": "Suggest lighting schedule optimizations.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "optimization_heating_schedule", "description": "Suggest heating schedule optimizations.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "optimization_energy_tariff", "description": "Analyze energy consumption by tariff periods.", "parameters": {"type": "object", "properties": {"peak_rate": {"type": "number", "default": 0.20}, "off_peak_rate": {"type": "number", "default": 0.08}}}}},
+    {"type": "function", "function": {"name": "monitor_entity_availability", "description": "Monitor entity availability status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "monitor_integration_status", "description": "Monitor integration health status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "monitor_battery_fleet", "description": "Monitor all battery-powered devices.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "routine_morning_checklist", "description": "Generate morning routine checklist.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "routine_bedtime_checklist", "description": "Generate bedtime routine checklist.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "routine_away_checklist", "description": "Generate leaving-home checklist.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "sensor_calibration_check", "description": "Check sensor calibration by comparing similar sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "sensor_drift_detection", "description": "Detect sensors that may have drifted.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "event_bus_listener_count", "description": "Get event bus listener count.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "event_type_frequency", "description": "Analyze event type frequency.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "maintenance_schedule_check", "description": "Check maintenance-related entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "maintenance_filter_reminder", "description": "Check HVAC filter replacement reminders.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "connectivity_check_entities", "description": "Check connectivity-related entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "connectivity_offline_devices", "description": "Find offline/unavailable devices.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "config_yaml_validation", "description": "Validate key YAML config files exist.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "config_entry_health", "description": "Check health of all config entries.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "dashboard_entity_suggestions", "description": "Suggest important entities for dashboard.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "dashboard_area_overview", "description": "Generate area-based dashboard overview.", "parameters": {"type": "object", "properties": {}}}},
 ]
