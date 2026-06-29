@@ -1145,7 +1145,22 @@ async def recommend_resources(
     zigbee_support: list[dict[str, Any]] = []
     tasmota_support: list[dict[str, Any]] = []
     esphome_support: list[dict[str, Any]] = []
+    native_support: list[dict[str, Any]] = []
     for brand in list(signals["manufacturers"])[:6]:
+        try:
+            nr = await search_ha_integrations(hass, brand, limit=4)
+            nat = [
+                {"domain": d["domain"], "title": d["title"],
+                 "iot_class": d["iot_class"], "url": d["url"]}
+                for d in (nr.get("results") or [])
+            ]
+            if nat:
+                native_support.append(
+                    {"brand": brand, "matched": nr.get("total_matched") or len(nat),
+                     "examples": nat[:3]}
+                )
+        except Exception:  # noqa: BLE001 - best-effort cross-check
+            pass
         try:
             zr = await search_zigbee_devices(hass, brand, limit=5)
             z2m = [
@@ -1185,6 +1200,8 @@ async def recommend_resources(
                 )
         except Exception:  # noqa: BLE001 - best-effort cross-check
             pass
+    if native_support:
+        out["native_integration_support"] = native_support
     if zigbee_support:
         out["zigbee_support"] = zigbee_support
     if tasmota_support:
