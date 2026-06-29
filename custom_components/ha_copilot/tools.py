@@ -5570,6 +5570,297 @@ async def _reset_utility_meter(
 
 
 # ---------------------------------------------------------------------------
+# Wave 4: media player, notification, presence, reload, history, registry
+# ---------------------------------------------------------------------------
+
+
+async def _media_player_control(
+    hass: HomeAssistant, entity_id: str, command: str, **kwargs: Any,
+) -> dict[str, Any]:
+    """Control a media player (play/pause/stop/next/previous/volume/source/shuffle)."""
+    valid = {
+        "play": "media_play", "pause": "media_pause", "stop": "media_stop",
+        "next": "media_next_track", "previous": "media_previous_track",
+        "volume_up": "volume_up", "volume_down": "volume_down",
+        "volume_set": "volume_set", "volume_mute": "volume_mute",
+        "select_source": "select_source", "shuffle_set": "shuffle_set",
+        "repeat_set": "repeat_set", "turn_on": "turn_on", "turn_off": "turn_off",
+    }
+    svc = valid.get(command)
+    if not svc:
+        return {"error": f"Invalid command '{command}'. Valid: {list(valid.keys())}"}
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if command == "volume_set" and "volume_level" in kwargs:
+        data["volume_level"] = float(kwargs["volume_level"])
+    if command == "volume_mute" and "is_volume_muted" in kwargs:
+        data["is_volume_muted"] = bool(kwargs["is_volume_muted"])
+    if command == "select_source" and "source" in kwargs:
+        data["source"] = kwargs["source"]
+    if command == "shuffle_set" and "shuffle" in kwargs:
+        data["shuffle"] = bool(kwargs["shuffle"])
+    if command == "repeat_set" and "repeat" in kwargs:
+        data["repeat"] = kwargs["repeat"]
+    try:
+        await hass.services.async_call(
+            "media_player", svc, data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"media_player.{svc} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _list_media_players(hass: HomeAssistant) -> dict[str, Any]:
+    """List all media_player entities with status."""
+    states = hass.states.async_all("media_player")
+    items = []
+    for s in states:
+        items.append({
+            "entity_id": s.entity_id,
+            "state": s.state,
+            "friendly_name": s.attributes.get("friendly_name", ""),
+            "source": s.attributes.get("source"),
+            "volume_level": s.attributes.get("volume_level"),
+            "media_title": s.attributes.get("media_title"),
+            "source_list": s.attributes.get("source_list"),
+        })
+    return {"ok": True, "count": len(items), "players": items}
+
+
+async def _send_mobile_notification(
+    hass: HomeAssistant, target: str, message: str, title: str | None = None,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send a rich mobile push notification (supports actions/images/channels)."""
+    svc_data: dict[str, Any] = {"message": message}
+    if title:
+        svc_data["title"] = title
+    if data:
+        svc_data["data"] = data
+    try:
+        await hass.services.async_call(
+            "notify", target, svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"notify.{target} failed: {exc}"}
+    return {"ok": True, "target": target, "message": message[:80]}
+
+
+async def _get_person_location(
+    hass: HomeAssistant, person_id: str | None = None,
+) -> dict[str, Any]:
+    """Get location of a person or all persons."""
+    states = hass.states.async_all("person")
+    if person_id:
+        states = [s for s in states if s.entity_id == person_id or
+                  s.entity_id == f"person.{person_id}"]
+    persons = []
+    for s in states:
+        persons.append({
+            "entity_id": s.entity_id,
+            "state": s.state,
+            "friendly_name": s.attributes.get("friendly_name", ""),
+            "latitude": s.attributes.get("latitude"),
+            "longitude": s.attributes.get("longitude"),
+            "gps_accuracy": s.attributes.get("gps_accuracy"),
+            "source": s.attributes.get("source"),
+        })
+    return {"ok": True, "count": len(persons), "persons": persons}
+
+
+async def _list_device_trackers(hass: HomeAssistant) -> dict[str, Any]:
+    """List all device_tracker entities with state and location."""
+    states = hass.states.async_all("device_tracker")
+    trackers = []
+    for s in states:
+        trackers.append({
+            "entity_id": s.entity_id,
+            "state": s.state,
+            "friendly_name": s.attributes.get("friendly_name", ""),
+            "source_type": s.attributes.get("source_type"),
+            "latitude": s.attributes.get("latitude"),
+            "longitude": s.attributes.get("longitude"),
+            "battery_level": s.attributes.get("battery_level"),
+        })
+    return {"ok": True, "count": len(trackers), "trackers": trackers}
+
+
+async def _reload_yaml(hass: HomeAssistant, target: str = "all") -> dict[str, Any]:
+    """Reload YAML-based config (automations/scripts/scenes/groups/all)."""
+    valid = ["automation", "script", "scene", "group", "input_boolean",
+             "input_number", "input_text", "input_select", "input_datetime",
+             "template", "all"]
+    if target not in valid:
+        return {"error": f"Invalid target '{target}'. Valid: {valid}"}
+    reloaded = []
+    targets = valid[:-1] if target == "all" else [target]
+    for t in targets:
+        try:
+            await hass.services.async_call(
+                t, "reload", {}, blocking=True,
+            )
+            reloaded.append(t)
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ok": True, "reloaded": reloaded, "count": len(reloaded)}
+
+
+async def _reload_all_integrations(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload all config entries (integrations)."""
+    try:
+        entries = hass.config_entries.async_entries()
+        reloaded = []
+        for entry in entries[:50]:
+            try:
+                await hass.config_entries.async_reload(entry.entry_id)
+                reloaded.append(entry.domain)
+            except Exception:  # noqa: BLE001
+                pass
+        return {"ok": True, "reloaded": reloaded, "count": len(reloaded)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reload all integrations failed: {exc}"}
+
+
+async def _get_entity_history_summary(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get summarized history for a single entity (state changes + duration)."""
+    from datetime import timedelta
+    from homeassistant.util import dt as dt_util
+    end = dt_util.utcnow()
+    start = end - timedelta(hours=hours)
+    try:
+        from homeassistant.components.recorder import history
+        hist = await hass.async_add_executor_job(
+            history.state_changes_during_period, hass, start, end, entity_id,
+        )
+        states_list = hist.get(entity_id, [])
+        changes = []
+        for s in states_list[-50:]:
+            changes.append({
+                "state": s.state,
+                "changed": s.last_changed.isoformat() if s.last_changed else None,
+            })
+        return {
+            "ok": True, "entity_id": entity_id,
+            "period_hours": hours,
+            "total_changes": len(states_list),
+            "recent_changes": changes,
+        }
+    except Exception as exc:  # noqa: BLE001
+        state = hass.states.get(entity_id)
+        if not state:
+            return {"error": f"Entity {entity_id} not found"}
+        return {
+            "ok": True, "entity_id": entity_id,
+            "note": f"Recorder unavailable ({exc}); showing current state only",
+            "current_state": state.state,
+            "last_changed": state.last_changed.isoformat() if state.last_changed else None,
+        }
+
+
+async def _get_entity_logbook(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get filtered logbook entries for a specific entity."""
+    from datetime import timedelta
+    from homeassistant.util import dt as dt_util
+    end = dt_util.utcnow()
+    start = end - timedelta(hours=hours)
+    try:
+        from homeassistant.components.logbook import async_log_entries
+        entries = await async_log_entries(
+            hass, start, end, entity_ids=[entity_id],
+        )
+        items = [{"name": e.get("name"), "message": e.get("message"),
+                  "when": e.get("when")} for e in entries[:50]]
+        return {"ok": True, "entity_id": entity_id, "count": len(items), "entries": items}
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": True, "entity_id": entity_id,
+            "note": f"Logbook unavailable ({exc}); use get_history instead",
+            "entries": [],
+        }
+
+
+async def _get_states_by_domain(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Get all entity states in a specific domain with full attributes."""
+    states = hass.states.async_all(domain)
+    if not states:
+        return {"ok": True, "domain": domain, "count": 0, "entities": []}
+    entities = []
+    for s in states:
+        entities.append({
+            "entity_id": s.entity_id,
+            "state": s.state,
+            "attributes": dict(s.attributes),
+            "last_changed": s.last_changed.isoformat() if s.last_changed else None,
+        })
+    return {"ok": True, "domain": domain, "count": len(entities), "entities": entities}
+
+
+async def _get_nearest_person(
+    hass: HomeAssistant, zone: str = "home",
+) -> dict[str, Any]:
+    """Find the nearest person to a zone."""
+    zone_state = hass.states.get(f"zone.{zone}") if not zone.startswith("zone.") else hass.states.get(zone)
+    if not zone_state:
+        return {"error": f"Zone '{zone}' not found"}
+    zone_lat = zone_state.attributes.get("latitude")
+    zone_lon = zone_state.attributes.get("longitude")
+    if zone_lat is None or zone_lon is None:
+        return {"error": f"Zone '{zone}' has no coordinates"}
+    persons = hass.states.async_all("person")
+    results = []
+    for p in persons:
+        lat = p.attributes.get("latitude")
+        lon = p.attributes.get("longitude")
+        if lat is not None and lon is not None:
+            dist = ((float(lat) - float(zone_lat)) ** 2 + (float(lon) - float(zone_lon)) ** 2) ** 0.5
+            results.append({
+                "entity_id": p.entity_id,
+                "friendly_name": p.attributes.get("friendly_name", ""),
+                "state": p.state,
+                "distance_approx": round(dist * 111, 2),
+            })
+    results.sort(key=lambda x: x["distance_approx"])
+    return {"ok": True, "zone": zone, "count": len(results), "persons": results}
+
+
+async def _assign_device_label(
+    hass: HomeAssistant, device_id: str, labels: list[str],
+) -> dict[str, Any]:
+    """Assign labels to a device."""
+    try:
+        from homeassistant.helpers import device_registry as dr
+        registry = dr.async_get(hass)
+        device = registry.async_get(device_id)
+        if not device:
+            return {"error": f"Device '{device_id}' not found"}
+        registry.async_update_device(device_id, labels=set(labels))
+        return {"ok": True, "device_id": device_id, "labels": labels}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Assign device label failed: {exc}"}
+
+
+async def _get_image_url(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get the URL/path of an image entity."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Entity '{entity_id}' not found"}
+    url = state.attributes.get("entity_picture") or state.attributes.get("url")
+    return {
+        "ok": True, "entity_id": entity_id,
+        "image_url": url,
+        "state": state.state,
+        "access_token": state.attributes.get("access_token"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -7114,6 +7405,56 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _reset_utility_meter(hass, args.get("entity_id", ""))
+        # --- Wave 4 dispatch ---
+        if name == "media_player_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            extra = {k: v for k, v in args.items() if k not in ("entity_id", "command")}
+            return await _media_player_control(
+                hass, args.get("entity_id", ""), args.get("command", ""), **extra,
+            )
+        if name == "list_media_players":
+            return await _list_media_players(hass)
+        if name == "send_mobile_notification":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _send_mobile_notification(
+                hass, args.get("target", "mobile_app"),
+                args.get("message", ""), args.get("title"),
+                args.get("data"),
+            )
+        if name == "get_person_location":
+            return await _get_person_location(hass, args.get("person_id"))
+        if name == "list_device_trackers":
+            return await _list_device_trackers(hass)
+        if name == "reload_yaml":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reload_yaml(hass, args.get("target", "all"))
+        if name == "reload_all_integrations":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reload_all_integrations(hass)
+        if name == "get_entity_history_summary":
+            return await _get_entity_history_summary(
+                hass, args.get("entity_id", ""), int(args.get("hours", 24)),
+            )
+        if name == "get_entity_logbook":
+            return await _get_entity_logbook(
+                hass, args.get("entity_id", ""), int(args.get("hours", 24)),
+            )
+        if name == "get_states_by_domain":
+            return await _get_states_by_domain(hass, args.get("domain", ""))
+        if name == "get_nearest_person":
+            return await _get_nearest_person(hass, args.get("zone", "home"))
+        if name == "assign_device_label":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _assign_device_label(
+                hass, args.get("device_id", ""), args.get("labels", []),
+            )
+        if name == "get_image_url":
+            return await _get_image_url(hass, args.get("entity_id", ""))
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -9204,6 +9545,178 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "reset_utility_meter",
             "description": "Reset a utility meter sensor to zero.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 4 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_control",
+            "description": "Control a media player: play/pause/stop/next/previous/volume_set/volume_up/volume_down/volume_mute/select_source/shuffle_set/repeat_set/turn_on/turn_off.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "media_player entity"},
+                    "command": {"type": "string", "description": "Command: play|pause|stop|next|previous|volume_set|volume_up|volume_down|volume_mute|select_source|shuffle_set|repeat_set|turn_on|turn_off"},
+                    "volume_level": {"type": "number", "description": "Volume 0.0-1.0 (for volume_set)"},
+                    "is_volume_muted": {"type": "boolean", "description": "Mute state (for volume_mute)"},
+                    "source": {"type": "string", "description": "Source name (for select_source)"},
+                    "shuffle": {"type": "boolean", "description": "Shuffle on/off (for shuffle_set)"},
+                    "repeat": {"type": "string", "description": "Repeat mode: off|one|all (for repeat_set)"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_media_players",
+            "description": "List all media_player entities with state, source, volume, and media info.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_mobile_notification",
+            "description": "Send a rich mobile push notification with optional actions, images, and channels.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target": {"type": "string", "description": "Notify service target (e.g. mobile_app_phone)"},
+                    "message": {"type": "string", "description": "Notification body"},
+                    "title": {"type": "string", "description": "Notification title"},
+                    "data": {"type": "object", "description": "Extra data (actions, image, channel, etc.)"},
+                },
+                "required": ["target", "message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_person_location",
+            "description": "Get location of a person or all persons (state, coordinates, source).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "person_id": {"type": "string", "description": "Person entity_id (optional, omit for all)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_device_trackers",
+            "description": "List all device_tracker entities with state, source_type, and location.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_yaml",
+            "description": "Reload YAML-based configuration (automations/scripts/scenes/groups/inputs/all).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target": {"type": "string", "description": "What to reload: automation|script|scene|group|input_boolean|input_number|input_text|input_select|input_datetime|template|all"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_all_integrations",
+            "description": "Reload all config entries (integrations) sequentially.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_entity_history_summary",
+            "description": "Get summarized state change history for a single entity over a period.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "hours": {"type": "integer", "description": "Lookback period in hours (default 24)"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_entity_logbook",
+            "description": "Get filtered logbook entries for a specific entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "hours": {"type": "integer", "description": "Lookback period in hours (default 24)"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_states_by_domain",
+            "description": "Get all entity states in a specific domain with full attributes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string", "description": "HA domain (e.g. light, sensor, climate)"},
+                },
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_nearest_person",
+            "description": "Find the nearest person to a zone (approximate geodesic distance).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "zone": {"type": "string", "description": "Zone name (default: home)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_device_label",
+            "description": "Assign labels to a device in the device registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device_id": {"type": "string"},
+                    "labels": {"type": "array", "items": {"type": "string"}, "description": "List of label names"},
+                },
+                "required": ["device_id", "labels"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_image_url",
+            "description": "Get the URL/path of an image entity (camera still, generic image).",
             "parameters": {
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
