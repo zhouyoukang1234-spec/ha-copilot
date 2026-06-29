@@ -22994,6 +22994,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _label_registry_check(hass)
         if name == "floor_registry_check":
             return await _floor_registry_check(hass)
+        # --- Wave 122 dispatch (MILESTONE 2100+) ---
+        if name == "health_score_check":
+            return await _health_score_check(hass)
+        if name == "sleep_tracker_status":
+            return await _sleep_tracker_status(hass)
+        if name == "weight_tracker_status":
+            return await _weight_tracker_status(hass)
+        if name == "activity_tracker_status":
+            return await _activity_tracker_status(hass)
+        if name == "step_counter_check":
+            return await _step_counter_check(hass)
+        if name == "calories_burned_check":
+            return await _calories_burned_check(hass)
+        if name == "hydration_tracker":
+            return await _hydration_tracker(hass)
+        if name == "medication_tracker":
+            return await _medication_tracker(hass)
+        if name == "allergy_tracker":
+            return await _allergy_tracker(hass)
+        if name == "indoor_air_quality_deep":
+            return await _indoor_air_quality_deep(hass)
+        if name == "uv_exposure_check":
+            return await _uv_exposure_check(hass)
+        if name == "ergonomic_status":
+            return await _ergonomic_status(hass)
+        if name == "eye_strain_check":
+            return await _eye_strain_check(hass)
+        if name == "posture_monitor":
+            return await _posture_monitor(hass)
+        if name == "stress_level_check":
+            return await _stress_level_check(hass)
+        if name == "mood_wellbeing_check":
+            return await _mood_wellbeing_check(hass)
+        if name == "nutrition_tracker":
+            return await _nutrition_tracker(hass)
+        if name == "fitness_goal_check":
+            return await _fitness_goal_check(hass)
+        if name == "body_temperature_check":
+            return await _body_temperature_check(hass)
+        if name == "oxygen_saturation_check":
+            return await _oxygen_saturation_check(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -43735,6 +43776,242 @@ async def _floor_registry_check(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "floor_count": len(floors), "floors": list(floors)}
 
 
+# ---------------------------------------------------------------------------
+# Wave 122 — MILESTONE 2100+ — health/wellness deep: health score, sleep,
+# weight, activity, steps, calories, hydration, medication, allergy,
+# indoor air quality, UV, ergonomic, eye strain, posture, stress, mood,
+# nutrition, fitness goal, body temp, oxygen saturation
+# ---------------------------------------------------------------------------
+
+
+async def _health_score_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check health score."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "health" in name and ("score" in name or "index" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _sleep_tracker_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check sleep tracker."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "sleep" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _weight_tracker_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check weight tracker."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc == "weight" or "weight" in name and ("kg" in name or "lbs" in name or "scale" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _activity_tracker_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check activity tracker."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "activity" in name or "workout" in name or "exercise" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _step_counter_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check step counter."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "step" in name and ("count" in name or "total" in name or "daily" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _calories_burned_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check calories burned."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "calor" in name and ("burn" in name or "total" in name or "active" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _hydration_tracker(hass: HomeAssistant) -> dict[str, Any]:
+    """Check hydration tracker."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "hydration" in name or "water_intake" in name or "water intake" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _medication_tracker(hass: HomeAssistant) -> dict[str, Any]:
+    """Check medication tracker."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "medication" in name or "medicine" in name or "pill" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _allergy_tracker(hass: HomeAssistant) -> dict[str, Any]:
+    """Check allergy tracker."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "allergy" in name or "allergen" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _indoor_air_quality_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """Check indoor air quality deep."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("aqi", "pm25", "pm10", "carbon_dioxide", "volatile_organic_compounds"):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "device_class": dc,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _uv_exposure_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check UV exposure."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "uv" in name and ("index" in name or "exposure" in name or "level" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _ergonomic_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check ergonomic status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "ergonomic" in name or "ergo" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _eye_strain_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check eye strain."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "eye" in name and ("strain" in name or "fatigue" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _posture_monitor(hass: HomeAssistant) -> dict[str, Any]:
+    """Check posture monitor."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "posture" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _stress_level_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check stress level."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "stress" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _mood_wellbeing_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check mood/wellbeing."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "mood" in name or "wellbeing" in name or "well_being" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _nutrition_tracker(hass: HomeAssistant) -> dict[str, Any]:
+    """Check nutrition tracker."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "nutrition" in name or "nutrient" in name or "diet" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _fitness_goal_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check fitness goals."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "fitness" in name and "goal" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _body_temperature_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check body temperature."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "body" in name and ("temp" in name or "fever" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _oxygen_saturation_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check oxygen saturation."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "oxygen" in name or "spo2" in name or "o2" in name and "satur" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -56494,4 +56771,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "area_registry_deep", "description": "Area registry deep.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "label_registry_check", "description": "Label registry.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "floor_registry_check", "description": "Floor registry.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 122 TOOL_SPECS (MILESTONE 2100+) ---
+    {"type": "function", "function": {"name": "health_score_check", "description": "Health score.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "sleep_tracker_status", "description": "Sleep tracker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "weight_tracker_status", "description": "Weight tracker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "activity_tracker_status", "description": "Activity tracker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "step_counter_check", "description": "Step counter.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "calories_burned_check", "description": "Calories burned.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "hydration_tracker", "description": "Hydration tracker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "medication_tracker", "description": "Medication tracker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "allergy_tracker", "description": "Allergy tracker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "indoor_air_quality_deep", "description": "Indoor air quality deep.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "uv_exposure_check", "description": "UV exposure.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ergonomic_status", "description": "Ergonomic status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "eye_strain_check", "description": "Eye strain.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "posture_monitor", "description": "Posture monitor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "stress_level_check", "description": "Stress level.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mood_wellbeing_check", "description": "Mood/wellbeing.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "nutrition_tracker", "description": "Nutrition tracker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "fitness_goal_check", "description": "Fitness goals.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "body_temperature_check", "description": "Body temperature.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "oxygen_saturation_check", "description": "Oxygen saturation.", "parameters": {"type": "object", "properties": {}}}},
 ]
