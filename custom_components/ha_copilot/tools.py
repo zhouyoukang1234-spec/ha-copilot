@@ -8339,6 +8339,270 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 38: wake word, assist satellite, media player browse, scene snapshot,
+#           input select first/last, automation context, script vars, system
+#           location, config entry get/list, area get, integration manifests,
+#           service call generic
+# ---------------------------------------------------------------------------
+
+
+async def _wake_word_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List wake word engines."""
+    try:
+        states = hass.states.async_all("wake_word")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "wake_words": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Wake word list failed: {exc}"}
+
+
+async def _assist_satellite_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List assist satellite entities."""
+    try:
+        states = hass.states.async_all("assist_satellite")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
+            for s in states
+        ]
+        return {"ok": True, "satellites": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Assist satellite list failed: {exc}"}
+
+
+async def _assist_satellite_intercept(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Intercept assist satellite for manual handling."""
+    try:
+        await hass.services.async_call(
+            "assist_satellite", "intercept",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Assist satellite intercept failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "intercepted"}
+
+
+async def _media_player_browse_media(
+    hass: HomeAssistant, entity_id: str,
+    media_content_type: str | None = None,
+    media_content_id: str | None = None,
+) -> dict[str, Any]:
+    """Browse media on a media player."""
+    try:
+        from homeassistant.components.media_player import async_browse_media
+        result = await async_browse_media(
+            hass, entity_id, media_content_type, media_content_id,
+        )
+        children = []
+        if hasattr(result, "children") and result.children:
+            children = [
+                {"title": c.title, "media_content_type": c.media_content_type,
+                 "media_content_id": c.media_content_id}
+                for c in result.children[:50]
+            ]
+        return {
+            "ok": True, "entity_id": entity_id,
+            "title": getattr(result, "title", ""),
+            "children": children,
+        }
+    except ImportError:
+        return {"error": "media_player browse not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player browse media failed: {exc}"}
+
+
+async def _scene_create_snapshot(
+    hass: HomeAssistant, entity_ids: list[str],
+    scene_id: str,
+) -> dict[str, Any]:
+    """Create a scene snapshot from current entity states."""
+    try:
+        await hass.services.async_call(
+            "scene", "create",
+            {"scene_id": scene_id, "snapshot_entities": entity_ids},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Scene create snapshot failed: {exc}"}
+    return {"ok": True, "scene_id": scene_id, "action": "snapshot_created"}
+
+
+async def _input_select_set_first(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Set input_select to first option."""
+    try:
+        await hass.services.async_call(
+            "input_select", "select_first",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input select set first failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "set_first"}
+
+
+async def _input_select_set_last(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Set input_select to last option."""
+    try:
+        await hass.services.async_call(
+            "input_select", "select_last",
+            {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input select set last failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "set_last"}
+
+
+async def _automation_trigger_with_context(
+    hass: HomeAssistant, entity_id: str,
+    skip_condition: bool = False,
+    context_user_id: str | None = None,
+) -> dict[str, Any]:
+    """Trigger automation with context options."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if skip_condition:
+        data["skip_condition"] = True
+    try:
+        from homeassistant.core import Context
+        ctx = Context(user_id=context_user_id) if context_user_id else None
+        await hass.services.async_call(
+            "automation", "trigger", data, blocking=True, context=ctx,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation trigger with context failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "triggered"}
+
+
+async def _script_turn_on_with_variables(
+    hass: HomeAssistant, entity_id: str,
+    variables: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Turn on a script with variables."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if variables:
+        data["variables"] = variables
+    try:
+        await hass.services.async_call(
+            "script", "turn_on", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script turn on with variables failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turned_on"}
+
+
+async def _system_set_location(
+    hass: HomeAssistant, latitude: float, longitude: float,
+    elevation: int | None = None,
+) -> dict[str, Any]:
+    """Set system location."""
+    try:
+        await hass.services.async_call(
+            "homeassistant", "set_location",
+            {"latitude": latitude, "longitude": longitude,
+             **({"elevation": elevation} if elevation is not None else {})},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System set location failed: {exc}"}
+    return {"ok": True, "latitude": latitude, "longitude": longitude, "action": "location_set"}
+
+
+async def _config_entry_get(
+    hass: HomeAssistant, entry_id: str,
+) -> dict[str, Any]:
+    """Get config entry details."""
+    try:
+        for entry in hass.config_entries.async_entries():
+            eid = getattr(entry, "entry_id", None)
+            if eid == entry_id:
+                return {
+                    "ok": True, "entry_id": eid,
+                    "domain": getattr(entry, "domain", ""),
+                    "title": getattr(entry, "title", ""),
+                    "state": str(getattr(entry, "state", "")),
+                }
+        return {"error": f"Config entry {entry_id} not found"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config entry get failed: {exc}"}
+
+
+async def _config_entry_list_by_domain(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """List config entries for a domain."""
+    try:
+        entries = [
+            {
+                "entry_id": getattr(e, "entry_id", ""),
+                "title": getattr(e, "title", ""),
+                "state": str(getattr(e, "state", "")),
+            }
+            for e in hass.config_entries.async_entries()
+            if getattr(e, "domain", "") == domain
+        ]
+        return {"ok": True, "domain": domain, "entries": entries[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config entry list by domain failed: {exc}"}
+
+
+async def _area_get(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Get area details."""
+    try:
+        from homeassistant.helpers.area_registry import async_get
+        registry = async_get(hass)
+        area = registry.async_get_area(area_id)
+        if area is None:
+            return {"error": f"Area {area_id} not found"}
+        return {
+            "ok": True, "id": area.id, "name": area.name,
+            "floor_id": getattr(area, "floor_id", None),
+            "icon": getattr(area, "icon", None),
+        }
+    except ImportError:
+        return {"error": "area_registry not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Area get failed: {exc}"}
+
+
+async def _integration_manifests(hass: HomeAssistant) -> dict[str, Any]:
+    """List integration manifests."""
+    try:
+        from homeassistant.loader import async_get_integrations
+        integrations = await async_get_integrations(hass, set())
+        result = [
+            {"domain": k, "name": getattr(v, "name", "")}
+            for k, v in list(integrations.items())[:100]
+        ]
+        return {"ok": True, "integrations": result}
+    except ImportError:
+        return {"error": "loader not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Integration manifests failed: {exc}"}
+
+
+async def _service_call_generic(
+    hass: HomeAssistant, domain: str, service: str,
+    service_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Call any HA service generically."""
+    try:
+        await hass.services.async_call(
+            domain, service, service_data or {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Service call {domain}.{service} failed: {exc}"}
+    return {"ok": True, "domain": domain, "service": service, "action": "called"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 37: todo, datetime, template advanced, tag, person, sun, weather
 #           forecast, zone, logbook, network adapters
 # ---------------------------------------------------------------------------
@@ -13468,6 +13732,84 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 38 dispatch ---
+        if name == "wake_word_list":
+            return await _wake_word_list(hass)
+        if name == "assist_satellite_list":
+            return await _assist_satellite_list(hass)
+        if name == "assist_satellite_intercept":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _assist_satellite_intercept(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "media_player_browse_media":
+            return await _media_player_browse_media(
+                hass, args.get("entity_id", ""),
+                args.get("media_content_type"),
+                args.get("media_content_id"),
+            )
+        if name == "scene_create_snapshot":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _scene_create_snapshot(
+                hass, args.get("entity_ids", []),
+                args.get("scene_id", ""),
+            )
+        if name == "input_select_set_first":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_select_set_first(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "input_select_set_last":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_select_set_last(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "automation_trigger_with_context":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_trigger_with_context(
+                hass, args.get("entity_id", ""),
+                bool(args.get("skip_condition", False)),
+                args.get("context_user_id"),
+            )
+        if name == "script_turn_on_with_variables":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _script_turn_on_with_variables(
+                hass, args.get("entity_id", ""),
+                args.get("variables"),
+            )
+        if name == "system_set_location":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _system_set_location(
+                hass, float(args.get("latitude", 0)),
+                float(args.get("longitude", 0)),
+                args.get("elevation"),
+            )
+        if name == "config_entry_get":
+            return await _config_entry_get(
+                hass, args.get("entry_id", ""),
+            )
+        if name == "config_entry_list_by_domain":
+            return await _config_entry_list_by_domain(
+                hass, args.get("domain", ""),
+            )
+        if name == "area_get":
+            return await _area_get(hass, args.get("area_id", ""))
+        if name == "integration_manifests":
+            return await _integration_manifests(hass)
+        if name == "service_call_generic":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _service_call_generic(
+                hass, args.get("domain", ""), args.get("service", ""),
+                args.get("service_data"),
+            )
         # --- Wave 37 dispatch ---
         if name == "todo_list_items":
             return await _todo_list_items(
@@ -18978,6 +19320,197 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 38 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "wake_word_list",
+            "description": "List wake word engines.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assist_satellite_list",
+            "description": "List assist satellite entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assist_satellite_intercept",
+            "description": "Intercept assist satellite for manual handling.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_browse_media",
+            "description": "Browse media on a media player.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "media_content_type": {"type": "string"},
+                    "media_content_id": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scene_create_snapshot",
+            "description": "Create a scene snapshot from current entity states.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_ids": {"type": "array", "items": {"type": "string"}},
+                    "scene_id": {"type": "string"},
+                },
+                "required": ["entity_ids", "scene_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_select_set_first",
+            "description": "Set input_select to first option.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_select_set_last",
+            "description": "Set input_select to last option.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_trigger_with_context",
+            "description": "Trigger automation with context options.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "skip_condition": {"type": "boolean"},
+                    "context_user_id": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "script_turn_on_with_variables",
+            "description": "Turn on a script with variables.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "variables": {"type": "object"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_set_location",
+            "description": "Set system location.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "latitude": {"type": "number"},
+                    "longitude": {"type": "number"},
+                    "elevation": {"type": "integer"},
+                },
+                "required": ["latitude", "longitude"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_get",
+            "description": "Get config entry details.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entry_id": {"type": "string"}},
+                "required": ["entry_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_list_by_domain",
+            "description": "List config entries for a domain.",
+            "parameters": {
+                "type": "object",
+                "properties": {"domain": {"type": "string"}},
+                "required": ["domain"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_get",
+            "description": "Get area details.",
+            "parameters": {
+                "type": "object",
+                "properties": {"area_id": {"type": "string"}},
+                "required": ["area_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_manifests",
+            "description": "List integration manifests.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "service_call_generic",
+            "description": "Call any HA service generically.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string"},
+                    "service": {"type": "string"},
+                    "service_data": {"type": "object"},
+                },
+                "required": ["domain", "service"],
             },
         },
     },
