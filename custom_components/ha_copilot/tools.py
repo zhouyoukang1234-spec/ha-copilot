@@ -22625,6 +22625,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _security_audit_summary(hass)
         if name == "sensor_stale_check":
             return await _sensor_stale_check(hass)
+        # --- Wave 113 dispatch ---
+        if name == "flood_sensor_check":
+            return await _flood_sensor_check(hass)
+        if name == "earthquake_sensor_check":
+            return await _earthquake_sensor_check(hass)
+        if name == "lightning_sensor_check":
+            return await _lightning_sensor_check(hass)
+        if name == "solar_radiation_check":
+            return await _solar_radiation_check(hass)
+        if name == "wind_gust_check":
+            return await _wind_gust_check(hass)
+        if name == "wind_direction_check":
+            return await _wind_direction_check(hass)
+        if name == "precipitation_forecast":
+            return await _precipitation_forecast(hass)
+        if name == "storm_forecast_check":
+            return await _storm_forecast_check(hass)
+        if name == "frost_warning_check":
+            return await _frost_warning_check(hass)
+        if name == "heat_warning_check":
+            return await _heat_warning_check(hass)
+        if name == "air_quality_forecast":
+            return await _air_quality_forecast(hass)
+        if name == "plant_growth_condition":
+            return await _plant_growth_condition(hass)
+        if name == "soil_temperature_check":
+            return await _soil_temperature_check(hass)
+        if name == "greenhouse_status":
+            return await _greenhouse_status(hass)
+        if name == "bird_feeder_status":
+            return await _bird_feeder_status(hass)
+        if name == "fish_tank_status":
+            return await _fish_tank_status(hass)
+        if name == "reptile_room_status":
+            return await _reptile_room_status(hass)
+        if name == "pet_door_status":
+            return await _pet_door_status(hass)
+        if name == "smart_kennel_status":
+            return await _smart_kennel_status(hass)
+        if name == "compost_bin_status":
+            return await _compost_bin_status(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -41161,6 +41202,267 @@ async def _sensor_stale_check(hass: HomeAssistant) -> dict[str, Any]:
             "sensors": sorted(stale, key=lambda x: x["hours_stale"], reverse=True)[:20]}
 
 
+# ---------------------------------------------------------------------------
+# Wave 113 — extreme weather, nature/garden/pet: flood, earthquake, lightning,
+# solar radiation, wind gust/direction, precipitation/storm forecast,
+# frost/heat warning, air quality forecast, plant growth, soil temp,
+# greenhouse, bird feeder, fish tank, reptile room, pet door, kennel, compost
+# ---------------------------------------------------------------------------
+
+
+async def _flood_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check flood sensor."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "flood" in name or (s.attributes.get("device_class") == "moisture" and "flood" in s.entity_id):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "flooding": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _earthquake_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check earthquake sensor."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "earthquake" in name or "seismic" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _lightning_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check lightning sensor."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "lightning" in name or "thunder" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _solar_radiation_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check solar radiation."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if "solar_radiation" in name or "irradiance" in name or dc == "irradiance":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _wind_gust_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check wind gust."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if "wind" in name and "gust" in name or dc == "wind_speed":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _wind_direction_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check wind direction."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "wind" in name and "direction" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _precipitation_forecast(hass: HomeAssistant) -> dict[str, Any]:
+    """Check precipitation forecast."""
+    results = []
+    for s in hass.states.async_all("weather"):
+        forecast = s.attributes.get("forecast", [])
+        precip_entries = []
+        for entry in (forecast[:5] if isinstance(forecast, list) else []):
+            if isinstance(entry, dict) and entry.get("precipitation"):
+                precip_entries.append(entry)
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "precipitation_forecast": precip_entries[:3],
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "forecasts": results}
+
+
+async def _storm_forecast_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check storm forecast."""
+    results = []
+    for s in hass.states.async_all("weather"):
+        condition = s.state
+        storm_conditions = ("lightning", "lightning-rainy", "hail",
+                            "exceptional", "tornado")
+        is_storm = condition in storm_conditions
+        results.append({"entity_id": s.entity_id, "condition": condition,
+                        "is_storm": is_storm,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "forecasts": results}
+
+
+async def _frost_warning_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check frost warning."""
+    frost_risk = False
+    temps = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "temperature":
+            try:
+                val = float(s.state)
+                temps.append({"entity_id": s.entity_id, "temp": val,
+                              "friendly_name": s.attributes.get("friendly_name")})
+                if val < 2:
+                    frost_risk = True
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "frost_risk": frost_risk,
+            "sensor_count": len(temps), "sensors": temps[:10]}
+
+
+async def _heat_warning_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check heat warning."""
+    heat_risk = False
+    temps = []
+    for s in hass.states.async_all("sensor"):
+        if s.attributes.get("device_class") == "temperature":
+            try:
+                val = float(s.state)
+                temps.append({"entity_id": s.entity_id, "temp": val,
+                              "friendly_name": s.attributes.get("friendly_name")})
+                if val > 35:
+                    heat_risk = True
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "heat_risk": heat_risk,
+            "sensor_count": len(temps), "sensors": temps[:10]}
+
+
+async def _air_quality_forecast(hass: HomeAssistant) -> dict[str, Any]:
+    """Check air quality forecast."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        dc = s.attributes.get("device_class", "")
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if dc == "aqi" or "air_quality" in name or "aqi" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _plant_growth_condition(hass: HomeAssistant) -> dict[str, Any]:
+    """Check plant growth conditions."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if any(kw in name for kw in ("plant", "soil", "moisture")) or dc == "moisture":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _soil_temperature_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check soil temperature."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "soil" in name and ("temp" in name or s.attributes.get("device_class") == "temperature"):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _greenhouse_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check greenhouse status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "greenhouse" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _bird_feeder_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check bird feeder status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "bird" in name and ("feeder" in name or "feed" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _fish_tank_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check fish tank status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "fish" in name or "aquarium" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _reptile_room_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check reptile room status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "reptile" in name or "terrarium" in name or "vivarium" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _pet_door_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check pet door status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "pet" in name and "door" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_kennel_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart kennel status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "kennel" in name or "doghouse" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _compost_bin_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check compost bin status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "compost" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -53731,4 +54033,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "network_anomaly_check", "description": "Network anomaly check.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "security_audit_summary", "description": "Security audit summary.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "sensor_stale_check", "description": "Stale sensor check.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 113 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "flood_sensor_check", "description": "Check flood sensor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "earthquake_sensor_check", "description": "Check earthquake sensor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "lightning_sensor_check", "description": "Check lightning sensor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "solar_radiation_check", "description": "Check solar radiation.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "wind_gust_check", "description": "Check wind gusts.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "wind_direction_check", "description": "Check wind direction.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "precipitation_forecast", "description": "Precipitation forecast.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "storm_forecast_check", "description": "Storm forecast.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "frost_warning_check", "description": "Frost warning.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "heat_warning_check", "description": "Heat warning.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "air_quality_forecast", "description": "Air quality forecast.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "plant_growth_condition", "description": "Plant growth conditions.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "soil_temperature_check", "description": "Check soil temp.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "greenhouse_status", "description": "Greenhouse status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "bird_feeder_status", "description": "Bird feeder status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "fish_tank_status", "description": "Fish tank status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "reptile_room_status", "description": "Reptile room status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pet_door_status", "description": "Pet door status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_kennel_status", "description": "Smart kennel status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "compost_bin_status", "description": "Compost bin status.", "parameters": {"type": "object", "properties": {}}}},
 ]
