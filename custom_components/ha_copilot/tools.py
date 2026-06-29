@@ -22789,6 +22789,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _greywater_system_status(hass)
         if name == "water_softener_status":
             return await _water_softener_status(hass)
+        # --- Wave 117 dispatch (MILESTONE 2000+) ---
+        if name == "access_control_history":
+            return await _access_control_history(hass)
+        if name == "video_phone_status":
+            return await _video_phone_status(hass)
+        if name == "emergency_lighting_check":
+            return await _emergency_lighting_check(hass)
+        if name == "fire_escape_status":
+            return await _fire_escape_status(hass)
+        if name == "panic_room_status":
+            return await _panic_room_status(hass)
+        if name == "safe_room_status":
+            return await _safe_room_status(hass)
+        if name == "cctv_coverage_check":
+            return await _cctv_coverage_check(hass)
+        if name == "perimeter_fence_status":
+            return await _perimeter_fence_status(hass)
+        if name == "motion_detector_zones":
+            return await _motion_detector_zones(hass)
+        if name == "glass_break_sensor_check":
+            return await _glass_break_sensor_check(hass)
+        if name == "smoke_co_combo_check":
+            return await _smoke_co_combo_check(hass)
+        if name == "siren_status_check":
+            return await _siren_status_check(hass)
+        if name == "keypad_status_check":
+            return await _keypad_status_check(hass)
+        if name == "nfc_tag_reader_status":
+            return await _nfc_tag_reader_status(hass)
+        if name == "face_recognition_status":
+            return await _face_recognition_status(hass)
+        if name == "license_plate_reader":
+            return await _license_plate_reader(hass)
+        if name == "package_locker_status":
+            return await _package_locker_status(hass)
+        if name == "smart_fence_status":
+            return await _smart_fence_status(hass)
+        if name == "doorbell_event_history":
+            return await _doorbell_event_history(hass)
+        if name == "security_camera_analytics":
+            return await _security_camera_analytics(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -42284,6 +42325,247 @@ async def _water_softener_status(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "entities": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 117 — MILESTONE 2000+ — security/safety deep: access control,
+# video phone, emergency lighting, fire escape, panic/safe room, CCTV,
+# perimeter fence, motion zones, glass break, smoke/CO combo, siren,
+# keypad, NFC tag, face recognition, license plate, package locker,
+# smart fence, doorbell events, security camera analytics
+# ---------------------------------------------------------------------------
+
+
+async def _access_control_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Check access control history."""
+    results = []
+    for s in hass.states.async_all("lock"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "last_changed": str(s.last_changed),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "door":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "last_changed": str(s.last_changed),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "events": results}
+
+
+async def _video_phone_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check video phone status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "video" in name and ("phone" in name or "intercom" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _emergency_lighting_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check emergency lighting."""
+    results = []
+    for s in hass.states.async_all("light"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "emergency" in name or "exit" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "lights": results}
+
+
+async def _fire_escape_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check fire escape status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "fire" in name and ("escape" in name or "exit" in name or "route" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _panic_room_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check panic room status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "panic" in name and "room" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _safe_room_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check safe room status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "safe" in name and "room" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _cctv_coverage_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check CCTV coverage."""
+    results = []
+    for s in hass.states.async_all("camera"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "total_cameras": len(results),
+            "active": sum(1 for r in results if r["state"] != "unavailable"),
+            "cameras": results}
+
+
+async def _perimeter_fence_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check perimeter fence status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "perimeter" in name or ("fence" in name and "sensor" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _motion_detector_zones(hass: HomeAssistant) -> dict[str, Any]:
+    """Check motion detector zones."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        if s.attributes.get("device_class") == "motion":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "active": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    active = sum(1 for r in results if r["active"])
+    return {"ok": True, "total_zones": len(results), "active": active,
+            "zones": results}
+
+
+async def _glass_break_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check glass break sensor."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        dc = s.attributes.get("device_class", "")
+        if "glass" in name or dc == "vibration":
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "triggered": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _smoke_co_combo_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smoke/CO combo detectors."""
+    results = []
+    for s in hass.states.async_all("binary_sensor"):
+        dc = s.attributes.get("device_class", "")
+        if dc in ("smoke", "gas", "carbon_monoxide"):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "device_class": dc, "alarm": s.state == "on",
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results),
+            "alarming": sum(1 for r in results if r["alarm"]),
+            "detectors": results}
+
+
+async def _siren_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check siren status."""
+    results = []
+    for s in hass.states.async_all("siren"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "active": s.state == "on",
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sirens": results}
+
+
+async def _keypad_status_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check keypad status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "keypad" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "keypads": results}
+
+
+async def _nfc_tag_reader_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check NFC tag reader status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "nfc" in name or "tag_reader" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "readers": results}
+
+
+async def _face_recognition_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check face recognition status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "face" in name and ("recogn" in name or "detect" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _license_plate_reader(hass: HomeAssistant) -> dict[str, Any]:
+    """Check license plate reader."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("license" in name or "plate" in name or "lpr" in name or "anpr" in name) and \
+           ("reader" in name or "camera" in name or "recogn" in name or "lpr" in name or "anpr" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _package_locker_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check package locker status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "package" in name and ("locker" in name or "box" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_fence_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart fence status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "fence" in name and ("smart" in name or "electric" in name or "sensor" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _doorbell_event_history(hass: HomeAssistant) -> dict[str, Any]:
+    """Check doorbell event history."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "doorbell" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "last_changed": str(s.last_changed),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "events": results}
+
+
+async def _security_camera_analytics(hass: HomeAssistant) -> dict[str, Any]:
+    """Check security camera analytics."""
+    results = []
+    for s in hass.states.async_all("camera"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "is_recording": s.attributes.get("is_recording"),
+                        "motion_detection": s.attributes.get("motion_detection_enabled"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "cameras": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -54938,4 +55220,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "rainwater_harvest_status", "description": "Rainwater harvest.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "greywater_system_status", "description": "Greywater system.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "water_softener_status", "description": "Water softener.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 117 TOOL_SPECS (MILESTONE 2000+) ---
+    {"type": "function", "function": {"name": "access_control_history", "description": "Access control history.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "video_phone_status", "description": "Video phone status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "emergency_lighting_check", "description": "Emergency lighting.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "fire_escape_status", "description": "Fire escape status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "panic_room_status", "description": "Panic room status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "safe_room_status", "description": "Safe room status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "cctv_coverage_check", "description": "CCTV coverage.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "perimeter_fence_status", "description": "Perimeter fence.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "motion_detector_zones", "description": "Motion detector zones.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "glass_break_sensor_check", "description": "Glass break sensor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smoke_co_combo_check", "description": "Smoke/CO combo.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "siren_status_check", "description": "Siren status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "keypad_status_check", "description": "Keypad status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "nfc_tag_reader_status", "description": "NFC tag reader.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "face_recognition_status", "description": "Face recognition.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "license_plate_reader", "description": "License plate reader.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "package_locker_status", "description": "Package locker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_fence_status", "description": "Smart fence status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "doorbell_event_history", "description": "Doorbell events.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "security_camera_analytics", "description": "Security camera analytics.", "parameters": {"type": "object", "properties": {}}}},
 ]
