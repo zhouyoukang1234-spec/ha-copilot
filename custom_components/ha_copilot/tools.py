@@ -8339,6 +8339,101 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 22: light flash, switch toggle, media player join/unjoin,
+#           water heater away mode, climate on/off
+# ---------------------------------------------------------------------------
+
+
+async def _light_flash(
+    hass: HomeAssistant, entity_id: str, flash: str = "short",
+) -> dict[str, Any]:
+    """Flash a light (short or long)."""
+    try:
+        await hass.services.async_call(
+            "light", "turn_on",
+            {"entity_id": entity_id, "flash": flash}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light flash failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "flash": flash}
+
+
+async def _switch_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Toggle a switch."""
+    try:
+        await hass.services.async_call(
+            "switch", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Switch toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _media_player_join(
+    hass: HomeAssistant, entity_id: str, group_members: list[str],
+) -> dict[str, Any]:
+    """Join media players into a group."""
+    try:
+        await hass.services.async_call(
+            "media_player", "join",
+            {"entity_id": entity_id, "group_members": group_members}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player join failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "group_members": group_members}
+
+
+async def _media_player_unjoin(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Remove media player from a group."""
+    try:
+        await hass.services.async_call(
+            "media_player", "unjoin", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player unjoin failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "unjoined"}
+
+
+async def _water_heater_set_away_mode(
+    hass: HomeAssistant, entity_id: str, away_mode: bool,
+) -> dict[str, Any]:
+    """Set water heater away mode on/off."""
+    svc = "set_away_mode"
+    try:
+        await hass.services.async_call(
+            "water_heater", svc,
+            {"entity_id": entity_id, "away_mode": away_mode}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Water heater set away mode failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "away_mode": away_mode}
+
+
+async def _climate_turn_on(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Turn on a climate device."""
+    try:
+        await hass.services.async_call(
+            "climate", "turn_on", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate turn on failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+
+
+async def _climate_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Turn off a climate device."""
+    try:
+        await hass.services.async_call(
+            "climate", "turn_off", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate turn off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 21: shopping list, media player source/sound mode, climate humidity
 # ---------------------------------------------------------------------------
 
@@ -10641,6 +10736,42 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 22 dispatch ---
+        if name == "light_flash":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _light_flash(
+                hass, args.get("entity_id", ""), args.get("flash", "short"),
+            )
+        if name == "switch_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _switch_toggle(hass, args.get("entity_id", ""))
+        if name == "media_player_join":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_join(
+                hass, args.get("entity_id", ""), args.get("group_members", []),
+            )
+        if name == "media_player_unjoin":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_unjoin(hass, args.get("entity_id", ""))
+        if name == "water_heater_set_away_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _water_heater_set_away_mode(
+                hass, args.get("entity_id", ""),
+                bool(args.get("away_mode", False)),
+            )
+        if name == "climate_turn_on":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_turn_on(hass, args.get("entity_id", ""))
+        if name == "climate_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_turn_off(hass, args.get("entity_id", ""))
         # --- Wave 21 dispatch ---
         if name == "add_shopping_list_item":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -15256,6 +15387,100 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "reset_counter",
             "description": "Reset a counter entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 22 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "light_flash",
+            "description": "Flash a light (short or long).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "flash": {"type": "string", "description": "short|long"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "switch_toggle",
+            "description": "Toggle a switch.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_join",
+            "description": "Join media players into a group.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "group_members": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["entity_id", "group_members"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_unjoin",
+            "description": "Remove media player from a group.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "water_heater_set_away_mode",
+            "description": "Set water heater away mode on/off.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "away_mode": {"type": "boolean"},
+                },
+                "required": ["entity_id", "away_mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_turn_on",
+            "description": "Turn on a climate device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_turn_off",
+            "description": "Turn off a climate device.",
             "parameters": {
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
