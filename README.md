@@ -4,21 +4,23 @@
 
 本仓库的本源是：**让操作者本身（强 AI / 外部 agent）全链路操作 Home Assistant 的底层**。这里的"智能体"是操作者自己，**不是**一个被塞进聊天框、寄生在外接模型上的弱模型。基础设施只是适配于操作者的"工具层"，操作者直接驱动它，在不断实践中操作到底、验证到底。
 
-因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**，并经**四条本源底层**暴露给外部操作者：
+因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（142 个工具），并经**五条本源底层**暴露给外部操作者：
 
-- **底层一 · 原生 HA 服务**：`ha_copilot.run_tool` 通用服务 + 12 个原生资源服务（`ha_copilot.discover_resources` / `ha_copilot.search_zwave_devices` 等），自动化/脚本/开发者工具可直调。
+- **底层一 · 原生 HA 服务**：`ha_copilot.run_tool` 通用服务 + 12 个原生资源服务（`ha_copilot.discover_resources` / `ha_copilot.search_zwave_devices` 等），自动化/脚本/开发者工具可直调。每次调用自动发射 `ha_copilot_tool_called` 事件。
 - **底层二 · MCP**：鉴权的 MCP 服务器端点 `/api/ha_copilot/mcp`（JSON-RPC 2.0），任意 MCP 客户端即可发现并操作整台 HA。
-- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部确定性工具。
+- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 142 个确定性工具。
 - **底层四 · HTTP**：鉴权 HTTP 端点 `/api/ha_copilot/tools`（列目录）、`/api/ha_copilot/run_tool`（执行工具）。
+- **底层五 · WebSocket**：HA 原生 WebSocket 命令 `ha_copilot/tools`（列目录）、`ha_copilot/run_tool`（执行工具）、`ha_copilot/info`（集成状态）——前端面板和 WS 客户端的实时通道。
 
-四条底层共用**同一套** `tools.py` 工具层——一处实现，四路暴露。
+五条底层共用**同一套** `tools.py` 工具层——一处实现，五路暴露。
 
 ```
 操作者本体(外部 agent / 对话代理 / 我)
         │
         ├── MCP 客户端 ──▶ /api/ha_copilot/mcp ────────┐
         ├── 原生 LLM API ──▶ HA 对话代理框架 ────────────┤
-        ├── HA 服务 ──▶ 13 个原生服务（自动化可直调）──────┤──▶ tools.py（确定性工具层）──▶ 运行中的 HA
+        ├── HA 服务 ──▶ 13 个原生服务（自动化可直调）──────┤
+        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（142 确定性工具）──▶ 运行中的 HA
         └── HTTP ──▶ /api/ha_copilot/run_tool ────────────┘
 ```
 
@@ -103,9 +105,27 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
 
 离线/CI 友好的验证脚本：`python hactl/verify_resources.py --live`（实测拉取 HACS 全量目录并验证排序）。
 
+## 原生 HA 实体
+
+通过 UI 配置流（Settings → Integrations → Add Integration → HA-Copilot）安装后，自动创建：
+
+| 实体 | 类型 | 说明 |
+|------|------|------|
+| `switch.ha_copilot_allow_write` | 开关 | 写配置文件能力开关——可从仪表盘/自动化/语音切换 |
+| `switch.ha_copilot_allow_restart` | 开关 | 重启 HA 能力开关 |
+| `sensor.ha_copilot_tool_count` | 传感器 | 当前工具目录大小（142） |
+| `sensor.ha_copilot_data_sources` | 传感器 | 免费数据源数量（9） |
+| `sensor.ha_copilot_native_services` | 传感器 | 原生 HA 服务数量（13） |
+
+安全开关即改即生效，无需重启 HA。传感器为诊断类别，可加入图表。
+
 ## 安装
 
-### 方式一 · HACS（推荐，一键安装）
+### 方式一 · UI 配置流（推荐）
+
+Settings → Integrations → Add Integration → 搜索 **HA-Copilot** → 设置安全开关 → 完成。无需编辑 YAML。支持中文界面。
+
+### 方式二 · HACS（一键安装）
 
 本仓库自带 `hacs.json`，可作为 **HACS 自定义仓库**安装：
 
@@ -179,4 +199,4 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
 
 ## 状态
 
-v0.3 — **深度融合**：四路暴露（HA 服务 + MCP + 原生 LLM API + HTTP）；12 个原生资源服务可被自动化直调；9 个免费数据源（HACS 2628 · GitHub · 蓝图 · Zigbee 2700+ · Z-Wave 2375+ · Tasmota 2800+ · ESPHome 770+ · 内置集成 1470 · 加载项 78+）；品牌别名映射（Fibaro→Nice Polska 等）；查询分隔符归一化。55 个 PR 持续迭代验证。
+v0.3 — **深度融合**：五路暴露（HA 服务 + MCP + 原生 LLM API + HTTP + WebSocket）；UI 配置流（无需 YAML）；安全开关实体（switch）+ 诊断传感器（sensor）+ Diagnostics；事件总线集成（`ha_copilot_tool_called`）；中文翻译；12 个原生资源服务可被自动化直调；9 个免费数据源（HACS 2628 · GitHub · 蓝图 · Zigbee 2700+ · Z-Wave 2375+ · Tasmota 2800+ · ESPHome 770+ · 内置集成 1470 · 加载项 78+）；品牌别名映射（Fibaro→Nice Polska 等）；查询分隔符归一化；142 工具 · 64 个 PR 持续迭代验证。
