@@ -133,8 +133,8 @@ class CopilotServiceCountSensor(SensorEntity):
 
     @property
     def native_value(self) -> int:
-        """Return total service count (run_tool + 12 resource services)."""
-        return 13
+        """Return total service count (run_tool + 13 resource services)."""
+        return 14
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -154,11 +154,13 @@ class CopilotServiceCountSensor(SensorEntity):
                 "search_ha_addons",
                 "recommend_resources",
                 "recommend_blueprints",
+                "resolve_user_intent",
             ],
             "routes": [
                 "HA services",
                 "MCP (JSON-RPC 2.0)",
                 "Native LLM API",
                 "HTTP",
+                "WebSocket",
             ],
         }
