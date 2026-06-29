@@ -22748,6 +22748,47 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _portable_heater_check(hass)
         if name == "dehumidifier_efficiency":
             return await _dehumidifier_efficiency(hass)
+        # --- Wave 116 dispatch ---
+        if name == "smart_frame_status":
+            return await _smart_frame_status(hass)
+        if name == "smart_desk_status":
+            return await _smart_desk_status(hass)
+        if name == "smart_toilet_status":
+            return await _smart_toilet_status(hass)
+        if name == "smart_shower_status":
+            return await _smart_shower_status(hass)
+        if name == "smart_bathtub_status":
+            return await _smart_bathtub_status(hass)
+        if name == "smart_oven_status":
+            return await _smart_oven_status(hass)
+        if name == "smart_dishwasher_status":
+            return await _smart_dishwasher_status(hass)
+        if name == "smart_dryer_status":
+            return await _smart_dryer_status(hass)
+        if name == "smart_washer_monitor":
+            return await _smart_washer_monitor(hass)
+        if name == "smart_refrigerator_deep":
+            return await _smart_refrigerator_deep(hass)
+        if name == "smart_freezer_status":
+            return await _smart_freezer_status(hass)
+        if name == "smart_microwave_status":
+            return await _smart_microwave_status(hass)
+        if name == "robot_mop_status":
+            return await _robot_mop_status(hass)
+        if name == "window_cleaner_status":
+            return await _window_cleaner_status(hass)
+        if name == "pool_auto_cover":
+            return await _pool_auto_cover(hass)
+        if name == "hot_tub_chemistry":
+            return await _hot_tub_chemistry(hass)
+        if name == "smart_irrigation_zone":
+            return await _smart_irrigation_zone(hass)
+        if name == "rainwater_harvest_status":
+            return await _rainwater_harvest_status(hass)
+        if name == "greywater_system_status":
+            return await _greywater_system_status(hass)
+        if name == "water_softener_status":
+            return await _water_softener_status(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -42013,6 +42054,236 @@ async def _dehumidifier_efficiency(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "entities": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 116 — smart appliances & water systems: smart frame/desk/toilet/shower/
+# bathtub/oven/dishwasher/dryer/washer/refrigerator/freezer/microwave,
+# robot mop, window cleaner, pool cover, hot tub chemistry,
+# irrigation zone, rainwater harvest, greywater, water softener
+# ---------------------------------------------------------------------------
+
+
+async def _smart_frame_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart frame status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "frame" in name and ("smart" in name or "photo" in name or "art" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_desk_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart desk status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "desk" in name and ("standing" in name or "height" in name or "smart" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_toilet_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart toilet status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "toilet" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_shower_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart shower status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "shower" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_bathtub_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart bathtub status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "bathtub" in name or "bath_tub" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_oven_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart oven status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "oven" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_dishwasher_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart dishwasher status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "dishwasher" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_dryer_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart dryer status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "dryer" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_washer_monitor(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart washer monitor."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "washer" in name and "dish" not in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_refrigerator_deep(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart refrigerator deep status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "refrigerator" in name or "fridge" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_freezer_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart freezer status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "freezer" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _smart_microwave_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart microwave status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "microwave" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _robot_mop_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check robot mop status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "mop" in name and ("robot" in name or "auto" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _window_cleaner_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check window cleaner status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "window" in name and ("clean" in name or "robot" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _pool_auto_cover(hass: HomeAssistant) -> dict[str, Any]:
+    """Check pool auto cover."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "pool" in name and "cover" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _hot_tub_chemistry(hass: HomeAssistant) -> dict[str, Any]:
+    """Check hot tub chemistry."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if ("hot_tub" in name or "hot tub" in name or "hottub" in name or "spa" in name) and \
+           ("ph" in name or "chlor" in name or "bromine" in name or "orp" in name or "alkalin" in name):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results}
+
+
+async def _smart_irrigation_zone(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart irrigation zones."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "irrigation" in name and "zone" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "zones": results}
+
+
+async def _rainwater_harvest_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check rainwater harvest status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "rainwater" in name or "rain_barrel" in name or "cistern" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _greywater_system_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check greywater system status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "greywater" in name or "gray_water" in name or "grey_water" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _water_softener_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check water softener status."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "water" in name and "softener" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -54646,4 +54917,25 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "mini_split_status", "description": "Mini split status.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "portable_heater_check", "description": "Portable heater.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "dehumidifier_efficiency", "description": "Dehumidifier efficiency.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 116 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "smart_frame_status", "description": "Smart frame status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_desk_status", "description": "Smart desk status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_toilet_status", "description": "Smart toilet status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_shower_status", "description": "Smart shower status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_bathtub_status", "description": "Smart bathtub status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_oven_status", "description": "Smart oven status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_dishwasher_status", "description": "Smart dishwasher.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_dryer_status", "description": "Smart dryer status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_washer_monitor", "description": "Smart washer monitor.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_refrigerator_deep", "description": "Refrigerator deep status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_freezer_status", "description": "Smart freezer status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_microwave_status", "description": "Smart microwave.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "robot_mop_status", "description": "Robot mop status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "window_cleaner_status", "description": "Window cleaner.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "pool_auto_cover", "description": "Pool auto cover.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "hot_tub_chemistry", "description": "Hot tub chemistry.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_irrigation_zone", "description": "Irrigation zones.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "rainwater_harvest_status", "description": "Rainwater harvest.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "greywater_system_status", "description": "Greywater system.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "water_softener_status", "description": "Water softener.", "parameters": {"type": "object", "properties": {}}}},
 ]
