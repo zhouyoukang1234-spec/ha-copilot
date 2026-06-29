@@ -110,11 +110,17 @@ async def _async_setup_core(
     except ValueError:
         pass
 
-    # Generic run_tool service.
+    # Generic run_tool service with event bus integration.
     async def _handle_run_tool(call: ServiceCall) -> dict:
-        return await dispatch_tool(
-            hass, store, call.data["tool"], call.data.get("args") or {}
+        tool_name = call.data["tool"]
+        result = await dispatch_tool(
+            hass, store, tool_name, call.data.get("args") or {}
         )
+        hass.bus.async_fire(
+            f"{DOMAIN}_tool_called",
+            {"tool": tool_name, "ok": result.get("ok", True) if isinstance(result, dict) else True},
+        )
+        return result
 
     hass.services.async_register(
         DOMAIN,

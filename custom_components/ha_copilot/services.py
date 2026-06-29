@@ -131,11 +131,25 @@ async def async_register_services(hass: HomeAssistant) -> None:
         ("recommend_blueprints", _recommend_blueprints, _RECOMMEND_BP_SCHEMA),
     ]
 
+    def _wrap_with_event(svc_name: str, handler):
+        """Wrap a service handler to fire a bus event after each call."""
+        async def _wrapped(call: ServiceCall) -> dict:
+            result = await handler(call)
+            hass.bus.async_fire(
+                f"{DOMAIN}_tool_called",
+                {
+                    "tool": svc_name,
+                    "ok": result.get("ok", True) if isinstance(result, dict) else True,
+                },
+            )
+            return result
+        return _wrapped
+
     for name, handler, schema in services:
         hass.services.async_register(
             DOMAIN,
             name,
-            handler,
+            _wrap_with_event(name, handler),
             schema=schema,
             supports_response=SupportsResponse.ONLY,
         )
