@@ -926,6 +926,7 @@ _ADDON_REPOS: tuple[tuple[str, str], ...] = (
     ("hassio-addons/repository", "community"),
     ("esphome/home-assistant-addon", "esphome"),
     ("zigbee2mqtt/hassio-zigbee2mqtt", "zigbee2mqtt"),
+    ("sabeechen/hassio-google-drive-backup", "community"),
 )
 _ADDONS_TTL = 6 * 3600
 _addons_cache: dict[str, Any] = {"catalog": None, "ts": 0.0}
@@ -1025,6 +1026,18 @@ async def search_ha_addons(
         if all(w in hay for w in words):
             strong = sum(1 for w in words if w in strong_hay)
             scored.append((strong, a))
+    # Recall fallback: a natural multi-word query ("backup google drive") may
+    # have no single add-on containing every word; relax to an OR match that
+    # still requires >=1 word in the slug/name so the relevant add-on surfaces.
+    relaxed = False
+    if not scored and len(words) > 1:
+        relaxed = True
+        for a in catalog:
+            strong_hay = f"{a['slug']} {a['name']}".lower()
+            strong = sum(1 for w in words if w in strong_hay)
+            if strong:
+                weak = sum(1 for w in words if w in a["description"].lower())
+                scored.append((strong * 10 + weak, a))
     scored.sort(key=lambda t: (t[0], t[1]["source"] == "official"), reverse=True)
 
     results = [a for _, a in scored[: max(1, limit)]]
@@ -1033,6 +1046,7 @@ async def search_ha_addons(
         "query": q,
         "count": len(results),
         "total_matched": len(scored),
+        "relaxed": relaxed,
         "catalog_size": len(catalog),
         "results": results,
         "source": "home assistant add-on stores",
