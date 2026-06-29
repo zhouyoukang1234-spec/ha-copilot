@@ -8339,6 +8339,213 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 40: energy management, statistics, config validation, conversation
+#           process, cloud/nabu casa, state batch operations
+# ---------------------------------------------------------------------------
+
+
+async def _energy_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Get energy dashboard configuration info."""
+    try:
+        from homeassistant.components.energy import async_get_manager
+        manager = await async_get_manager(hass)
+        data = manager.data
+        return {
+            "ok": True,
+            "energy_sources": len(getattr(data, "energy_sources", []))
+            if data else 0,
+            "device_consumption": len(getattr(data, "device_consumption", []))
+            if data else 0,
+        }
+    except ImportError:
+        return {"error": "energy component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Energy info failed: {exc}"}
+
+
+async def _energy_solar_forecast(hass: HomeAssistant) -> dict[str, Any]:
+    """Get solar energy forecast."""
+    try:
+        from homeassistant.components.energy import async_get_manager
+        manager = await async_get_manager(hass)
+        forecasts = await manager.async_get_solar_forecast()
+        if forecasts is None:
+            return {"ok": True, "forecasts": {}}
+        return {"ok": True, "forecasts": {
+            k: list(v.items())[:20] for k, v in forecasts.items()
+        }}
+    except ImportError:
+        return {"error": "energy component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Energy solar forecast failed: {exc}"}
+
+
+async def _energy_gas_consumption(hass: HomeAssistant) -> dict[str, Any]:
+    """Get gas consumption entities."""
+    try:
+        states = hass.states.async_all("sensor")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "unit": s.attributes.get("unit_of_measurement", "")}
+            for s in states
+            if "gas" in s.entity_id.lower()
+            or s.attributes.get("device_class") == "gas"
+        ]
+        return {"ok": True, "sensors": result[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Energy gas consumption failed: {exc}"}
+
+
+async def _energy_water_consumption(hass: HomeAssistant) -> dict[str, Any]:
+    """Get water consumption entities."""
+    try:
+        states = hass.states.async_all("sensor")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "unit": s.attributes.get("unit_of_measurement", "")}
+            for s in states
+            if "water" in s.entity_id.lower()
+            or s.attributes.get("device_class") == "water"
+        ]
+        return {"ok": True, "sensors": result[:50]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Energy water consumption failed: {exc}"}
+
+
+async def _statistics_during_period(
+    hass: HomeAssistant, statistic_id: str,
+    hours: int = 24,
+) -> dict[str, Any]:
+    """Get statistics during a period."""
+    try:
+        from homeassistant.util import dt as dt_util
+        from datetime import timedelta
+        from homeassistant.components.recorder.statistics import (
+            statistics_during_period,
+        )
+        now = dt_util.utcnow()
+        start = now - timedelta(hours=hours)
+        stats = await hass.async_add_executor_job(
+            statistics_during_period,
+            hass, start, now, {statistic_id}, "hour", None, {"mean", "sum"},
+        )
+        result = {}
+        for sid, entries in stats.items():
+            result[sid] = [
+                {"start": str(e.get("start", "")),
+                 "mean": e.get("mean"), "sum": e.get("sum")}
+                for e in entries[:50]
+            ]
+        return {"ok": True, "statistics": result}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Statistics during period failed: {exc}"}
+
+
+async def _statistics_get_metadata(
+    hass: HomeAssistant, statistic_id: str | None = None,
+) -> dict[str, Any]:
+    """Get statistics metadata."""
+    try:
+        from homeassistant.components.recorder.statistics import (
+            list_statistic_ids,
+        )
+        metadata = await hass.async_add_executor_job(
+            list_statistic_ids, hass,
+        )
+        if statistic_id:
+            metadata = [m for m in metadata if m.get("statistic_id") == statistic_id]
+        result = [
+            {"statistic_id": m.get("statistic_id", ""),
+             "name": m.get("name", ""),
+             "unit": m.get("unit_of_measurement", "")}
+            for m in metadata[:100]
+        ]
+        return {"ok": True, "metadata": result}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Statistics get metadata failed: {exc}"}
+
+
+async def _config_check_valid(hass: HomeAssistant) -> dict[str, Any]:
+    """Check if HA configuration is valid."""
+    try:
+        from homeassistant.config import async_check_ha_config_file
+        result = await async_check_ha_config_file(hass)
+        errors = result.errors if hasattr(result, "errors") else []
+        return {
+            "ok": True,
+            "valid": len(errors) == 0,
+            "errors": [str(e) for e in errors[:20]],
+        }
+    except ImportError:
+        return {"error": "config check not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config check valid failed: {exc}"}
+
+
+async def _conversation_process_text(
+    hass: HomeAssistant, text: str,
+    agent_id: str | None = None,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Process text through conversation agent."""
+    try:
+        from homeassistant.components.conversation import async_converse
+        result = await async_converse(
+            hass, text, None, None,
+            agent_id=agent_id, language=language,
+        )
+        response = result.response
+        return {
+            "ok": True,
+            "speech": getattr(response, "speech", {}).get("plain", {}).get("speech", "")
+            if hasattr(response, "speech") else str(response),
+            "response_type": str(getattr(response, "response_type", "")),
+        }
+    except ImportError:
+        return {"error": "conversation component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Conversation process text failed: {exc}"}
+
+
+async def _cloud_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Nabu Casa / HA Cloud status."""
+    try:
+        from homeassistant.components.cloud import async_get_cloud
+        cloud = async_get_cloud(hass)
+        return {
+            "ok": True,
+            "logged_in": cloud.is_logged_in,
+            "remote_enabled": getattr(cloud, "remote_enabled", False),
+            "remote_connected": getattr(cloud, "remote_connected", False),
+        }
+    except ImportError:
+        return {"error": "cloud component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cloud status failed: {exc}"}
+
+
+async def _state_set_batch(
+    hass: HomeAssistant, states: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Set multiple entity states at once."""
+    results = []
+    for item in states[:50]:
+        eid = item.get("entity_id", "")
+        state = item.get("state", "")
+        attrs = item.get("attributes", {})
+        try:
+            hass.states.async_set(eid, state, attrs)
+            results.append({"entity_id": eid, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "results": results}
+
+
+# ---------------------------------------------------------------------------
 # Wave 39: state history, template sensors, auth mgmt, webhook, MQTT extras,
 #           REST command, supervisor, core state, input boolean list,
 #           system metrics, persistent notification list
@@ -14055,6 +14262,39 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 40 dispatch ---
+        if name == "energy_info":
+            return await _energy_info(hass)
+        if name == "energy_solar_forecast":
+            return await _energy_solar_forecast(hass)
+        if name == "energy_gas_consumption":
+            return await _energy_gas_consumption(hass)
+        if name == "energy_water_consumption":
+            return await _energy_water_consumption(hass)
+        if name == "statistics_during_period":
+            return await _statistics_during_period(
+                hass, args.get("statistic_id", ""),
+                int(args.get("hours", 24)),
+            )
+        if name == "statistics_get_metadata":
+            return await _statistics_get_metadata(
+                hass, args.get("statistic_id"),
+            )
+        if name == "config_check_valid":
+            return await _config_check_valid(hass)
+        if name == "conversation_process_text":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _conversation_process_text(
+                hass, args.get("text", ""),
+                args.get("agent_id"), args.get("language"),
+            )
+        if name == "cloud_status":
+            return await _cloud_status(hass)
+        if name == "state_set_batch":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _state_set_batch(hass, args.get("states", []))
         # --- Wave 39 dispatch ---
         if name == "state_history_period":
             return await _state_history_period(
@@ -19722,6 +19962,124 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 40 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "energy_info",
+            "description": "Get energy dashboard configuration info.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "energy_solar_forecast",
+            "description": "Get solar energy forecast.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "energy_gas_consumption",
+            "description": "Get gas consumption entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "energy_water_consumption",
+            "description": "Get water consumption entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "statistics_during_period",
+            "description": "Get statistics during a period.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_id": {"type": "string"},
+                    "hours": {"type": "integer", "description": "Hours to look back (default 24)"},
+                },
+                "required": ["statistic_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "statistics_get_metadata",
+            "description": "Get statistics metadata.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "statistic_id": {"type": "string", "description": "Optional filter"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_check_valid",
+            "description": "Check if HA configuration is valid.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "conversation_process_text",
+            "description": "Process text through conversation agent.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "agent_id": {"type": "string"},
+                    "language": {"type": "string"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cloud_status",
+            "description": "Get Nabu Casa / HA Cloud status.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "state_set_batch",
+            "description": "Set multiple entity states at once.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "states": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "entity_id": {"type": "string"},
+                                "state": {"type": "string"},
+                                "attributes": {"type": "object"},
+                            },
+                            "required": ["entity_id", "state"],
+                        },
+                    },
+                },
+                "required": ["states"],
             },
         },
     },
