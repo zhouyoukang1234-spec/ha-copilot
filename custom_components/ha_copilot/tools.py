@@ -8093,6 +8093,251 @@ async def _reset_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Wave 18: todo list, input_boolean, input_number, input_select,
+#           media player shuffle/repeat
+# ---------------------------------------------------------------------------
+
+
+async def _todo_add_item(
+    hass: HomeAssistant, entity_id: str, item: str,
+    due_date: str | None = None, description: str | None = None,
+) -> dict[str, Any]:
+    """Add an item to a todo list entity."""
+    data: dict[str, Any] = {"entity_id": entity_id, "item": item}
+    if due_date:
+        data["due_date"] = due_date
+    if description:
+        data["description"] = description
+    try:
+        await hass.services.async_call("todo", "add_item", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo add item failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "item": item}
+
+
+async def _todo_update_item(
+    hass: HomeAssistant, entity_id: str, item: str,
+    rename: str | None = None, status: str | None = None,
+    due_date: str | None = None, description: str | None = None,
+) -> dict[str, Any]:
+    """Update an item in a todo list entity."""
+    data: dict[str, Any] = {"entity_id": entity_id, "item": item}
+    if rename:
+        data["rename"] = rename
+    if status:
+        data["status"] = status
+    if due_date:
+        data["due_date"] = due_date
+    if description:
+        data["description"] = description
+    try:
+        await hass.services.async_call("todo", "update_item", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo update item failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "item": item}
+
+
+async def _todo_remove_item(
+    hass: HomeAssistant, entity_id: str, item: str,
+) -> dict[str, Any]:
+    """Remove an item from a todo list entity."""
+    try:
+        await hass.services.async_call(
+            "todo", "remove_item",
+            {"entity_id": entity_id, "item": item}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo remove item failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "item": item, "action": "removed"}
+
+
+async def _todo_get_items(
+    hass: HomeAssistant, entity_id: str,
+    status: str | None = None,
+) -> dict[str, Any]:
+    """Get items from a todo list entity."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if status:
+        data["status"] = status
+    try:
+        resp = await hass.services.async_call(
+            "todo", "get_items", data, blocking=True, return_response=True,
+        )
+        return {"ok": True, "entity_id": entity_id, "items": resp}
+    except TypeError:
+        try:
+            await hass.services.async_call("todo", "get_items", data, blocking=True)
+            return {"ok": True, "entity_id": entity_id, "note": "items retrieved"}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Todo get items failed: {exc}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Todo get items failed: {exc}"}
+
+
+async def _input_boolean_turn_on(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Turn on an input_boolean."""
+    try:
+        await hass.services.async_call(
+            "input_boolean", "turn_on", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input boolean turn_on failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+
+
+async def _input_boolean_turn_off(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Turn off an input_boolean."""
+    try:
+        await hass.services.async_call(
+            "input_boolean", "turn_off", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input boolean turn_off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+
+
+async def _input_boolean_toggle(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Toggle an input_boolean."""
+    try:
+        await hass.services.async_call(
+            "input_boolean", "toggle", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input boolean toggle failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+
+
+async def _input_number_set_value(
+    hass: HomeAssistant, entity_id: str, value: float,
+) -> dict[str, Any]:
+    """Set an input_number value."""
+    try:
+        await hass.services.async_call(
+            "input_number", "set_value",
+            {"entity_id": entity_id, "value": float(value)}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input number set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _input_number_increment(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Increment an input_number by its step."""
+    try:
+        await hass.services.async_call(
+            "input_number", "increment", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input number increment failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "incremented"}
+
+
+async def _input_number_decrement(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Decrement an input_number by its step."""
+    try:
+        await hass.services.async_call(
+            "input_number", "decrement", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input number decrement failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "decremented"}
+
+
+async def _input_select_set_option(
+    hass: HomeAssistant, entity_id: str, option: str,
+) -> dict[str, Any]:
+    """Select an option on an input_select."""
+    try:
+        await hass.services.async_call(
+            "input_select", "select_option",
+            {"entity_id": entity_id, "option": option}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input select set option failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "option": option}
+
+
+async def _input_select_set_options(
+    hass: HomeAssistant, entity_id: str, options: list[str],
+) -> dict[str, Any]:
+    """Set the options list of an input_select."""
+    try:
+        await hass.services.async_call(
+            "input_select", "set_options",
+            {"entity_id": entity_id, "options": options}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input select set options failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "options": options}
+
+
+async def _input_select_next(
+    hass: HomeAssistant, entity_id: str, cycle: bool = True,
+) -> dict[str, Any]:
+    """Select next option on an input_select."""
+    try:
+        await hass.services.async_call(
+            "input_select", "select_next",
+            {"entity_id": entity_id, "cycle": cycle}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input select next failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "next"}
+
+
+async def _input_select_previous(
+    hass: HomeAssistant, entity_id: str, cycle: bool = True,
+) -> dict[str, Any]:
+    """Select previous option on an input_select."""
+    try:
+        await hass.services.async_call(
+            "input_select", "select_previous",
+            {"entity_id": entity_id, "cycle": cycle}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input select previous failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "previous"}
+
+
+async def _media_player_shuffle_set(
+    hass: HomeAssistant, entity_id: str, shuffle: bool,
+) -> dict[str, Any]:
+    """Set media player shuffle mode."""
+    try:
+        await hass.services.async_call(
+            "media_player", "shuffle_set",
+            {"entity_id": entity_id, "shuffle": shuffle}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player shuffle set failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "shuffle": shuffle}
+
+
+async def _media_player_repeat_set(
+    hass: HomeAssistant, entity_id: str, repeat: str,
+) -> dict[str, Any]:
+    """Set media player repeat mode (off/all/one)."""
+    try:
+        await hass.services.async_call(
+            "media_player", "repeat_set",
+            {"entity_id": entity_id, "repeat": repeat}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player repeat set failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "repeat": repeat}
+
+
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -10179,6 +10424,95 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 18 dispatch ---
+        if name == "todo_add_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _todo_add_item(
+                hass, args.get("entity_id", ""), args.get("item", ""),
+                args.get("due_date"), args.get("description"),
+            )
+        if name == "todo_update_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _todo_update_item(
+                hass, args.get("entity_id", ""), args.get("item", ""),
+                args.get("rename"), args.get("status"),
+                args.get("due_date"), args.get("description"),
+            )
+        if name == "todo_remove_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _todo_remove_item(
+                hass, args.get("entity_id", ""), args.get("item", ""),
+            )
+        if name == "todo_get_items":
+            return await _todo_get_items(
+                hass, args.get("entity_id", ""), args.get("status"),
+            )
+        if name == "input_boolean_turn_on":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_boolean_turn_on(hass, args.get("entity_id", ""))
+        if name == "input_boolean_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_boolean_turn_off(hass, args.get("entity_id", ""))
+        if name == "input_boolean_toggle":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_boolean_toggle(hass, args.get("entity_id", ""))
+        if name == "input_number_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_number_set_value(
+                hass, args.get("entity_id", ""), float(args.get("value", 0)),
+            )
+        if name == "input_number_increment":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_number_increment(hass, args.get("entity_id", ""))
+        if name == "input_number_decrement":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_number_decrement(hass, args.get("entity_id", ""))
+        if name == "input_select_set_option":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_select_set_option(
+                hass, args.get("entity_id", ""), args.get("option", ""),
+            )
+        if name == "input_select_set_options":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_select_set_options(
+                hass, args.get("entity_id", ""), args.get("options", []),
+            )
+        if name == "input_select_next":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_select_next(
+                hass, args.get("entity_id", ""), bool(args.get("cycle", True)),
+            )
+        if name == "input_select_previous":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_select_previous(
+                hass, args.get("entity_id", ""), bool(args.get("cycle", True)),
+            )
+        if name == "media_player_shuffle_set":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_shuffle_set(
+                hass, args.get("entity_id", ""),
+                bool(args.get("shuffle", False)),
+            )
+        if name == "media_player_repeat_set":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_repeat_set(
+                hass, args.get("entity_id", ""), args.get("repeat", "off"),
+            )
         # --- Wave 17 dispatch ---
         if name == "siren_turn_on":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -14639,6 +14973,238 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 18 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_add_item",
+            "description": "Add an item to a todo list entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "item": {"type": "string"},
+                    "due_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "description": {"type": "string"},
+                },
+                "required": ["entity_id", "item"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_update_item",
+            "description": "Update an item in a todo list entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "item": {"type": "string"},
+                    "rename": {"type": "string"},
+                    "status": {"type": "string", "description": "needs_action|completed"},
+                    "due_date": {"type": "string"},
+                    "description": {"type": "string"},
+                },
+                "required": ["entity_id", "item"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_remove_item",
+            "description": "Remove an item from a todo list entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "item": {"type": "string"},
+                },
+                "required": ["entity_id", "item"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_get_items",
+            "description": "Get items from a todo list entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "status": {"type": "string", "description": "needs_action|completed"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_boolean_turn_on",
+            "description": "Turn on an input_boolean.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_boolean_turn_off",
+            "description": "Turn off an input_boolean.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_boolean_toggle",
+            "description": "Toggle an input_boolean.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_number_set_value",
+            "description": "Set an input_number value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "number"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_number_increment",
+            "description": "Increment an input_number by its step.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_number_decrement",
+            "description": "Decrement an input_number by its step.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_select_set_option",
+            "description": "Select an option on an input_select.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "option": {"type": "string"},
+                },
+                "required": ["entity_id", "option"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_select_set_options",
+            "description": "Set the options list of an input_select.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "options": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["entity_id", "options"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_select_next",
+            "description": "Select next option on an input_select.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "cycle": {"type": "boolean"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_select_previous",
+            "description": "Select previous option on an input_select.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "cycle": {"type": "boolean"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_shuffle_set",
+            "description": "Set media player shuffle mode.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "shuffle": {"type": "boolean"},
+                },
+                "required": ["entity_id", "shuffle"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_repeat_set",
+            "description": "Set media player repeat mode (off/all/one).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "repeat": {"type": "string", "description": "off|all|one"},
+                },
+                "required": ["entity_id", "repeat"],
             },
         },
     },
