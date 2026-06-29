@@ -3442,6 +3442,252 @@ async def _assist(
 
 
 # ---------------------------------------------------------------------------
+# Workflow orchestration — batch & config operations (Stage 4 evolution)
+# ---------------------------------------------------------------------------
+
+
+async def _batch_call_service(
+    hass: HomeAssistant,
+    domain: str,
+    service: str,
+    entity_ids: list[str],
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Call a service for multiple entities in one operation.
+
+    This is the batch equivalent of ``call_service`` — controls many entities
+    at once without requiring N individual calls, which matters for scenes like
+    "turn off everything" or "set all lights to 50%".
+    """
+    if not entity_ids:
+        return {"error": "entity_ids list is empty"}
+    results: list[dict[str, Any]] = []
+    for eid in entity_ids:
+        svc_data = dict(data or {})
+        svc_data["entity_id"] = eid
+        try:
+            await hass.services.async_call(domain, service, svc_data, blocking=True)
+            results.append({"entity_id": eid, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": eid, "ok": False, "error": str(exc)})
+    ok = sum(1 for r in results if r["ok"])
+    return {
+        "ok": ok == len(results),
+        "total": len(results),
+        "succeeded": ok,
+        "failed": len(results) - ok,
+        "results": results,
+    }
+
+
+async def _export_config(
+    hass: HomeAssistant,
+    config_type: str,
+    entity_id: str | None = None,
+) -> dict[str, Any]:
+    """Export configuration as YAML for backup, sharing, or migration.
+
+    Supports automations, scripts, scenes, and dashboard configs. Returns
+    the raw YAML that can be saved, shared, or re-imported.
+    """
+    import io
+
+    if config_type == "automation":
+        if entity_id:
+            state = hass.states.get(entity_id)
+            if state is None:
+                return {"error": f"Entity {entity_id} not found"}
+        path = hass.config.path("automations.yaml")
+        try:
+            with open(path) as fh:
+                content = fh.read()
+            return {"ok": True, "type": "automation", "yaml": content,
+                    "path": path}
+        except FileNotFoundError:
+            return {"error": f"File not found: {path}"}
+
+    if config_type == "script":
+        path = hass.config.path("scripts.yaml")
+        try:
+            with open(path) as fh:
+                content = fh.read()
+            return {"ok": True, "type": "script", "yaml": content, "path": path}
+        except FileNotFoundError:
+            return {"error": f"File not found: {path}"}
+
+    if config_type == "scene":
+        path = hass.config.path("scenes.yaml")
+        try:
+            with open(path) as fh:
+                content = fh.read()
+            return {"ok": True, "type": "scene", "yaml": content, "path": path}
+        except FileNotFoundError:
+            return {"error": f"File not found: {path}"}
+
+    if config_type == "dashboard":
+        if not entity_id:
+            try:
+                import homeassistant.components.lovelace as ll
+                dashboards_list = []
+                for dash_id, dash in (ll.async_get_dashboards(hass) or {}).items():
+                    dashboards_list.append({"id": dash_id, "title": getattr(dash, "title", "")})
+                return {"ok": True, "dashboards": dashboards_list}
+            except Exception:  # noqa: BLE001
+                return {"error": "Could not list dashboards. Use get_dashboard_config instead."}
+        # Export specific dashboard
+        try:
+            import homeassistant.components.lovelace as ll
+            config = await ll.async_get_config(hass, entity_id)
+            buf = io.StringIO()
+            yaml.dump(config, buf, default_flow_style=False, allow_unicode=True)
+            return {"ok": True, "type": "dashboard", "dashboard_id": entity_id,
+                    "yaml": buf.getvalue()}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"Export failed: {exc}"}
+
+    return {"error": f"Unknown config_type: {config_type}. Use: automation, script, scene, dashboard"}
+
+
+async def _import_config(
+    hass: HomeAssistant,
+    config_type: str,
+    yaml_content: str,
+) -> dict[str, Any]:
+    """Import YAML configuration into Home Assistant.
+
+    Appends automations/scripts/scenes to existing config files. For
+    dashboards, use update_dashboard instead.
+    """
+    if config_type not in ("automation", "script", "scene"):
+        return {"error": "config_type must be: automation, script, or scene"}
+
+    path_map = {
+        "automation": "automations.yaml",
+        "script": "scripts.yaml",
+        "scene": "scenes.yaml",
+    }
+    path = hass.config.path(path_map[config_type])
+
+    # Validate the incoming YAML
+    try:
+        incoming = yaml.safe_load(yaml_content)
+    except yaml.YAMLError as exc:
+        return {"error": f"Invalid YAML: {exc}"}
+
+    if incoming is None:
+        return {"error": "YAML content is empty"}
+
+    # Read existing
+    try:
+        with open(path) as fh:
+            existing = yaml.safe_load(fh.read())
+    except FileNotFoundError:
+        existing = None
+
+    if existing is None:
+        existing = []
+    if not isinstance(existing, list):
+        existing = [existing]
+
+    # Merge
+    if isinstance(incoming, list):
+        existing.extend(incoming)
+        added = len(incoming)
+    else:
+        existing.append(incoming)
+        added = 1
+
+    with open(path, "w") as fh:
+        yaml.dump(existing, fh, default_flow_style=False, allow_unicode=True)
+
+    return {
+        "ok": True,
+        "type": config_type,
+        "added": added,
+        "total": len(existing),
+        "path": path,
+        "hint": f"Run reload(target='{config_type}') to apply changes.",
+    }
+
+
+async def _validate_template(
+    hass: HomeAssistant, template_str: str,
+) -> dict[str, Any]:
+    """Validate a Jinja2 template without executing it.
+
+    Checks syntax and reports errors. Useful before embedding templates in
+    automations or dashboard cards to catch issues early.
+    """
+    from homeassistant.helpers.template import Template
+
+    try:
+        tpl = Template(template_str, hass)
+        tpl.ensure_valid()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "valid": False, "error": str(exc)}
+
+    return {"ok": True, "valid": True, "template": template_str[:200]}
+
+
+async def _send_notification(
+    hass: HomeAssistant,
+    message: str,
+    title: str | None = None,
+    target: str | None = None,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send a notification through HA's notify services.
+
+    If target is given, sends to that specific notifier (e.g. "mobile_app_phone").
+    Otherwise sends to notify.notify (the default notifier group).
+    """
+    svc_data: dict[str, Any] = {"message": message}
+    if title:
+        svc_data["title"] = title
+    if data:
+        svc_data["data"] = data
+
+    service_name = target or "notify"
+    try:
+        await hass.services.async_call(
+            "notify", service_name, svc_data, blocking=True
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Notification failed: {exc}"}
+
+    return {"ok": True, "service": f"notify.{service_name}", "message": message}
+
+
+async def _compare_states(
+    hass: HomeAssistant,
+    entity_ids: list[str],
+) -> dict[str, Any]:
+    """Compare current states of multiple entities side-by-side.
+
+    Useful for debugging: are all room temperatures similar? Are all lights
+    in the expected state? Returns a compact comparison table.
+    """
+    if not entity_ids:
+        return {"error": "entity_ids list is empty"}
+    rows = []
+    for eid in entity_ids:
+        state = hass.states.get(eid)
+        if state:
+            rows.append({
+                "entity_id": eid,
+                "state": state.state,
+                "last_changed": state.last_changed.isoformat() if state.last_changed else None,
+                "attributes": {
+                    k: v for k, v in state.attributes.items()
+                    if k in ("friendly_name", "device_class", "unit_of_measurement")
+                },
+            })
+        else:
+            rows.append({"entity_id": eid, "state": "not_found"})
+    return {"ok": True, "count": len(rows), "entities": rows}
+
+
+# ---------------------------------------------------------------------------
 # Intelligence layer — proactive analysis (Stage 3 evolution)
 # ---------------------------------------------------------------------------
 
@@ -4032,6 +4278,37 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _suggest_optimizations(hass)
         if name == "check_device_health":
             return await _check_device_health(hass)
+        if name == "batch_call_service":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            eids = args.get("entity_ids") or args.get("entities") or []
+            return await _batch_call_service(
+                hass, args.get("domain", ""), args.get("service", ""),
+                eids, args.get("data"),
+            )
+        if name == "export_config":
+            return await _export_config(
+                hass, args.get("config_type", ""), args.get("entity_id"),
+            )
+        if name == "import_config":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _import_config(
+                hass, args.get("config_type", ""), args.get("yaml_content", ""),
+            )
+        if name == "validate_template":
+            tpl = args.get("template") or args.get("template_str") or ""
+            return await _validate_template(hass, tpl)
+        if name == "send_notification":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _send_notification(
+                hass, args.get("message", ""), args.get("title"),
+                args.get("target"), args.get("data"),
+            )
+        if name == "compare_states":
+            eids = args.get("entity_ids") or args.get("entities") or []
+            return await _compare_states(hass, eids)
         if name == "read_logs":
             return await _read_logs(hass, args.get("lines", 60))
         if name == "create_area":
@@ -4941,6 +5218,139 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "48+ hours). Surfaces devices that need physical attention."
             ),
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "batch_call_service",
+            "description": (
+                "Call a service for multiple entities at once. E.g. turn off "
+                "all lights, set all covers to 50%. Returns per-entity results."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "string", "description": "Service domain (e.g. 'light')"},
+                    "service": {"type": "string", "description": "Service name (e.g. 'turn_off')"},
+                    "entity_ids": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "List of entity_ids to target",
+                    },
+                    "data": {"type": "object", "description": "Extra service data (e.g. brightness)"},
+                },
+                "required": ["domain", "service", "entity_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "export_config",
+            "description": (
+                "Export automations, scripts, scenes, or dashboard config as "
+                "YAML for backup, sharing, or migration."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "config_type": {
+                        "type": "string",
+                        "enum": ["automation", "script", "scene", "dashboard"],
+                        "description": "What to export",
+                    },
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Optional: specific entity or dashboard ID",
+                    },
+                },
+                "required": ["config_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "import_config",
+            "description": (
+                "Import YAML configuration (automations, scripts, scenes) "
+                "into HA. Appends to existing config files."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "config_type": {
+                        "type": "string",
+                        "enum": ["automation", "script", "scene"],
+                    },
+                    "yaml_content": {
+                        "type": "string",
+                        "description": "YAML content to import",
+                    },
+                },
+                "required": ["config_type", "yaml_content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "validate_template",
+            "description": (
+                "Validate a Jinja2 template syntax without executing it. "
+                "Catches errors before embedding in automations or cards."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "template": {"type": "string", "description": "Jinja2 template string"},
+                },
+                "required": ["template"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_notification",
+            "description": (
+                "Send a notification through HA's notify services. "
+                "Uses the default notifier unless a specific target is given."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "title": {"type": "string"},
+                    "target": {
+                        "type": "string",
+                        "description": "Specific notifier (e.g. 'mobile_app_phone')",
+                    },
+                    "data": {"type": "object", "description": "Extra notification data"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_states",
+            "description": (
+                "Compare current states of multiple entities side-by-side. "
+                "Useful for debugging: are all temperatures consistent? "
+                "Are all lights in the expected state?"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_ids": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "List of entity_ids to compare",
+                    },
+                },
+                "required": ["entity_ids"],
+            },
         },
     },
     {
