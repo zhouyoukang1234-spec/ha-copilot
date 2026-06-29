@@ -380,13 +380,14 @@ async def discover_resources(
                 "'low battery notification')"
             )
         }
-    hacs, github, blueprints, zigbee, tasmota, esphome = await asyncio.gather(
+    hacs, github, blueprints, zigbee, tasmota, esphome, native = await asyncio.gather(
         search_community_resources(hass, q, "all", limit),
         search_github(hass, q, "stars", limit),
         search_blueprints(hass, q, limit),
         search_zigbee_devices(hass, q, limit),
         search_tasmota_devices(hass, q, limit),
         search_esphome_devices(hass, q, min(limit, 4)),
+        search_ha_integrations(hass, q, limit),
         return_exceptions=True,
     )
     errors: list[str] = []
@@ -406,6 +407,7 @@ async def discover_resources(
     zigbee_r = _section("zigbee", zigbee)
     tasmota_r = _section("tasmota", tasmota)
     esphome_r = _section("esphome", esphome)
+    native_r = _section("ha_integrations", native)
 
     # Fused top list: dedupe by repo full_name, keep the highest-starred, tag
     # each with which source(s) surfaced it.
@@ -439,11 +441,13 @@ async def discover_resources(
         "hacs": hacs_r,
         "github": github_r,
         "blueprints": blueprint_r,
+        "ha_integrations": native_r,
         "zigbee": zigbee_r,
         "tasmota": tasmota_r,
         "esphome": esphome_r,
         "note": (
-            "Install HACS items as a custom repository by url; for a blueprint "
+            "ha_integrations are built into Home Assistant (no HACS needed); "
+            "install HACS items as a custom repository by url; for a blueprint "
             "call list_repo_blueprints then import_blueprint. zigbee entries "
             "show whether the hardware is supported (zigbee2mqtt_supported/zha); "
             "tasmota/esphome entries carry a ready firmware config/page."
@@ -572,6 +576,14 @@ _TASMOTA_DB_URL = "https://templates.blakadder.com/templates.json"
 _TASMOTA_SITE = "https://templates.blakadder.com"
 _TASMOTA_TTL = 6 * 3600
 _tasmota_cache: dict[str, Any] = {"devices": None, "ts": 0.0}
+
+# Home Assistant's own catalog of built-in/virtual integrations: a brand or
+# need maps to a natively-supported integration (no HACS needed). Complements
+# the HACS custom-repo search. Free, no auth.
+_HA_INTEGRATIONS_URL = "https://www.home-assistant.io/integrations.json"
+_HA_INTEGRATIONS_DOCS = "https://www.home-assistant.io/integrations"
+_HA_INTEGRATIONS_TTL = 6 * 3600
+_ha_integrations_cache: dict[str, Any] = {"index": None, "ts": 0.0}
 
 
 def _extract_json_objects(text: str, start: int) -> list[str]:
@@ -803,6 +815,83 @@ async def search_esphome_devices(
         "note": (
             "board is the ESP chip family; made_for_esphome=true devices ship "
             "ESPHome-ready. Open url for the importable ESPHome config."
+        ),
+    }
+
+
+async def _fetch_ha_integrations(hass: HomeAssistant) -> dict[str, Any]:
+    """Return HA's built-in integration catalog, fetching+caching with a TTL."""
+    now = time.time()
+    cached = _ha_integrations_cache.get("index")
+    if cached is not None and (now - _ha_integrations_cache.get("ts", 0.0)) < _HA_INTEGRATIONS_TTL:
+        return cached
+    data = await _fetch_json(hass, _HA_INTEGRATIONS_URL, timeout=30.0)
+    if isinstance(data, dict) and data:
+        _ha_integrations_cache.update({"index": data, "ts": now})
+        return data
+    return {}
+
+
+async def search_ha_integrations(
+    hass: HomeAssistant,
+    query: str,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """Search Home Assistant's catalog of built-in integrations.
+
+    A non-expert types a brand or need ("aqara", "tuya", "vacuum") and learns
+    which integrations ship *natively* with Home Assistant — no HACS install
+    needed — with each one's IoT class (local/cloud), type, quality scale and
+    docs page. Complements ``search_community_resources`` (HACS custom repos):
+    together they answer "is my device supported, and how do I add it".
+    Read-only.
+    """
+    q = (query or "").strip()
+    if not q:
+        return {"error": "provide a brand or need (e.g. 'aqara' or 'vacuum')"}
+    try:
+        index = await _fetch_ha_integrations(hass)
+    except Exception as err:  # noqa: BLE001 - surface fetch errors cleanly
+        return {"error": f"{type(err).__name__}: {err}"}
+    if not index:
+        return {"error": "home assistant integration catalog unavailable"}
+
+    words = [w for w in q.lower().split() if w]
+    scored: list[tuple[int, str, dict[str, Any]]] = []
+    for key, meta in index.items():
+        if not isinstance(meta, dict):
+            continue
+        title = str(meta.get("title") or "")
+        desc = str(meta.get("description") or "")
+        hay = f"{key} {title} {desc}".lower()
+        if all(w in hay for w in words):
+            # title/key hits rank above description-only hits
+            strong = sum(1 for w in words if w in f"{key} {title}".lower())
+            scored.append((strong, key, meta))
+    scored.sort(key=lambda t: (t[0], -len(t[1])), reverse=True)
+
+    results = [
+        {
+            "domain": key,
+            "title": meta.get("title"),
+            "iot_class": meta.get("iot_class") or None,
+            "integration_type": meta.get("integration_type") or None,
+            "quality_scale": meta.get("quality_scale") or None,
+            "url": f"{_HA_INTEGRATIONS_DOCS}/{key}",
+        }
+        for _, key, meta in scored[: max(1, limit)]
+    ]
+    return {
+        "ok": True,
+        "query": q,
+        "count": len(results),
+        "total_matched": len(scored),
+        "results": results,
+        "source": "home assistant built-in integrations",
+        "note": (
+            "These are built into Home Assistant (add via Settings > Devices & "
+            "Services > Add Integration; no HACS needed). iot_class shows "
+            "local vs cloud. For custom add-ons use search_community_resources."
         ),
     }
 
