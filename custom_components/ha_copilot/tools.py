@@ -20455,6 +20455,75 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 hass, args.get("entity_id", ""),
                 args.get("duration", ""),
             )
+        # --- Wave 65 dispatch ---
+        if name == "entity_list_by_device_class":
+            return await _entity_list_by_device_class(hass, args.get("device_class", ""))
+        if name == "entity_list_unavailable":
+            return await _entity_list_unavailable(hass)
+        if name == "entity_list_disabled":
+            return await _entity_list_disabled(hass)
+        if name == "entity_list_recently_changed":
+            return await _entity_list_recently_changed(hass, args.get("minutes", 60))
+        if name == "entity_compare_states":
+            return await _entity_compare_states(hass, args.get("entity_ids", []))
+        if name == "automation_list_by_trigger_type":
+            return await _automation_list_by_trigger_type(hass, args.get("trigger_type", ""))
+        if name == "automation_count_by_domain":
+            return await _automation_count_by_domain(hass)
+        if name == "integration_list_failed":
+            return await _integration_list_failed(hass)
+        if name == "integration_get_info":
+            return await _integration_get_info(hass, args.get("domain", ""))
+        if name == "system_monitor_cpu":
+            return await _system_monitor_cpu(hass)
+        if name == "system_monitor_memory":
+            return await _system_monitor_memory(hass)
+        if name == "system_monitor_disk":
+            return await _system_monitor_disk(hass)
+        if name == "addon_list_installed":
+            return await _addon_list_installed(hass)
+        if name == "addon_get_changelog":
+            return await _addon_get_changelog(hass, args.get("slug", ""))
+        if name == "network_scan_devices":
+            return await _network_scan_devices(hass)
+        if name == "zha_list_devices":
+            return await _zha_list_devices(hass)
+        if name == "zha_get_device_info":
+            return await _zha_get_device_info(hass, args.get("ieee", ""))
+        if name == "mqtt_list_topics":
+            return await _mqtt_list_topics(hass)
+        if name == "energy_get_consumption":
+            return await _energy_get_consumption(hass, args.get("hours", 24))
+        if name == "entity_history_summary":
+            return await _entity_history_summary(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "service_call_dry_run":
+            return await _service_call_dry_run(hass, args.get("domain", ""), args.get("service", ""), args.get("data"))
+        if name == "config_validate_domain":
+            return await _config_validate_domain(hass, args.get("domain", ""))
+        if name == "template_list_all":
+            return await _template_list_all(hass)
+        if name == "rest_command_list":
+            return await _rest_command_list(hass)
+        if name == "shell_command_list":
+            return await _shell_command_list(hass)
+        if name == "custom_component_list":
+            return await _custom_component_list(hass)
+        if name == "config_entry_list_by_state":
+            return await _config_entry_list_by_state(hass, args.get("state", ""))
+        if name == "area_list_with_devices":
+            return await _area_list_with_devices(hass)
+        if name == "automation_trace_detail":
+            return await _automation_trace_detail(hass, args.get("entity_id", ""), args.get("run_id", ""))
+        if name == "entity_search_by_attribute":
+            return await _entity_search_by_attribute(hass, args.get("attribute", ""), args.get("value"))
+        if name == "helper_list_all":
+            return await _helper_list_all(hass)
+        if name == "vacuum_list_fan_speeds":
+            return await _vacuum_list_fan_speeds(hass, args.get("entity_id", ""))
+        if name == "media_player_queue_info":
+            return await _media_player_queue_info(hass, args.get("entity_id", ""))
+        if name == "climate_get_hvac_modes":
+            return await _climate_get_hvac_modes(hass, args.get("entity_id", ""))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -21880,6 +21949,674 @@ async def _timer_change_duration(
         return {"ok": True, "entity_id": entity_id, "duration": duration}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Timer change duration failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 65 — entity analysis, automation analysis, integration status, system
+# monitor, addon management, network scan, ZHA, MQTT, energy, history agg,
+# service dry-run, config validation, template list, REST/shell commands,
+# custom components, config entry by state, area batch, trace detail,
+# attribute search, helper introspection, vacuum, media player, climate
+# ---------------------------------------------------------------------------
+
+
+async def _entity_list_by_device_class(
+    hass: HomeAssistant, device_class: str,
+) -> dict[str, Any]:
+    """List all entities with a specific device_class."""
+    results = []
+    for state in hass.states.async_all():
+        if state.attributes.get("device_class") == device_class:
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "device_class": device_class, "count": len(results),
+            "entities": results[:500]}
+
+
+async def _entity_list_unavailable(hass: HomeAssistant) -> dict[str, Any]:
+    """List all entities currently in unavailable/unknown state."""
+    results = []
+    for state in hass.states.async_all():
+        if state.state in ("unavailable", "unknown"):
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "entities": results[:500]}
+
+
+async def _entity_list_disabled(hass: HomeAssistant) -> dict[str, Any]:
+    """List all disabled entities from the entity registry."""
+    reg = er.async_get(hass)
+    results = []
+    for entry in reg.entities.values():
+        if entry.disabled_by is not None:
+            results.append({
+                "entity_id": entry.entity_id,
+                "disabled_by": str(entry.disabled_by),
+                "platform": entry.platform,
+                "name": entry.name or entry.original_name,
+            })
+    return {"ok": True, "count": len(results), "entities": results[:500]}
+
+
+async def _entity_list_recently_changed(
+    hass: HomeAssistant, minutes: int = 60,
+) -> dict[str, Any]:
+    """List entities that changed state in the last N minutes."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    results = []
+    for state in hass.states.async_all():
+        if state.last_changed >= cutoff:
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "last_changed": state.last_changed.isoformat(),
+            })
+    return {"ok": True, "minutes": minutes, "count": len(results),
+            "entities": results[:500]}
+
+
+async def _entity_compare_states(
+    hass: HomeAssistant, entity_ids: list[str],
+) -> dict[str, Any]:
+    """Compare current states of multiple entities side by side."""
+    results = []
+    for eid in entity_ids:
+        state = hass.states.get(eid)
+        if state:
+            results.append({
+                "entity_id": eid,
+                "state": state.state,
+                "last_changed": state.last_changed.isoformat(),
+                "attributes": dict(state.attributes),
+            })
+        else:
+            results.append({"entity_id": eid, "error": "not found"})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _automation_list_by_trigger_type(
+    hass: HomeAssistant, trigger_type: str,
+) -> dict[str, Any]:
+    """List automations filtered by trigger type from automations.yaml."""
+    try:
+        config_dir = hass.config.config_dir
+        path = os.path.join(config_dir, "automations.yaml")
+
+        def _read():
+            with open(path, encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+        raw = await hass.async_add_executor_job(_read)
+        if not isinstance(raw, list):
+            return {"error": "automations.yaml is not a list"}
+        results = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            triggers = item.get("trigger", item.get("triggers", []))
+            if isinstance(triggers, dict):
+                triggers = [triggers]
+            for trig in triggers:
+                if isinstance(trig, dict) and trig.get("platform") == trigger_type:
+                    results.append({
+                        "id": item.get("id"),
+                        "alias": item.get("alias"),
+                        "trigger_type": trigger_type,
+                    })
+                    break
+        return {"ok": True, "trigger_type": trigger_type,
+                "count": len(results), "automations": results}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"List by trigger type failed: {exc}"}
+
+
+async def _automation_count_by_domain(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """Count automations grouped by their action domains."""
+    try:
+        config_dir = hass.config.config_dir
+        path = os.path.join(config_dir, "automations.yaml")
+
+        def _read():
+            with open(path, encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+        raw = await hass.async_add_executor_job(_read)
+        if not isinstance(raw, list):
+            return {"error": "automations.yaml is not a list"}
+        counts: dict[str, int] = {}
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            actions = item.get("action", item.get("actions", []))
+            if isinstance(actions, dict):
+                actions = [actions]
+            for act in actions:
+                if isinstance(act, dict):
+                    svc = act.get("service", act.get("action", ""))
+                    if "." in str(svc):
+                        domain = str(svc).split(".")[0]
+                        counts[domain] = counts.get(domain, 0) + 1
+        return {"ok": True, "counts": counts,
+                "total_automations": len(raw)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation count by domain failed: {exc}"}
+
+
+async def _integration_list_failed(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """List config entries that failed to set up."""
+    entries = hass.config_entries.async_entries()
+    failed = []
+    for entry in entries:
+        state = getattr(entry, "state", None)
+        if state and str(state) in ("setup_error", "setup_retry", "failed_unload"):
+            failed.append({
+                "entry_id": entry.entry_id,
+                "domain": entry.domain,
+                "title": entry.title,
+                "state": str(state),
+            })
+    return {"ok": True, "count": len(failed), "entries": failed}
+
+
+async def _integration_get_info(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Get information about an integration/domain."""
+    try:
+        from homeassistant.loader import async_get_integration
+        integration = await async_get_integration(hass, domain)
+        return {
+            "ok": True,
+            "domain": domain,
+            "name": integration.name,
+            "version": getattr(integration, "version", None),
+            "is_built_in": integration.is_built_in,
+            "documentation": integration.documentation,
+            "requirements": list(integration.requirements),
+            "config_flow": integration.config_flow,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Integration info failed: {exc}"}
+
+
+async def _system_monitor_cpu(hass: HomeAssistant) -> dict[str, Any]:
+    """Get CPU usage via psutil."""
+    try:
+        import psutil
+        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_count = psutil.cpu_count()
+        load_avg = os.getloadavg() if hasattr(os, "getloadavg") else None
+        return {"ok": True, "cpu_percent": cpu_percent,
+                "cpu_count": cpu_count, "load_avg": load_avg}
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"CPU monitor failed: {exc}"}
+
+
+async def _system_monitor_memory(hass: HomeAssistant) -> dict[str, Any]:
+    """Get memory usage via psutil."""
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        return {
+            "ok": True,
+            "total_mb": round(mem.total / 1048576, 1),
+            "available_mb": round(mem.available / 1048576, 1),
+            "used_mb": round(mem.used / 1048576, 1),
+            "percent": mem.percent,
+        }
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Memory monitor failed: {exc}"}
+
+
+async def _system_monitor_disk(hass: HomeAssistant) -> dict[str, Any]:
+    """Get disk usage via psutil."""
+    try:
+        import psutil
+        disk = psutil.disk_usage("/")
+        return {
+            "ok": True,
+            "total_gb": round(disk.total / 1073741824, 2),
+            "used_gb": round(disk.used / 1073741824, 2),
+            "free_gb": round(disk.free / 1073741824, 2),
+            "percent": disk.percent,
+        }
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Disk monitor failed: {exc}"}
+
+
+async def _addon_list_installed(hass: HomeAssistant) -> dict[str, Any]:
+    """List installed HA add-ons via Supervisor API."""
+    try:
+        from homeassistant.components.hassio import get_addons_info
+        addons = await get_addons_info(hass)
+        items = []
+        for addon in addons.get("addons", []):
+            items.append({
+                "slug": addon.get("slug"),
+                "name": addon.get("name"),
+                "version": addon.get("version"),
+                "state": addon.get("state"),
+                "update_available": addon.get("update_available", False),
+            })
+        return {"ok": True, "count": len(items), "addons": items}
+    except ImportError:
+        return {"error": "hassio component not available (not running Supervisor)"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon list failed: {exc}"}
+
+
+async def _addon_get_changelog(
+    hass: HomeAssistant, slug: str,
+) -> dict[str, Any]:
+    """Get changelog for a specific add-on."""
+    try:
+        from homeassistant.components.hassio import get_addon_changelog
+        changelog = await get_addon_changelog(hass, slug)
+        return {"ok": True, "slug": slug,
+                "changelog": str(changelog)[:5000]}
+    except ImportError:
+        return {"error": "hassio component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Addon changelog failed: {exc}"}
+
+
+async def _network_scan_devices(hass: HomeAssistant) -> dict[str, Any]:
+    """List all device_tracker entities to show network devices."""
+    trackers = hass.states.async_all("device_tracker")
+    results = []
+    for state in trackers:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "ip": attrs.get("ip"),
+            "mac": attrs.get("mac"),
+            "hostname": attrs.get("hostname"),
+            "friendly_name": attrs.get("friendly_name"),
+        })
+    return {"ok": True, "count": len(results), "devices": results[:500]}
+
+
+async def _zha_list_devices(hass: HomeAssistant) -> dict[str, Any]:
+    """List all ZHA Zigbee devices."""
+    try:
+        from homeassistant.components.zha.core.gateway import ZHAGateway
+        gateway: ZHAGateway = hass.data.get("zha", {}).get("zha_gateway")
+        if gateway is None:
+            return {"error": "ZHA gateway not available"}
+        devices = []
+        for dev in gateway.devices.values():
+            devices.append({
+                "ieee": str(dev.ieee),
+                "name": dev.name,
+                "model": getattr(dev, "model", None),
+                "manufacturer": getattr(dev, "manufacturer", None),
+                "available": dev.available,
+            })
+        return {"ok": True, "count": len(devices), "devices": devices}
+    except ImportError:
+        return {"error": "ZHA component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"ZHA list devices failed: {exc}"}
+
+
+async def _zha_get_device_info(
+    hass: HomeAssistant, ieee: str,
+) -> dict[str, Any]:
+    """Get detailed info about a specific ZHA device."""
+    try:
+        from homeassistant.components.zha.core.gateway import ZHAGateway
+        gateway: ZHAGateway = hass.data.get("zha", {}).get("zha_gateway")
+        if gateway is None:
+            return {"error": "ZHA gateway not available"}
+        for dev in gateway.devices.values():
+            if str(dev.ieee) == ieee:
+                return {
+                    "ok": True,
+                    "ieee": ieee,
+                    "name": dev.name,
+                    "model": getattr(dev, "model", None),
+                    "manufacturer": getattr(dev, "manufacturer", None),
+                    "available": dev.available,
+                    "lqi": getattr(dev, "lqi", None),
+                    "rssi": getattr(dev, "rssi", None),
+                    "last_seen": str(getattr(dev, "last_seen", None)),
+                }
+        return {"error": f"ZHA device with IEEE '{ieee}' not found"}
+    except ImportError:
+        return {"error": "ZHA component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"ZHA device info failed: {exc}"}
+
+
+async def _mqtt_list_topics(hass: HomeAssistant) -> dict[str, Any]:
+    """List known MQTT topics from the debug data."""
+    try:
+        mqtt_data = hass.data.get("mqtt")
+        if mqtt_data is None:
+            return {"error": "MQTT not configured"}
+        debug = getattr(mqtt_data, "debug_info", None)
+        if debug is None:
+            return {"ok": True, "topics": [], "note": "No debug info available"}
+        topics = list(debug.keys()) if isinstance(debug, dict) else []
+        return {"ok": True, "count": len(topics), "topics": topics[:500]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"MQTT list topics failed: {exc}"}
+
+
+async def _energy_get_consumption(
+    hass: HomeAssistant, hours: int = 24,
+) -> dict[str, Any]:
+    """Get energy consumption data from recorder statistics."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        stats = await _recorder_get_instance(hass).async_add_executor_job(
+            _recorder_statistics.statistics_during_period,
+            hass, start, end, None, {"energy"}, {"change"},
+        )
+        results = {}
+        for sid, data in stats.items():
+            total_change = sum(
+                p.get("change", 0) or 0 for p in data
+            )
+            results[sid] = round(total_change, 3)
+        return {"ok": True, "hours": hours, "consumption": results}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Energy consumption failed: {exc}"}
+
+
+async def _entity_history_summary(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get a summary of entity state changes over a period."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        hist = await _recorder_get_instance(hass).async_add_executor_job(
+            _recorder_history.state_changes_during_period,
+            hass, start, end, entity_id,
+        )
+        states_list = hist.get(entity_id, [])
+        state_counts: dict[str, int] = {}
+        for s in states_list:
+            state_counts[s.state] = state_counts.get(s.state, 0) + 1
+        return {
+            "ok": True,
+            "entity_id": entity_id,
+            "hours": hours,
+            "total_changes": len(states_list),
+            "state_counts": state_counts,
+            "first": states_list[0].state if states_list else None,
+            "last": states_list[-1].state if states_list else None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"History summary failed: {exc}"}
+
+
+async def _service_call_dry_run(
+    hass: HomeAssistant, domain: str, service: str,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate a service call without executing it."""
+    services = hass.services.async_services()
+    domain_svcs = services.get(domain, {})
+    if not domain_svcs:
+        return {"error": f"Domain '{domain}' not found"}
+    if service not in domain_svcs:
+        return {"error": f"Service '{domain}.{service}' not found"}
+    return {
+        "ok": True,
+        "domain": domain,
+        "service": service,
+        "data": data or {},
+        "valid": True,
+        "note": "Service exists and can be called",
+    }
+
+
+async def _config_validate_domain(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Check config entry health for a domain."""
+    entries = hass.config_entries.async_entries(domain)
+    if not entries:
+        return {"error": f"No config entries for domain '{domain}'"}
+    results = []
+    for entry in entries:
+        results.append({
+            "entry_id": entry.entry_id,
+            "title": entry.title,
+            "state": str(getattr(entry, "state", "unknown")),
+            "source": getattr(entry, "source", None),
+        })
+    return {"ok": True, "domain": domain, "count": len(results),
+            "entries": results}
+
+
+async def _template_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all template entities."""
+    results = []
+    for state in hass.states.async_all():
+        if state.entity_id.startswith("template.") or (
+            state.attributes.get("friendly_name", "").startswith("Template")
+        ):
+            results.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _rest_command_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all configured REST commands."""
+    rest_data = hass.data.get("rest_command", {})
+    commands = list(rest_data.keys()) if isinstance(rest_data, dict) else []
+    return {"ok": True, "count": len(commands), "commands": commands}
+
+
+async def _shell_command_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all configured shell commands."""
+    shell_data = hass.data.get("shell_command", {})
+    commands = list(shell_data.keys()) if isinstance(shell_data, dict) else []
+    return {"ok": True, "count": len(commands), "commands": commands}
+
+
+async def _custom_component_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all custom components (non-built-in)."""
+    try:
+        from homeassistant.loader import async_get_custom_components
+        custom = await async_get_custom_components(hass)
+        items = []
+        for domain, integration in custom.items():
+            items.append({
+                "domain": domain,
+                "name": integration.name,
+                "version": getattr(integration, "version", None),
+            })
+        return {"ok": True, "count": len(items), "components": items}
+    except ImportError:
+        return {"error": "Loader not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Custom component list failed: {exc}"}
+
+
+async def _config_entry_list_by_state(
+    hass: HomeAssistant, state: str,
+) -> dict[str, Any]:
+    """List config entries filtered by their state."""
+    entries = hass.config_entries.async_entries()
+    results = []
+    for entry in entries:
+        entry_state = str(getattr(entry, "state", ""))
+        if state and entry_state != state:
+            continue
+        results.append({
+            "entry_id": entry.entry_id,
+            "domain": entry.domain,
+            "title": entry.title,
+            "state": entry_state,
+        })
+    return {"ok": True, "filter_state": state, "count": len(results),
+            "entries": results}
+
+
+async def _area_list_with_devices(hass: HomeAssistant) -> dict[str, Any]:
+    """List all areas with their device and entity counts."""
+    area_reg = ar.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+    results = []
+    for area in area_reg.async_list_areas():
+        dev_count = sum(1 for d in dev_reg.devices.values() if d.area_id == area.id)
+        ent_count = sum(1 for e in ent_reg.entities.values() if e.area_id == area.id)
+        results.append({
+            "area_id": area.id,
+            "name": area.name,
+            "device_count": dev_count,
+            "entity_count": ent_count,
+            "floor_id": getattr(area, "floor_id", None),
+        })
+    return {"ok": True, "count": len(results), "areas": results}
+
+
+async def _automation_trace_detail(
+    hass: HomeAssistant, entity_id: str, run_id: str,
+) -> dict[str, Any]:
+    """Get detailed trace data for a specific automation run."""
+    try:
+        from homeassistant.components.trace import async_get_trace
+        trace = await async_get_trace(hass, "automation", entity_id, run_id)
+        return {
+            "ok": True,
+            "entity_id": entity_id,
+            "run_id": run_id,
+            "trace": {
+                "state": trace.get("state"),
+                "script_execution": trace.get("script_execution"),
+                "timestamp": trace.get("timestamp", {}).get("start"),
+                "trace_steps": len(trace.get("trace", {})),
+            },
+        }
+    except ImportError:
+        return {"error": "trace component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation trace detail failed: {exc}"}
+
+
+async def _entity_search_by_attribute(
+    hass: HomeAssistant, attribute: str, value: Any = None,
+) -> dict[str, Any]:
+    """Search entities by attribute name and optionally value."""
+    results = []
+    for state in hass.states.async_all():
+        if attribute in state.attributes:
+            if value is None or state.attributes[attribute] == value:
+                results.append({
+                    "entity_id": state.entity_id,
+                    "state": state.state,
+                    attribute: state.attributes[attribute],
+                })
+    return {"ok": True, "attribute": attribute, "value": value,
+            "count": len(results), "entities": results[:500]}
+
+
+async def _helper_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all helper/input entities."""
+    helper_domains = ("input_boolean", "input_number", "input_text",
+                      "input_select", "input_datetime", "input_button",
+                      "counter", "timer", "schedule")
+    results = []
+    for domain in helper_domains:
+        for state in hass.states.async_all(domain):
+            results.append({
+                "entity_id": state.entity_id,
+                "domain": domain,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(results), "helpers": results}
+
+
+async def _vacuum_list_fan_speeds(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List available fan speed levels for a vacuum."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Vacuum '{entity_id}' not found"}
+    fan_speeds = state.attributes.get("fan_speed_list", [])
+    current = state.attributes.get("fan_speed")
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "current_fan_speed": current,
+        "fan_speed_list": fan_speeds,
+    }
+
+
+async def _media_player_queue_info(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get media player current playback and queue info."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Media player '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "media_title": attrs.get("media_title"),
+        "media_artist": attrs.get("media_artist"),
+        "media_album_name": attrs.get("media_album_name"),
+        "media_duration": attrs.get("media_duration"),
+        "media_position": attrs.get("media_position"),
+        "media_content_type": attrs.get("media_content_type"),
+        "shuffle": attrs.get("shuffle"),
+        "repeat": attrs.get("repeat"),
+        "queue_size": attrs.get("queue_size"),
+    }
+
+
+async def _climate_get_hvac_modes(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get available HVAC modes, fan modes, swing modes for a climate entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Climate entity '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "current_mode": state.state,
+        "hvac_modes": attrs.get("hvac_modes", []),
+        "fan_modes": attrs.get("fan_modes", []),
+        "swing_modes": attrs.get("swing_modes", []),
+        "preset_modes": attrs.get("preset_modes", []),
+        "current_temperature": attrs.get("current_temperature"),
+        "target_temperature": attrs.get("temperature"),
+        "min_temp": attrs.get("min_temp"),
+        "max_temp": attrs.get("max_temp"),
+    }
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -33121,6 +33858,318 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "entity_id": {"type": "string", "description": "Timer entity ID"},
                 "duration": {"type": "string", "description": "New duration (e.g. '00:05:00')"},
             }, "required": ["entity_id", "duration"]},
+        },
+    },
+    # --- Wave 65 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_list_by_device_class",
+            "description": "List all entities with a specific device_class (e.g. temperature, humidity, motion).",
+            "parameters": {"type": "object", "properties": {
+                "device_class": {"type": "string", "description": "Device class to filter by"},
+            }, "required": ["device_class"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_list_unavailable",
+            "description": "List all entities currently in unavailable or unknown state.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_list_disabled",
+            "description": "List all disabled entities from the entity registry.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_list_recently_changed",
+            "description": "List entities that changed state in the last N minutes.",
+            "parameters": {"type": "object", "properties": {
+                "minutes": {"type": "integer", "description": "Minutes to look back (default 60)", "default": 60},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_compare_states",
+            "description": "Compare current states of multiple entities side by side.",
+            "parameters": {"type": "object", "properties": {
+                "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Entity IDs to compare"},
+            }, "required": ["entity_ids"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_list_by_trigger_type",
+            "description": "List automations filtered by trigger platform type (e.g. state, time, device).",
+            "parameters": {"type": "object", "properties": {
+                "trigger_type": {"type": "string", "description": "Trigger platform type"},
+            }, "required": ["trigger_type"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_count_by_domain",
+            "description": "Count automations grouped by their action service domains.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_list_failed",
+            "description": "List config entries that failed to set up (setup_error, setup_retry, etc.).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_get_info",
+            "description": "Get detailed information about an integration (name, version, requirements, config_flow).",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "Integration domain"},
+            }, "required": ["domain"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_monitor_cpu",
+            "description": "Get current CPU usage percentage and load average.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_monitor_memory",
+            "description": "Get memory usage details (total, available, used, percent).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "system_monitor_disk",
+            "description": "Get disk usage details (total, used, free, percent).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "addon_list_installed",
+            "description": "List all installed HA add-ons via Supervisor API.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "addon_get_changelog",
+            "description": "Get changelog for a specific HA add-on.",
+            "parameters": {"type": "object", "properties": {
+                "slug": {"type": "string", "description": "Add-on slug"},
+            }, "required": ["slug"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "network_scan_devices",
+            "description": "List all device_tracker entities to show known network devices.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zha_list_devices",
+            "description": "List all ZHA Zigbee devices with model, manufacturer, availability.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "zha_get_device_info",
+            "description": "Get detailed info about a specific ZHA Zigbee device by IEEE address.",
+            "parameters": {"type": "object", "properties": {
+                "ieee": {"type": "string", "description": "Device IEEE address"},
+            }, "required": ["ieee"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mqtt_list_topics",
+            "description": "List known MQTT topics from debug data.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "energy_get_consumption",
+            "description": "Get energy consumption data from recorder statistics over a period.",
+            "parameters": {"type": "object", "properties": {
+                "hours": {"type": "integer", "description": "Hours to look back (default 24)", "default": 24},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_history_summary",
+            "description": "Get a summary of entity state changes over a period (counts, first/last state).",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity ID"},
+                "hours": {"type": "integer", "description": "Hours to look back (default 24)", "default": 24},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "service_call_dry_run",
+            "description": "Validate a service call without executing it (check if domain.service exists).",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "Service domain"},
+                "service": {"type": "string", "description": "Service name"},
+                "data": {"type": "object", "description": "Optional service data"},
+            }, "required": ["domain", "service"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_validate_domain",
+            "description": "Check config entry health for a domain (list entries with their states).",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "Integration domain"},
+            }, "required": ["domain"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "template_list_all",
+            "description": "List all template entities in the system.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rest_command_list",
+            "description": "List all configured REST commands.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shell_command_list",
+            "description": "List all configured shell commands.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "custom_component_list",
+            "description": "List all custom (non-built-in) components installed.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_entry_list_by_state",
+            "description": "List config entries filtered by their state (loaded, setup_error, etc.).",
+            "parameters": {"type": "object", "properties": {
+                "state": {"type": "string", "description": "State to filter by"},
+            }, "required": ["state"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "area_list_with_devices",
+            "description": "List all areas with their device and entity counts.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_trace_detail",
+            "description": "Get detailed trace data for a specific automation run.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Automation entity ID"},
+                "run_id": {"type": "string", "description": "Trace run ID"},
+            }, "required": ["entity_id", "run_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_search_by_attribute",
+            "description": "Search entities by attribute name and optionally value.",
+            "parameters": {"type": "object", "properties": {
+                "attribute": {"type": "string", "description": "Attribute name to search for"},
+                "value": {"description": "Optional value to match"},
+            }, "required": ["attribute"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "helper_list_all",
+            "description": "List all helper/input entities (input_boolean, input_number, counter, timer, etc.).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_list_fan_speeds",
+            "description": "List available fan speed levels for a vacuum entity.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Vacuum entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_queue_info",
+            "description": "Get media player current playback info (title, artist, album, position, queue).",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Media player entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_get_hvac_modes",
+            "description": "Get available HVAC/fan/swing/preset modes and temperature range for a climate entity.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Climate entity ID"},
+            }, "required": ["entity_id"]},
         },
     },
 ]
