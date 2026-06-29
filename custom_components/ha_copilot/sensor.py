@@ -35,7 +35,7 @@ async def async_setup_entry(
         name="HA-Copilot",
         manufacturer="HA-Copilot",
         model="Capability Layer",
-        sw_version="0.4.0",
+        sw_version="0.5.0",
     )
     async_add_entities(
         [
