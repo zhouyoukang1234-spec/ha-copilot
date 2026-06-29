@@ -20579,6 +20579,95 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _automation_validate_yaml(hass)
         if name == "script_validate_yaml":
             return await _script_validate_yaml(hass)
+        # --- Wave 67 dispatch ---
+        if name == "entity_batch_disable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_batch_disable(hass, args.get("entity_ids", []))
+        if name == "entity_batch_enable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_batch_enable(hass, args.get("entity_ids", []))
+        if name == "entity_batch_rename":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_batch_rename(hass, args.get("renames", []))
+        if name == "automation_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_delete(hass, args.get("entity_id", ""))
+        if name == "automation_reorder":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_reorder(hass, args.get("entity_id", ""), args.get("position", 0))
+        if name == "scene_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _scene_delete(hass, args.get("entity_id", ""))
+        if name == "scene_list_entities":
+            return await _scene_list_entities(hass, args.get("entity_id", ""))
+        if name == "input_boolean_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_boolean_create(hass, args.get("name", ""), args.get("icon"))
+        if name == "input_number_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_number_create(hass, args.get("name", ""), args.get("min", 0), args.get("max", 100), args.get("step", 1))
+        if name == "input_text_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_text_create(hass, args.get("name", ""), args.get("min", 0), args.get("max", 100))
+        if name == "input_select_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_select_create(hass, args.get("name", ""), args.get("options", []))
+        if name == "input_datetime_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_datetime_create(hass, args.get("name", ""), args.get("has_date", True), args.get("has_time", True))
+        if name == "counter_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _counter_create(hass, args.get("name", ""), args.get("initial", 0), args.get("step", 1))
+        if name == "timer_create":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _timer_create(hass, args.get("name", ""), args.get("duration", "00:00:00"))
+        if name == "device_tracker_list_home":
+            return await _device_tracker_list_home(hass)
+        if name == "device_tracker_list_away":
+            return await _device_tracker_list_away(hass)
+        if name == "system_uptime":
+            return await _system_uptime(hass)
+        if name == "system_ha_version":
+            return await _system_ha_version(hass)
+        if name == "entity_change_id":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_change_id(hass, args.get("old_entity_id", ""), args.get("new_entity_id", ""))
+        if name == "script_delete":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _script_delete(hass, args.get("entity_id", ""))
+        if name == "integration_list_all_domains":
+            return await _integration_list_all_domains(hass)
+        if name == "automation_statistics":
+            return await _automation_statistics(hass)
+        if name == "config_dump_yaml":
+            return await _config_dump_yaml(hass, args.get("filename", "configuration.yaml"))
+        if name == "entity_set_icon":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_set_icon(hass, args.get("entity_id", ""), args.get("icon", ""))
+        if name == "area_turn_off_all":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _area_turn_off_all(hass, args.get("area_id", ""))
+        if name == "area_turn_on_all":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _area_turn_on_all(hass, args.get("area_id", ""))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -23196,6 +23285,519 @@ async def _script_validate_yaml(hass: HomeAssistant) -> dict[str, Any]:
         return await hass.async_add_executor_job(_validate)
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Script YAML validation failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 67 — entity batch ops, automation/script/scene management, helper
+# creation, device tracker home/away, system metrics, entity ID change,
+# integration domains, automation stats, config dump, entity icon, area ctrl
+# ---------------------------------------------------------------------------
+
+
+async def _entity_batch_disable(
+    hass: HomeAssistant, entity_ids: list[str],
+) -> dict[str, Any]:
+    """Batch-disable multiple entities."""
+    reg = er.async_get(hass)
+    results = []
+    for eid in entity_ids:
+        entry = reg.async_get(eid)
+        if entry is None:
+            results.append({"entity_id": eid, "error": "not found"})
+        else:
+            try:
+                from homeassistant.helpers.entity_registry import RegistryEntryDisabler
+                reg.async_update_entity(eid, disabled_by=RegistryEntryDisabler.USER)
+                results.append({"entity_id": eid, "ok": True})
+            except Exception as exc:  # noqa: BLE001
+                results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _entity_batch_enable(
+    hass: HomeAssistant, entity_ids: list[str],
+) -> dict[str, Any]:
+    """Batch-enable multiple entities."""
+    reg = er.async_get(hass)
+    results = []
+    for eid in entity_ids:
+        entry = reg.async_get(eid)
+        if entry is None:
+            results.append({"entity_id": eid, "error": "not found"})
+        else:
+            try:
+                reg.async_update_entity(eid, disabled_by=None)
+                results.append({"entity_id": eid, "ok": True})
+            except Exception as exc:  # noqa: BLE001
+                results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _entity_batch_rename(
+    hass: HomeAssistant, renames: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Batch-rename multiple entities."""
+    reg = er.async_get(hass)
+    results = []
+    for item in renames:
+        eid = item.get("entity_id", "")
+        new_name = item.get("name", "")
+        entry = reg.async_get(eid)
+        if entry is None:
+            results.append({"entity_id": eid, "error": "not found"})
+        else:
+            try:
+                reg.async_update_entity(eid, name=new_name)
+                results.append({"entity_id": eid, "ok": True, "name": new_name})
+            except Exception as exc:  # noqa: BLE001
+                results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _automation_delete(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Delete an automation from automations.yaml."""
+    try:
+        config_dir = hass.config.config_dir
+        auto_id = entity_id.replace("automation.", "")
+        path = os.path.join(config_dir, "automations.yaml")
+
+        def _do_delete():
+            with open(path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, list):
+                return False, "automations.yaml is not a list"
+            orig_len = len(raw)
+            raw = [
+                item for item in raw
+                if not (isinstance(item, dict) and (
+                    item.get("id") == auto_id
+                    or item.get("alias", "").lower().replace(" ", "_") == auto_id
+                ))
+            ]
+            if len(raw) == orig_len:
+                return False, f"Automation '{auto_id}' not found"
+            with open(path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+            return True, ""
+
+        ok, err = await hass.async_add_executor_job(_do_delete)
+        if not ok:
+            return {"error": err}
+        return {"ok": True, "entity_id": entity_id, "deleted": True}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation delete failed: {exc}"}
+
+
+async def _automation_reorder(
+    hass: HomeAssistant, entity_id: str, position: int,
+) -> dict[str, Any]:
+    """Move an automation to a specific position in automations.yaml."""
+    try:
+        config_dir = hass.config.config_dir
+        auto_id = entity_id.replace("automation.", "")
+        path = os.path.join(config_dir, "automations.yaml")
+
+        def _do_reorder():
+            with open(path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, list):
+                return False, "automations.yaml is not a list"
+            source = None
+            for i, item in enumerate(raw):
+                if isinstance(item, dict) and (
+                    item.get("id") == auto_id
+                    or item.get("alias", "").lower().replace(" ", "_") == auto_id
+                ):
+                    source = raw.pop(i)
+                    break
+            if source is None:
+                return False, f"Automation '{auto_id}' not found"
+            pos = max(0, min(position, len(raw)))
+            raw.insert(pos, source)
+            with open(path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+            return True, ""
+
+        ok, err = await hass.async_add_executor_job(_do_reorder)
+        if not ok:
+            return {"error": err}
+        return {"ok": True, "entity_id": entity_id, "position": position}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation reorder failed: {exc}"}
+
+
+async def _scene_delete(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Delete a scene from scenes.yaml."""
+    try:
+        config_dir = hass.config.config_dir
+        scene_id = entity_id.replace("scene.", "")
+        path = os.path.join(config_dir, "scenes.yaml")
+
+        def _do_delete():
+            with open(path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, list):
+                return False, "scenes.yaml is not a list"
+            orig_len = len(raw)
+            raw = [
+                item for item in raw
+                if not (isinstance(item, dict) and (
+                    item.get("id") == scene_id
+                    or item.get("name", "").lower().replace(" ", "_") == scene_id
+                ))
+            ]
+            if len(raw) == orig_len:
+                return False, f"Scene '{scene_id}' not found"
+            with open(path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+            return True, ""
+
+        ok, err = await hass.async_add_executor_job(_do_delete)
+        if not ok:
+            return {"error": err}
+        return {"ok": True, "entity_id": entity_id, "deleted": True}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Scene delete failed: {exc}"}
+
+
+async def _scene_list_entities(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List entities captured in a scene."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Scene '{entity_id}' not found"}
+    entity_ids = state.attributes.get("entity_id", [])
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "friendly_name": state.attributes.get("friendly_name"),
+        "entities": entity_ids if isinstance(entity_ids, list) else [entity_ids],
+        "count": len(entity_ids) if isinstance(entity_ids, list) else 1,
+    }
+
+
+async def _input_boolean_create(
+    hass: HomeAssistant, name: str, icon: str | None = None,
+) -> dict[str, Any]:
+    """Create a new input_boolean helper."""
+    try:
+        data: dict[str, Any] = {"name": name}
+        if icon:
+            data["icon"] = icon
+        await hass.services.async_call("input_boolean", "create", data)
+        return {"ok": True, "name": name, "type": "input_boolean"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input boolean create failed: {exc}"}
+
+
+async def _input_number_create(
+    hass: HomeAssistant, name: str,
+    min_val: float = 0, max_val: float = 100, step: float = 1,
+) -> dict[str, Any]:
+    """Create a new input_number helper."""
+    try:
+        await hass.services.async_call("input_number", "create", {
+            "name": name, "min": min_val, "max": max_val, "step": step,
+        })
+        return {"ok": True, "name": name, "type": "input_number",
+                "min": min_val, "max": max_val, "step": step}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input number create failed: {exc}"}
+
+
+async def _input_text_create(
+    hass: HomeAssistant, name: str,
+    min_len: int = 0, max_len: int = 100,
+) -> dict[str, Any]:
+    """Create a new input_text helper."""
+    try:
+        await hass.services.async_call("input_text", "create", {
+            "name": name, "min": min_len, "max": max_len,
+        })
+        return {"ok": True, "name": name, "type": "input_text"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input text create failed: {exc}"}
+
+
+async def _input_select_create(
+    hass: HomeAssistant, name: str, options: list[str],
+) -> dict[str, Any]:
+    """Create a new input_select helper."""
+    try:
+        await hass.services.async_call("input_select", "create", {
+            "name": name, "options": options,
+        })
+        return {"ok": True, "name": name, "type": "input_select",
+                "options": options}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input select create failed: {exc}"}
+
+
+async def _input_datetime_create(
+    hass: HomeAssistant, name: str,
+    has_date: bool = True, has_time: bool = True,
+) -> dict[str, Any]:
+    """Create a new input_datetime helper."""
+    try:
+        await hass.services.async_call("input_datetime", "create", {
+            "name": name, "has_date": has_date, "has_time": has_time,
+        })
+        return {"ok": True, "name": name, "type": "input_datetime",
+                "has_date": has_date, "has_time": has_time}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Input datetime create failed: {exc}"}
+
+
+async def _counter_create(
+    hass: HomeAssistant, name: str,
+    initial: int = 0, step: int = 1,
+) -> dict[str, Any]:
+    """Create a new counter helper."""
+    try:
+        await hass.services.async_call("counter", "create", {
+            "name": name, "initial": initial, "step": step,
+        })
+        return {"ok": True, "name": name, "type": "counter",
+                "initial": initial, "step": step}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Counter create failed: {exc}"}
+
+
+async def _timer_create(
+    hass: HomeAssistant, name: str, duration: str = "00:00:00",
+) -> dict[str, Any]:
+    """Create a new timer helper."""
+    try:
+        await hass.services.async_call("timer", "create", {
+            "name": name, "duration": duration,
+        })
+        return {"ok": True, "name": name, "type": "timer",
+                "duration": duration}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Timer create failed: {exc}"}
+
+
+async def _device_tracker_list_home(hass: HomeAssistant) -> dict[str, Any]:
+    """List all device trackers currently at home."""
+    results = []
+    for state in hass.states.async_all("device_tracker"):
+        if state.state == "home":
+            results.append({
+                "entity_id": state.entity_id,
+                "friendly_name": state.attributes.get("friendly_name"),
+                "source_type": state.attributes.get("source_type"),
+            })
+    return {"ok": True, "count": len(results), "trackers": results}
+
+
+async def _device_tracker_list_away(hass: HomeAssistant) -> dict[str, Any]:
+    """List all device trackers currently away/not_home."""
+    results = []
+    for state in hass.states.async_all("device_tracker"):
+        if state.state == "not_home":
+            results.append({
+                "entity_id": state.entity_id,
+                "friendly_name": state.attributes.get("friendly_name"),
+                "source_type": state.attributes.get("source_type"),
+            })
+    return {"ok": True, "count": len(results), "trackers": results}
+
+
+async def _system_uptime(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system uptime."""
+    try:
+        import psutil
+        boot_time = datetime.fromtimestamp(psutil.boot_time(), tz=timezone.utc)
+        uptime = datetime.now(timezone.utc) - boot_time
+        return {
+            "ok": True,
+            "boot_time": boot_time.isoformat(),
+            "uptime_seconds": int(uptime.total_seconds()),
+            "uptime_human": str(uptime).split(".")[0],
+        }
+    except ImportError:
+        return {"error": "psutil not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"System uptime failed: {exc}"}
+
+
+async def _system_ha_version(hass: HomeAssistant) -> dict[str, Any]:
+    """Get Home Assistant version info."""
+    return {
+        "ok": True,
+        "version": hass.config.version,
+        "config_dir": hass.config.config_dir,
+        "legacy_templates": getattr(hass.config, "legacy_templates", False),
+    }
+
+
+async def _entity_change_id(
+    hass: HomeAssistant, old_entity_id: str, new_entity_id: str,
+) -> dict[str, Any]:
+    """Change an entity's ID in the entity registry."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(old_entity_id)
+    if entry is None:
+        return {"error": f"Entity '{old_entity_id}' not found in registry"}
+    try:
+        reg.async_update_entity(old_entity_id, new_entity_id=new_entity_id)
+        return {"ok": True, "old_entity_id": old_entity_id,
+                "new_entity_id": new_entity_id}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity ID change failed: {exc}"}
+
+
+async def _script_delete(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Delete a script from scripts.yaml."""
+    try:
+        config_dir = hass.config.config_dir
+        script_id = entity_id.replace("script.", "")
+        path = os.path.join(config_dir, "scripts.yaml")
+
+        def _do_delete():
+            with open(path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            if not isinstance(raw, dict):
+                return False, "scripts.yaml is not a dict"
+            if script_id not in raw:
+                return False, f"Script '{script_id}' not found"
+            del raw[script_id]
+            with open(path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
+            return True, ""
+
+        ok, err = await hass.async_add_executor_job(_do_delete)
+        if not ok:
+            return {"error": err}
+        return {"ok": True, "entity_id": entity_id, "deleted": True}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Script delete failed: {exc}"}
+
+
+async def _integration_list_all_domains(hass: HomeAssistant) -> dict[str, Any]:
+    """List all integration domains that have config entries."""
+    entries = hass.config_entries.async_entries()
+    domains: dict[str, int] = {}
+    for entry in entries:
+        domains[entry.domain] = domains.get(entry.domain, 0) + 1
+    return {
+        "ok": True,
+        "count": len(domains),
+        "domains": dict(sorted(domains.items())),
+    }
+
+
+async def _automation_statistics(hass: HomeAssistant) -> dict[str, Any]:
+    """Get statistics about all automations."""
+    automations = hass.states.async_all("automation")
+    total = len(automations)
+    on_count = sum(1 for a in automations if a.state == "on")
+    off_count = total - on_count
+    recently_triggered = []
+    for a in automations:
+        lt = a.attributes.get("last_triggered")
+        if lt:
+            recently_triggered.append({
+                "entity_id": a.entity_id,
+                "last_triggered": str(lt),
+                "friendly_name": a.attributes.get("friendly_name"),
+            })
+    recently_triggered.sort(key=lambda x: x["last_triggered"], reverse=True)
+    return {
+        "ok": True,
+        "total": total,
+        "enabled": on_count,
+        "disabled": off_count,
+        "recently_triggered": recently_triggered[:20],
+    }
+
+
+async def _config_dump_yaml(
+    hass: HomeAssistant, filename: str = "configuration.yaml",
+) -> dict[str, Any]:
+    """Read and return a HA config YAML file content."""
+    try:
+        config_dir = hass.config.config_dir
+        path = os.path.join(config_dir, filename)
+
+        def _read():
+            with open(path, encoding="utf-8") as f:
+                return f.read()
+
+        content = await hass.async_add_executor_job(_read)
+        return {"ok": True, "filename": filename,
+                "content": content[:10000],
+                "truncated": len(content) > 10000}
+    except FileNotFoundError:
+        return {"error": f"File '{filename}' not found in config dir"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config dump failed: {exc}"}
+
+
+async def _entity_set_icon(
+    hass: HomeAssistant, entity_id: str, icon: str,
+) -> dict[str, Any]:
+    """Set a custom icon for an entity in the entity registry."""
+    reg = er.async_get(hass)
+    entry = reg.async_get(entity_id)
+    if entry is None:
+        return {"error": f"Entity '{entity_id}' not found in registry"}
+    try:
+        reg.async_update_entity(entity_id, icon=icon)
+        return {"ok": True, "entity_id": entity_id, "icon": icon}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set entity icon failed: {exc}"}
+
+
+async def _area_turn_off_all(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Turn off all controllable entities in an area."""
+    ent_reg = er.async_get(hass)
+    results = []
+    for entry in ent_reg.entities.values():
+        if entry.area_id != area_id:
+            continue
+        if entry.domain not in ("light", "switch", "fan", "media_player"):
+            continue
+        try:
+            await hass.services.async_call(
+                entry.domain, "turn_off", {"entity_id": entry.entity_id},
+            )
+            results.append({"entity_id": entry.entity_id, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": entry.entity_id, "error": str(exc)})
+    return {"ok": True, "area_id": area_id, "count": len(results),
+            "results": results}
+
+
+async def _area_turn_on_all(
+    hass: HomeAssistant, area_id: str,
+) -> dict[str, Any]:
+    """Turn on all controllable entities in an area."""
+    ent_reg = er.async_get(hass)
+    results = []
+    for entry in ent_reg.entities.values():
+        if entry.area_id != area_id:
+            continue
+        if entry.domain not in ("light", "switch", "fan", "media_player"):
+            continue
+        try:
+            await hass.services.async_call(
+                entry.domain, "turn_on", {"entity_id": entry.entity_id},
+            )
+            results.append({"entity_id": entry.entity_id, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": entry.entity_id, "error": str(exc)})
+    return {"ok": True, "area_id": area_id, "count": len(results),
+            "results": results}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -34778,4 +35380,31 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "label_list_entities", "description": "List all entities with a specific label.", "parameters": {"type": "object", "properties": {"label_id": {"type": "string", "description": "Label ID"}}, "required": ["label_id"]}}},
     {"type": "function", "function": {"name": "automation_validate_yaml", "description": "Validate automations.yaml structure (check for list format, alias/id presence).", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "script_validate_yaml", "description": "Validate scripts.yaml structure (check for dict format, sequence presence).", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 67 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "entity_batch_disable", "description": "Batch-disable multiple entities in the registry. Write op.", "parameters": {"type": "object", "properties": {"entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Entity IDs to disable"}}, "required": ["entity_ids"]}}},
+    {"type": "function", "function": {"name": "entity_batch_enable", "description": "Batch-enable multiple entities in the registry. Write op.", "parameters": {"type": "object", "properties": {"entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Entity IDs to enable"}}, "required": ["entity_ids"]}}},
+    {"type": "function", "function": {"name": "entity_batch_rename", "description": "Batch-rename multiple entities. Write op.", "parameters": {"type": "object", "properties": {"renames": {"type": "array", "items": {"type": "object"}, "description": "Array of {entity_id, name} pairs"}}, "required": ["renames"]}}},
+    {"type": "function", "function": {"name": "automation_delete", "description": "Delete an automation from automations.yaml. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Automation entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_reorder", "description": "Move an automation to a specific position in automations.yaml. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Automation entity ID"}, "position": {"type": "integer", "description": "Target position (0-based)"}}, "required": ["entity_id", "position"]}}},
+    {"type": "function", "function": {"name": "scene_delete", "description": "Delete a scene from scenes.yaml. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Scene entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "scene_list_entities", "description": "List entities captured in a scene.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Scene entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "input_boolean_create", "description": "Create a new input_boolean helper. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string", "description": "Helper name"}, "icon": {"type": "string", "description": "Optional icon"}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "input_number_create", "description": "Create a new input_number helper. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "min": {"type": "number", "default": 0}, "max": {"type": "number", "default": 100}, "step": {"type": "number", "default": 1}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "input_text_create", "description": "Create a new input_text helper. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "min": {"type": "integer", "default": 0}, "max": {"type": "integer", "default": 100}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "input_select_create", "description": "Create a new input_select helper. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "options": {"type": "array", "items": {"type": "string"}}}, "required": ["name", "options"]}}},
+    {"type": "function", "function": {"name": "input_datetime_create", "description": "Create a new input_datetime helper. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "has_date": {"type": "boolean", "default": True}, "has_time": {"type": "boolean", "default": True}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "counter_create", "description": "Create a new counter helper. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "initial": {"type": "integer", "default": 0}, "step": {"type": "integer", "default": 1}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "timer_create", "description": "Create a new timer helper. Write op.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}, "duration": {"type": "string", "default": "00:00:00"}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "device_tracker_list_home", "description": "List all device trackers currently at home.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_tracker_list_away", "description": "List all device trackers currently away.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_uptime", "description": "Get system uptime (boot time and duration).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_ha_version", "description": "Get Home Assistant version and config info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_change_id", "description": "Change an entity's ID in the registry. Write op.", "parameters": {"type": "object", "properties": {"old_entity_id": {"type": "string"}, "new_entity_id": {"type": "string"}}, "required": ["old_entity_id", "new_entity_id"]}}},
+    {"type": "function", "function": {"name": "script_delete", "description": "Delete a script from scripts.yaml. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Script entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "integration_list_all_domains", "description": "List all integration domains with config entry counts.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_statistics", "description": "Get statistics about all automations (total, enabled, disabled, recently triggered).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "config_dump_yaml", "description": "Read and return a HA config YAML file content.", "parameters": {"type": "object", "properties": {"filename": {"type": "string", "description": "YAML filename (default: configuration.yaml)", "default": "configuration.yaml"}}}}},
+    {"type": "function", "function": {"name": "entity_set_icon", "description": "Set a custom icon for an entity in the registry. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "icon": {"type": "string", "description": "MDI icon (e.g. mdi:lightbulb)"}}, "required": ["entity_id", "icon"]}}},
+    {"type": "function", "function": {"name": "area_turn_off_all", "description": "Turn off all controllable entities in an area. Write op.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string", "description": "Area ID"}}, "required": ["area_id"]}}},
+    {"type": "function", "function": {"name": "area_turn_on_all", "description": "Turn on all controllable entities in an area. Write op.", "parameters": {"type": "object", "properties": {"area_id": {"type": "string", "description": "Area ID"}}, "required": ["area_id"]}}},
 ]
