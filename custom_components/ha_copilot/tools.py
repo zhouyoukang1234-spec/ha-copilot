@@ -21185,6 +21185,55 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _notification_send_persistent(hass, args.get("message", ""), args.get("title", ""))
+        # --- Wave 79 dispatch ---
+        if name == "entity_batch_get_states":
+            return await _entity_batch_get_states(hass, args.get("entity_ids", []))
+        if name == "entity_batch_set_state":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _entity_batch_set_state(hass, args.get("entity_ids", []), args.get("state", ""))
+        if name == "correlation_temperature_energy":
+            return await _correlation_temperature_energy(hass)
+        if name == "correlation_motion_lights":
+            return await _correlation_motion_lights(hass)
+        if name == "automation_find_by_entity":
+            return await _automation_find_by_entity(hass, args.get("entity_id", ""))
+        if name == "automation_find_unused":
+            return await _automation_find_unused(hass)
+        if name == "entity_health_score":
+            return await _entity_health_score(hass)
+        if name == "entity_battery_levels":
+            return await _entity_battery_levels(hass)
+        if name == "entity_signal_strength":
+            return await _entity_signal_strength(hass)
+        if name == "service_discover_unused":
+            return await _service_discover_unused(hass)
+        if name == "device_firmware_versions":
+            return await _device_firmware_versions(hass)
+        if name == "power_consumption_by_area":
+            return await _power_consumption_by_area(hass)
+        if name == "power_consumption_total":
+            return await _power_consumption_total(hass)
+        if name == "network_device_count":
+            return await _network_device_count(hass)
+        if name == "scene_list_with_entities":
+            return await _scene_list_with_entities(hass)
+        if name == "scene_diff_current":
+            return await _scene_diff_current(hass, args.get("entity_id", ""))
+        if name == "climate_efficiency_report":
+            return await _climate_efficiency_report(hass)
+        if name == "entity_staleness_report":
+            return await _entity_staleness_report(hass, args.get("hours", 24))
+        if name == "domain_coverage_report":
+            return await _domain_coverage_report(hass)
+        if name == "smart_home_dashboard":
+            return await _smart_home_dashboard(hass)
+        if name == "smart_home_health_check":
+            return await _smart_home_health_check(hass)
+        if name == "entity_find_related":
+            return await _entity_find_related(hass, args.get("entity_id", ""))
+        if name == "entity_group_by_device":
+            return await _entity_group_by_device(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -28805,6 +28854,459 @@ async def _notification_send_persistent(
         return {"ok": True, "sent": True, "message": message[:100]}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Persistent notification failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 79 — batch ops, cross-domain correlation, automation dependency,
+# entity health/battery/signal, service discovery, firmware, power monitoring,
+# scene analysis, climate efficiency, smart home dashboard, entity relations
+# ---------------------------------------------------------------------------
+
+
+async def _entity_batch_get_states(
+    hass: HomeAssistant, entity_ids: list[str],
+) -> dict[str, Any]:
+    """Get states of multiple entities at once."""
+    results = []
+    for eid in entity_ids[:50]:
+        state = hass.states.get(eid)
+        if state:
+            results.append({
+                "entity_id": eid, "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+        else:
+            results.append({"entity_id": eid, "state": None, "error": "not found"})
+    return {"ok": True, "count": len(results), "states": results}
+
+
+async def _entity_batch_set_state(
+    hass: HomeAssistant, entity_ids: list[str], state: str,
+) -> dict[str, Any]:
+    """Set state for multiple entities (toggle on/off)."""
+    results = []
+    for eid in entity_ids[:20]:
+        domain = eid.split(".")[0]
+        service = "turn_on" if state == "on" else "turn_off"
+        try:
+            await hass.services.async_call(domain, service, {"entity_id": eid})
+            results.append({"entity_id": eid, "result": "ok"})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _correlation_temperature_energy(hass: HomeAssistant) -> dict[str, Any]:
+    """Correlate temperature and energy entities."""
+    temp_sensors = []
+    energy_sensors = []
+    for state in hass.states.async_all("sensor"):
+        dc = state.attributes.get("device_class", "")
+        if dc == "temperature":
+            try:
+                temp_sensors.append({"entity_id": state.entity_id, "value": float(state.state)})
+            except (ValueError, TypeError):
+                pass
+        elif dc == "energy":
+            try:
+                energy_sensors.append({"entity_id": state.entity_id, "value": float(state.state)})
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "temperature_sensors": len(temp_sensors),
+            "energy_sensors": len(energy_sensors),
+            "temperatures": temp_sensors[:20], "energy": energy_sensors[:20]}
+
+
+async def _correlation_motion_lights(hass: HomeAssistant) -> dict[str, Any]:
+    """Correlate motion sensors with light states."""
+    motion_sensors = []
+    for state in hass.states.async_all("binary_sensor"):
+        if state.attributes.get("device_class") == "motion":
+            motion_sensors.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    lights_on = sum(1 for s in hass.states.async_all("light") if s.state == "on")
+    lights_total = len(hass.states.async_all("light"))
+    return {"ok": True, "motion_sensors": len(motion_sensors),
+            "active_motion": sum(1 for m in motion_sensors if m["state"] == "on"),
+            "lights_on": lights_on, "lights_total": lights_total,
+            "motion_details": motion_sensors[:20]}
+
+
+async def _automation_find_by_entity(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Find automations that reference an entity."""
+    results = []
+    for state in hass.states.async_all("automation"):
+        attrs = dict(state.attributes)
+        full_text = str(attrs)
+        if entity_id in full_text:
+            results.append({
+                "entity_id": state.entity_id,
+                "friendly_name": attrs.get("friendly_name"),
+                "state": state.state,
+            })
+    return {"ok": True, "searched_for": entity_id,
+            "count": len(results), "automations": results}
+
+
+async def _automation_find_unused(hass: HomeAssistant) -> dict[str, Any]:
+    """Find automations that have never been triggered."""
+    unused = []
+    for state in hass.states.async_all("automation"):
+        lt = state.attributes.get("last_triggered")
+        if lt is None or str(lt) == "" or str(lt) == "None":
+            unused.append({
+                "entity_id": state.entity_id,
+                "friendly_name": state.attributes.get("friendly_name"),
+                "state": state.state,
+            })
+    return {"ok": True, "count": len(unused), "unused_automations": unused}
+
+
+async def _entity_health_score(hass: HomeAssistant) -> dict[str, Any]:
+    """Calculate overall entity health score."""
+    total = unavailable = unknown = stale = 0
+    now = datetime.now(timezone.utc)
+    for state in hass.states.async_all():
+        total += 1
+        if state.state == "unavailable":
+            unavailable += 1
+        elif state.state == "unknown":
+            unknown += 1
+        age = (now - state.last_updated).total_seconds()
+        if age > 86400:
+            stale += 1
+    healthy = total - unavailable - unknown
+    score = round((healthy / total) * 100, 1) if total > 0 else 0
+    return {"ok": True, "total_entities": total, "healthy": healthy,
+            "unavailable": unavailable, "unknown": unknown,
+            "stale_24h": stale, "health_score": score}
+
+
+async def _entity_battery_levels(hass: HomeAssistant) -> dict[str, Any]:
+    """List entities with battery level info."""
+    batteries = []
+    for state in hass.states.async_all("sensor"):
+        if state.attributes.get("device_class") == "battery":
+            try:
+                level = float(state.state)
+            except (ValueError, TypeError):
+                level = None
+            batteries.append({
+                "entity_id": state.entity_id,
+                "level": level,
+                "unit": state.attributes.get("unit_of_measurement"),
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    batteries.sort(key=lambda x: x["level"] if x["level"] is not None else 999)
+    low = sum(1 for b in batteries if b["level"] is not None and b["level"] < 20)
+    return {"ok": True, "count": len(batteries), "low_battery": low,
+            "batteries": batteries}
+
+
+async def _entity_signal_strength(hass: HomeAssistant) -> dict[str, Any]:
+    """List entities with signal strength info."""
+    signals = []
+    for state in hass.states.async_all("sensor"):
+        dc = state.attributes.get("device_class", "")
+        name = (state.attributes.get("friendly_name") or state.entity_id).lower()
+        if dc == "signal_strength" or "signal" in name or "rssi" in name:
+            try:
+                val = float(state.state)
+            except (ValueError, TypeError):
+                val = None
+            signals.append({
+                "entity_id": state.entity_id,
+                "value": val,
+                "unit": state.attributes.get("unit_of_measurement"),
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(signals), "signals": signals}
+
+
+async def _service_discover_unused(hass: HomeAssistant) -> dict[str, Any]:
+    """Discover service domains with no active entities."""
+    all_services = hass.services.async_services()
+    entity_domains = {s.entity_id.split(".")[0] for s in hass.states.async_all()}
+    unused = []
+    for domain in all_services:
+        if domain not in entity_domains:
+            unused.append(domain)
+    return {"ok": True, "unused_service_domains": sorted(unused),
+            "count": len(unused)}
+
+
+async def _device_firmware_versions(hass: HomeAssistant) -> dict[str, Any]:
+    """List device firmware versions from update entities."""
+    firmwares = []
+    for state in hass.states.async_all("update"):
+        attrs = dict(state.attributes)
+        firmwares.append({
+            "entity_id": state.entity_id,
+            "installed_version": attrs.get("installed_version"),
+            "latest_version": attrs.get("latest_version"),
+            "friendly_name": attrs.get("friendly_name"),
+            "update_available": state.state == "on",
+        })
+    return {"ok": True, "count": len(firmwares), "devices": firmwares}
+
+
+async def _power_consumption_by_area(hass: HomeAssistant) -> dict[str, Any]:
+    """Get power consumption grouped by area."""
+    ent_reg = er.async_get(hass)
+    area_power: dict[str, float] = {}
+    for state in hass.states.async_all("sensor"):
+        if state.attributes.get("device_class") == "power":
+            try:
+                val = float(state.state)
+            except (ValueError, TypeError):
+                continue
+            entry = ent_reg.async_get(state.entity_id)
+            area_id = entry.area_id if entry else "unassigned"
+            area_power[area_id or "unassigned"] = area_power.get(area_id or "unassigned", 0) + val
+    return {"ok": True, "areas": {k: round(v, 2) for k, v in sorted(area_power.items(), key=lambda x: x[1], reverse=True)},
+            "total_w": round(sum(area_power.values()), 2)}
+
+
+async def _power_consumption_total(hass: HomeAssistant) -> dict[str, Any]:
+    """Get total power consumption."""
+    total = 0.0
+    power_sensors = []
+    for state in hass.states.async_all("sensor"):
+        if state.attributes.get("device_class") == "power":
+            try:
+                val = float(state.state)
+                total += val
+                power_sensors.append({
+                    "entity_id": state.entity_id, "value": val,
+                    "unit": state.attributes.get("unit_of_measurement"),
+                })
+            except (ValueError, TypeError):
+                pass
+    return {"ok": True, "total_w": round(total, 2),
+            "sensor_count": len(power_sensors), "sensors": power_sensors[:30]}
+
+
+async def _network_device_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Count network-connected devices."""
+    trackers = hass.states.async_all("device_tracker")
+    home = sum(1 for s in trackers if s.state == "home")
+    away = sum(1 for s in trackers if s.state not in ("home", "unavailable", "unknown"))
+    return {"ok": True, "total_trackers": len(trackers),
+            "home": home, "away": away,
+            "unavailable": len(trackers) - home - away}
+
+
+async def _scene_list_with_entities(hass: HomeAssistant) -> dict[str, Any]:
+    """List scenes with their entity IDs."""
+    results = []
+    for state in hass.states.async_all("scene"):
+        attrs = dict(state.attributes)
+        entity_ids = attrs.get("entity_id", [])
+        results.append({
+            "entity_id": state.entity_id,
+            "friendly_name": attrs.get("friendly_name"),
+            "entity_count": len(entity_ids) if isinstance(entity_ids, list) else 0,
+            "entities": entity_ids if isinstance(entity_ids, list) else [],
+        })
+    return {"ok": True, "count": len(results), "scenes": results}
+
+
+async def _scene_diff_current(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Compare scene target states with current states."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Scene '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    entity_ids = attrs.get("entity_id", [])
+    diffs = []
+    if isinstance(entity_ids, list):
+        for eid in entity_ids:
+            current = hass.states.get(eid)
+            diffs.append({
+                "entity_id": eid,
+                "current_state": current.state if current else "unknown",
+            })
+    return {"ok": True, "scene": entity_id, "entity_count": len(diffs),
+            "entities": diffs}
+
+
+async def _climate_efficiency_report(hass: HomeAssistant) -> dict[str, Any]:
+    """Report on climate system efficiency."""
+    climates = hass.states.async_all("climate")
+    results = []
+    for state in climates:
+        attrs = dict(state.attributes)
+        current = attrs.get("current_temperature")
+        target = attrs.get("temperature")
+        diff = None
+        if current is not None and target is not None:
+            try:
+                diff = round(float(current) - float(target), 1)
+            except (ValueError, TypeError):
+                pass
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "current_temp": current,
+            "target_temp": target,
+            "diff": diff,
+            "hvac_action": attrs.get("hvac_action"),
+        })
+    return {"ok": True, "count": len(results), "climates": results}
+
+
+async def _entity_staleness_report(
+    hass: HomeAssistant, hours: int = 24,
+) -> dict[str, Any]:
+    """Report entities that haven't updated in X hours."""
+    now = datetime.now(timezone.utc)
+    threshold = now - timedelta(hours=hours)
+    stale = []
+    for state in hass.states.async_all():
+        if state.last_updated < threshold:
+            stale.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "last_updated": str(state.last_updated),
+                "hours_stale": round((now - state.last_updated).total_seconds() / 3600, 1),
+            })
+    stale.sort(key=lambda x: x["hours_stale"], reverse=True)
+    return {"ok": True, "threshold_hours": hours, "count": len(stale),
+            "stale_entities": stale[:50]}
+
+
+async def _domain_coverage_report(hass: HomeAssistant) -> dict[str, Any]:
+    """Report entity coverage across domains."""
+    domains: dict[str, dict[str, int]] = {}
+    for state in hass.states.async_all():
+        domain = state.entity_id.split(".")[0]
+        if domain not in domains:
+            domains[domain] = {"total": 0, "available": 0, "unavailable": 0}
+        domains[domain]["total"] += 1
+        if state.state in ("unavailable", "unknown"):
+            domains[domain]["unavailable"] += 1
+        else:
+            domains[domain]["available"] += 1
+    results = []
+    for domain, counts in sorted(domains.items(), key=lambda x: x[1]["total"], reverse=True):
+        pct = round((counts["available"] / counts["total"]) * 100, 1) if counts["total"] > 0 else 0
+        results.append({
+            "domain": domain, **counts, "availability_pct": pct,
+        })
+    return {"ok": True, "domain_count": len(results), "domains": results}
+
+
+async def _smart_home_dashboard(hass: HomeAssistant) -> dict[str, Any]:
+    """Get comprehensive smart home dashboard."""
+    all_entities = hass.states.async_all()
+    domain_counts: dict[str, int] = {}
+    for s in all_entities:
+        d = s.entity_id.split(".")[0]
+        domain_counts[d] = domain_counts.get(d, 0) + 1
+    lights_on = sum(1 for s in hass.states.async_all("light") if s.state == "on")
+    locks_locked = sum(1 for s in hass.states.async_all("lock") if s.state == "locked")
+    doors_open = sum(1 for s in hass.states.async_all("binary_sensor")
+                     if s.attributes.get("device_class") == "door" and s.state == "on")
+    unavail = sum(1 for s in all_entities if s.state == "unavailable")
+    return {
+        "ok": True,
+        "total_entities": len(all_entities),
+        "domains": len(domain_counts),
+        "lights_on": lights_on,
+        "locks_locked": locks_locked,
+        "doors_open": doors_open,
+        "unavailable": unavail,
+        "top_domains": dict(sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
+    }
+
+
+async def _smart_home_health_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Comprehensive health check of the smart home."""
+    all_entities = hass.states.async_all()
+    total = len(all_entities)
+    unavail = sum(1 for s in all_entities if s.state == "unavailable")
+    unknown = sum(1 for s in all_entities if s.state == "unknown")
+    now = datetime.now(timezone.utc)
+    stale = sum(1 for s in all_entities if (now - s.last_updated).total_seconds() > 86400)
+    automations = hass.states.async_all("automation")
+    auto_off = sum(1 for s in automations if s.state == "off")
+    entries = hass.config_entries.async_entries()
+    issues = []
+    if unavail > 0:
+        issues.append(f"{unavail} unavailable entities")
+    if unknown > 0:
+        issues.append(f"{unknown} unknown state entities")
+    if stale > 0:
+        issues.append(f"{stale} stale entities (>24h)")
+    if auto_off > 0:
+        issues.append(f"{auto_off} disabled automations")
+    score = max(0, round(100 - (unavail + unknown) / max(total, 1) * 100 - stale / max(total, 1) * 50, 1))
+    return {
+        "ok": True,
+        "health_score": min(100, score),
+        "total_entities": total,
+        "unavailable": unavail,
+        "unknown": unknown,
+        "stale_24h": stale,
+        "automations_total": len(automations),
+        "automations_off": auto_off,
+        "integrations": len(entries),
+        "issues": issues,
+    }
+
+
+async def _entity_find_related(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Find entities related to a given entity (same device/area)."""
+    ent_reg = er.async_get(hass)
+    entry = ent_reg.async_get(entity_id)
+    related = []
+    if entry:
+        for other in ent_reg.entities.values():
+            if other.entity_id == entity_id:
+                continue
+            if (entry.device_id and other.device_id == entry.device_id) or \
+               (entry.area_id and other.area_id == entry.area_id):
+                state = hass.states.get(other.entity_id)
+                related.append({
+                    "entity_id": other.entity_id,
+                    "same_device": entry.device_id is not None and other.device_id == entry.device_id,
+                    "same_area": entry.area_id is not None and other.area_id == entry.area_id,
+                    "state": state.state if state else None,
+                })
+    return {"ok": True, "entity_id": entity_id, "count": len(related),
+            "related": related[:50]}
+
+
+async def _entity_group_by_device(hass: HomeAssistant) -> dict[str, Any]:
+    """Group entities by their device."""
+    ent_reg = er.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    groups: dict[str, list[str]] = {}
+    for entry in ent_reg.entities.values():
+        did = entry.device_id or "no_device"
+        if did not in groups:
+            groups[did] = []
+        groups[did].append(entry.entity_id)
+    results = []
+    for did, entities in sorted(groups.items(), key=lambda x: len(x[1]), reverse=True)[:30]:
+        device = dev_reg.async_get(did) if did != "no_device" else None
+        results.append({
+            "device_id": did,
+            "device_name": device.name if device else None,
+            "manufacturer": device.manufacturer if device else None,
+            "entity_count": len(entities),
+            "entities": entities[:10],
+        })
+    return {"ok": True, "device_count": len(groups), "groups": results}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -40646,4 +41148,28 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "script_count_by_state", "description": "Count scripts by state (running/idle).", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "device_count_by_manufacturer", "description": "Count devices grouped by manufacturer.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "notification_send_persistent", "description": "Send a persistent notification. Write op.", "parameters": {"type": "object", "properties": {"message": {"type": "string"}, "title": {"type": "string"}}, "required": ["message"]}}},
+    # --- Wave 79 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "entity_batch_get_states", "description": "Get states of multiple entities at once.", "parameters": {"type": "object", "properties": {"entity_ids": {"type": "array", "items": {"type": "string"}}}, "required": ["entity_ids"]}}},
+    {"type": "function", "function": {"name": "entity_batch_set_state", "description": "Turn on/off multiple entities. Write op.", "parameters": {"type": "object", "properties": {"entity_ids": {"type": "array", "items": {"type": "string"}}, "state": {"type": "string", "enum": ["on", "off"]}}, "required": ["entity_ids", "state"]}}},
+    {"type": "function", "function": {"name": "correlation_temperature_energy", "description": "Correlate temperature and energy sensor data.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "correlation_motion_lights", "description": "Correlate motion sensors with light states.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "automation_find_by_entity", "description": "Find automations referencing an entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_find_unused", "description": "Find automations never triggered.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_health_score", "description": "Calculate overall entity health score.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_battery_levels", "description": "List entities with battery level info, sorted low to high.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_signal_strength", "description": "List entities with signal strength/RSSI info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "service_discover_unused", "description": "Find service domains with no active entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_firmware_versions", "description": "List device firmware versions from update entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "power_consumption_by_area", "description": "Get power consumption grouped by area.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "power_consumption_total", "description": "Get total power consumption from all power sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "network_device_count", "description": "Count network-connected devices (home/away).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "scene_list_with_entities", "description": "List scenes with their entity IDs.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "scene_diff_current", "description": "Compare scene target states with current states.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "climate_efficiency_report", "description": "Report on climate system efficiency (current vs target).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_staleness_report", "description": "Report entities not updated in X hours.", "parameters": {"type": "object", "properties": {"hours": {"type": "integer", "default": 24}}}}},
+    {"type": "function", "function": {"name": "domain_coverage_report", "description": "Report entity availability across all domains.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_home_dashboard", "description": "Get comprehensive smart home dashboard summary.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "smart_home_health_check", "description": "Comprehensive health check with score and issues.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_find_related", "description": "Find entities related by device or area.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "entity_group_by_device", "description": "Group entities by their parent device.", "parameters": {"type": "object", "properties": {}}}},
 ]
