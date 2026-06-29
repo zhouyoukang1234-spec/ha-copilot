@@ -20980,6 +20980,37 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _history_min_max_time(hass, args.get("entity_id", ""), args.get("hours", 24))
         if name == "system_config_summary":
             return await _system_config_summary(hass)
+        # --- Wave 74 dispatch ---
+        if name == "calendar_list_all":
+            return await _calendar_list_all(hass)
+        if name == "weather_get_daily_forecast":
+            return await _weather_get_daily_forecast(hass, args.get("entity_id", ""))
+        if name == "weather_compare_locations":
+            return await _weather_compare_locations(hass)
+        if name == "history_state_count":
+            return await _history_state_count(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "template_test":
+            return await _template_test(hass, args.get("template", ""))
+        if name == "tag_scan_last":
+            return await _tag_scan_last(hass)
+        if name == "device_tracker_get_location":
+            return await _device_tracker_get_location(hass, args.get("entity_id", ""))
+        if name == "sun_next_events":
+            return await _sun_next_events(hass)
+        if name == "system_get_memory_usage":
+            return await _system_get_memory_usage(hass)
+        if name == "system_get_disk_usage":
+            return await _system_get_disk_usage(hass)
+        if name == "system_get_cpu_usage":
+            return await _system_get_cpu_usage(hass)
+        if name == "mqtt_get_topics":
+            return await _mqtt_get_topics(hass)
+        if name == "api_status":
+            return await _api_status(hass)
+        if name == "statistics_list_ids":
+            return await _statistics_list_ids(hass)
+        if name == "statistics_get_sum":
+            return await _statistics_get_sum(hass, args.get("statistic_id", ""), args.get("hours", 24))
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -26826,6 +26857,300 @@ async def _system_config_summary(hass: HomeAssistant) -> dict[str, Any]:
         "config_entries": len(entries),
         "integrations": list({e.domain for e in entries}),
     }
+
+
+# ---------------------------------------------------------------------------
+# Wave 74 — calendar, weather forecast, history count, template test, tag,
+# device tracker, sun events, system monitor, MQTT topics, API status,
+# statistics
+# ---------------------------------------------------------------------------
+
+
+async def _calendar_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all calendar entities with their state."""
+    calendars = hass.states.async_all("calendar")
+    results = []
+    for state in calendars:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "friendly_name": attrs.get("friendly_name"),
+            "message": attrs.get("message"),
+            "all_day": attrs.get("all_day"),
+            "start_time": str(attrs.get("start_time", "")),
+            "end_time": str(attrs.get("end_time", "")),
+            "location": attrs.get("location"),
+            "description": attrs.get("description"),
+        })
+    return {"ok": True, "count": len(results), "calendars": results}
+
+
+async def _weather_get_daily_forecast(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get daily weather forecast."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Weather '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    forecast = attrs.get("forecast", [])
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "current": {
+            "state": state.state,
+            "temperature": attrs.get("temperature"),
+            "humidity": attrs.get("humidity"),
+            "pressure": attrs.get("pressure"),
+            "wind_speed": attrs.get("wind_speed"),
+            "wind_bearing": attrs.get("wind_bearing"),
+        },
+        "forecast_count": len(forecast),
+        "forecast": forecast[:14],
+    }
+
+
+async def _weather_compare_locations(hass: HomeAssistant) -> dict[str, Any]:
+    """Compare weather across all weather entities."""
+    weather_ents = hass.states.async_all("weather")
+    results = []
+    for state in weather_ents:
+        attrs = dict(state.attributes)
+        results.append({
+            "entity_id": state.entity_id,
+            "friendly_name": attrs.get("friendly_name"),
+            "state": state.state,
+            "temperature": attrs.get("temperature"),
+            "humidity": attrs.get("humidity"),
+            "wind_speed": attrs.get("wind_speed"),
+        })
+    return {"ok": True, "count": len(results), "locations": results}
+
+
+async def _history_state_count(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Count occurrences of each state value over time."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        counts: dict[str, int] = {}
+        for s in items:
+            counts[s.state] = counts.get(s.state, 0) + 1
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "total_changes": len(items),
+                "state_counts": dict(sorted(counts.items(), key=lambda x: x[1], reverse=True))}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"History state count failed: {exc}"}
+
+
+async def _template_test(
+    hass: HomeAssistant, template: str,
+) -> dict[str, Any]:
+    """Test/render a Jinja2 template."""
+    try:
+        from homeassistant.helpers.template import Template
+        tpl = Template(template, hass)
+        result = tpl.async_render()
+        return {"ok": True, "template": template, "result": str(result)}
+    except ImportError:
+        return {"error": "Template engine not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Template render failed: {exc}"}
+
+
+async def _tag_scan_last(hass: HomeAssistant) -> dict[str, Any]:
+    """Get the last scanned NFC/QR tag info."""
+    tag_data = hass.data.get("tag")
+    if tag_data and isinstance(tag_data, dict):
+        return {"ok": True, "tag_data": {
+            k: str(v) for k, v in tag_data.items()
+        }}
+    last_tags = []
+    for state in hass.states.async_all("tag"):
+        attrs = dict(state.attributes)
+        last_tags.append({
+            "entity_id": state.entity_id,
+            "state": state.state,
+            "last_scanned": str(attrs.get("last_scanned", "")),
+            "tag_id": attrs.get("tag_id"),
+        })
+    return {"ok": True, "count": len(last_tags), "tags": last_tags}
+
+
+async def _device_tracker_get_location(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get detailed location for a device tracker entity."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Device tracker '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "latitude": attrs.get("latitude"),
+        "longitude": attrs.get("longitude"),
+        "gps_accuracy": attrs.get("gps_accuracy"),
+        "altitude": attrs.get("altitude"),
+        "battery_level": attrs.get("battery_level"),
+        "source_type": attrs.get("source_type"),
+        "friendly_name": attrs.get("friendly_name"),
+    }
+
+
+async def _sun_next_events(hass: HomeAssistant) -> dict[str, Any]:
+    """Get next sunrise/sunset times."""
+    state = hass.states.get("sun.sun")
+    if state is None:
+        return {"ok": True, "note": "Sun entity not available"}
+    attrs = dict(state.attributes)
+    return {
+        "ok": True,
+        "state": state.state,
+        "next_dawn": str(attrs.get("next_dawn", "")),
+        "next_dusk": str(attrs.get("next_dusk", "")),
+        "next_midnight": str(attrs.get("next_midnight", "")),
+        "next_noon": str(attrs.get("next_noon", "")),
+        "next_rising": str(attrs.get("next_rising", "")),
+        "next_setting": str(attrs.get("next_setting", "")),
+        "elevation": attrs.get("elevation"),
+        "azimuth": attrs.get("azimuth"),
+    }
+
+
+async def _system_get_memory_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system memory usage from sensor data."""
+    for state in hass.states.async_all("sensor"):
+        name = (state.attributes.get("friendly_name") or state.entity_id).lower()
+        if "memory" in name and ("use" in name or "percent" in name or "free" in name):
+            try:
+                val = float(state.state)
+            except (ValueError, TypeError):
+                val = None
+            return {"ok": True, "entity_id": state.entity_id, "value": val,
+                    "unit": state.attributes.get("unit_of_measurement"),
+                    "friendly_name": state.attributes.get("friendly_name")}
+    return {"ok": True, "note": "No memory usage sensor found"}
+
+
+async def _system_get_disk_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system disk usage from sensor data."""
+    disk_sensors = []
+    for state in hass.states.async_all("sensor"):
+        name = (state.attributes.get("friendly_name") or state.entity_id).lower()
+        if "disk" in name and ("use" in name or "free" in name or "space" in name):
+            try:
+                val = float(state.state)
+            except (ValueError, TypeError):
+                val = None
+            disk_sensors.append({
+                "entity_id": state.entity_id, "value": val,
+                "unit": state.attributes.get("unit_of_measurement"),
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    return {"ok": True, "count": len(disk_sensors), "sensors": disk_sensors}
+
+
+async def _system_get_cpu_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Get system CPU usage from sensor data."""
+    for state in hass.states.async_all("sensor"):
+        name = (state.attributes.get("friendly_name") or state.entity_id).lower()
+        if ("cpu" in name or "processor" in name) and ("use" in name or "percent" in name or "load" in name):
+            try:
+                val = float(state.state)
+            except (ValueError, TypeError):
+                val = None
+            return {"ok": True, "entity_id": state.entity_id, "value": val,
+                    "unit": state.attributes.get("unit_of_measurement"),
+                    "friendly_name": state.attributes.get("friendly_name")}
+    return {"ok": True, "note": "No CPU usage sensor found"}
+
+
+async def _mqtt_get_topics(hass: HomeAssistant) -> dict[str, Any]:
+    """Get MQTT-related entities and inferred topics."""
+    mqtt_entities = []
+    for state in hass.states.async_all():
+        if "mqtt" in state.entity_id.lower() or "mqtt" in str(state.attributes.get("friendly_name", "")).lower():
+            mqtt_entities.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "friendly_name": state.attributes.get("friendly_name"),
+            })
+    mqtt_data = hass.data.get("mqtt", {})
+    topics = []
+    if isinstance(mqtt_data, dict):
+        subscriptions = mqtt_data.get("subscriptions", [])
+        if isinstance(subscriptions, list):
+            topics = [str(s) for s in subscriptions[:50]]
+    return {"ok": True, "mqtt_entity_count": len(mqtt_entities),
+            "entities": mqtt_entities[:50], "tracked_topics": topics}
+
+
+async def _api_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Get HA API status information."""
+    config = hass.config
+    all_entities = hass.states.async_all()
+    entries = hass.config_entries.async_entries()
+    return {
+        "ok": True,
+        "version": config.version,
+        "config_dir": config.config_dir,
+        "total_entities": len(all_entities),
+        "integrations_loaded": len(entries),
+        "state": "running",
+    }
+
+
+async def _statistics_list_ids(hass: HomeAssistant) -> dict[str, Any]:
+    """List available statistics IDs from recorder."""
+    try:
+        from homeassistant.components.recorder.statistics import list_statistic_ids
+        stat_ids = await hass.async_add_executor_job(list_statistic_ids, hass)
+        results = []
+        for item in stat_ids[:100]:
+            if isinstance(item, dict):
+                results.append(item)
+            else:
+                results.append({"statistic_id": str(item)})
+        return {"ok": True, "count": len(stat_ids), "statistic_ids": results}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Statistics list failed: {exc}"}
+
+
+async def _statistics_get_sum(
+    hass: HomeAssistant, statistic_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get sum statistics for a statistic ID."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.statistics import statistics_during_period
+        stats = await hass.async_add_executor_job(
+            statistics_during_period, hass, start, end, {statistic_id}, "hour", None, {"sum", "mean"},
+        )
+        items = stats.get(statistic_id, [])
+        if not items:
+            return {"ok": True, "statistic_id": statistic_id, "hours": hours,
+                    "note": "No statistics data"}
+        total_sum = items[-1].get("sum", 0) if isinstance(items[-1], dict) else 0
+        return {"ok": True, "statistic_id": statistic_id, "hours": hours,
+                "data_points": len(items), "sum": total_sum}
+    except ImportError:
+        return {"error": "recorder statistics not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Statistics get sum failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -38566,4 +38891,20 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "history_peak_detect", "description": "Find peak (max/min) values for an entity over time.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
     {"type": "function", "function": {"name": "history_min_max_time", "description": "Find when min/max values were reached.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
     {"type": "function", "function": {"name": "system_config_summary", "description": "Summary of HA configuration (version, entities, domains, integrations).", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 74 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "calendar_list_all", "description": "List all calendar entities with current event info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "weather_get_daily_forecast", "description": "Get daily weather forecast for a location.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "weather_compare_locations", "description": "Compare weather conditions across all weather entities.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "history_state_count", "description": "Count occurrences of each state value over time.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "template_test", "description": "Test/render a Jinja2 template string.", "parameters": {"type": "object", "properties": {"template": {"type": "string", "description": "Jinja2 template to render"}}, "required": ["template"]}}},
+    {"type": "function", "function": {"name": "tag_scan_last", "description": "Get last scanned NFC/QR tag info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "device_tracker_get_location", "description": "Get detailed location for a device tracker entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "sun_next_events", "description": "Get next sunrise, sunset, dawn, dusk times.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_get_memory_usage", "description": "Get system memory usage from sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_get_disk_usage", "description": "Get system disk usage from sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_get_cpu_usage", "description": "Get system CPU usage from sensors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mqtt_get_topics", "description": "Get MQTT-related entities and tracked topics.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "api_status", "description": "Get HA API status (version, entity count, state).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "statistics_list_ids", "description": "List available recorder statistics IDs.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "statistics_get_sum", "description": "Get sum statistics for a statistic ID over time.", "parameters": {"type": "object", "properties": {"statistic_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["statistic_id"]}}},
 ]
