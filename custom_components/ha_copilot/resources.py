@@ -871,6 +871,23 @@ async def search_ha_integrations(
             # title/key hits rank above description-only hits
             strong = sum(1 for w in words if w in f"{key} {title}".lower())
             scored.append((strong, key, meta))
+    # Recall fallback: a natural multi-word query ("aqara motion sensor",
+    # "xiaomi vacuum") rarely has every word in one integration, so a strict
+    # AND match returns nothing even though the brand IS built in. Relax to
+    # an OR match that still requires at least one word in the key/title (not
+    # description-only) so the brand surfaces without dragging in noise.
+    relaxed = False
+    if not scored and len(words) > 1:
+        relaxed = True
+        for key, meta in index.items():
+            if not isinstance(meta, dict):
+                continue
+            title = str(meta.get("title") or "")
+            desc = str(meta.get("description") or "")
+            strong = sum(1 for w in words if w in f"{key} {title}".lower())
+            if strong:
+                weak = sum(1 for w in words if w in desc.lower())
+                scored.append((strong * 10 + weak, key, meta))
     scored.sort(key=lambda t: (t[0], -len(t[1])), reverse=True)
 
     results = [
@@ -889,6 +906,7 @@ async def search_ha_integrations(
         "query": q,
         "count": len(results),
         "total_matched": len(scored),
+        "relaxed": relaxed,
         "results": results,
         "source": "home assistant built-in integrations",
         "note": (
