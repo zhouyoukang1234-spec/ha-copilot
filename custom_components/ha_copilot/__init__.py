@@ -2,7 +2,7 @@
 
 HA-Copilot bundles **no model** and calls **no external inference endpoint**. It
 exposes the full Home Assistant operating surface as one deterministic tool layer
-(:mod:`tools`, 142 tools), reachable through four foundations:
+(:mod:`tools`, 142 tools), reachable through five foundations:
 
 * HA Services — ``ha_copilot.run_tool`` (generic) + 12 native resource services.
 * MCP — the authenticated endpoint ``/api/ha_copilot/mcp`` (JSON-RPC 2.0).
@@ -10,6 +10,7 @@ exposes the full Home Assistant operating surface as one deterministic tool laye
   agent (OpenAI / Anthropic / Google / Ollama / local) selects HA-Copilot as its
   control API and gains all 142 deterministic tools.
 * HTTP — ``/api/ha_copilot/tools`` and ``/api/ha_copilot/run_tool``.
+* WebSocket — ``ha_copilot/tools``, ``ha_copilot/run_tool``, ``ha_copilot/info``.
 
 The agent is always external (any MCP client / operator). Setup via
 configuration.yaml is optional and only carries safety toggles:
@@ -54,6 +55,7 @@ from .http_api import (
 from .llm_api import async_register_llm_api
 from .services import async_register_services
 from .tools import dispatch as dispatch_tool
+from .websocket_api import async_register_websocket_commands
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,6 +92,9 @@ async def _async_setup_core(
 
     # Native LLM API.
     async_register_llm_api(hass)
+
+    # WebSocket commands (ha_copilot/tools, ha_copilot/run_tool, ha_copilot/info).
+    async_register_websocket_commands(hass)
 
     # Serve the panel's static assets.
     panel_dir = os.path.join(os.path.dirname(__file__), "panel")
@@ -137,7 +142,7 @@ async def _async_setup_core(
 
     _LOGGER.info(
         "HA-Copilot ready - capability layer (write=%s restart=%s); "
-        "4 routes: HA services / MCP / native LLM API / HTTP",
+        "5 routes: HA services / MCP / LLM API / HTTP / WebSocket",
         store[CONF_ALLOW_WRITE],
         store[CONF_ALLOW_RESTART],
     )
