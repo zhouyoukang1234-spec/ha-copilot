@@ -8339,6 +8339,70 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 50: climate preset mode, vacuum pause, remote list, media player seek
+# ---------------------------------------------------------------------------
+
+
+async def _climate_set_preset_mode(
+    hass: HomeAssistant, entity_id: str, preset_mode: str,
+) -> dict[str, Any]:
+    """Set climate preset mode."""
+    try:
+        await hass.services.async_call(
+            "climate", "set_preset_mode",
+            {"entity_id": entity_id, "preset_mode": preset_mode},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate set preset mode failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "preset_mode": preset_mode}
+
+
+async def _vacuum_pause(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Pause a vacuum."""
+    try:
+        await hass.services.async_call(
+            "vacuum", "pause",
+            {"entity_id": entity_id},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum pause failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "paused"}
+
+
+async def _remote_list(hass: HomeAssistant) -> dict[str, Any]:
+    """List all remote entities."""
+    try:
+        states = hass.states.async_all("remote")
+        result = [
+            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
+             "current_activity": s.attributes.get("current_activity")}
+            for s in states
+        ]
+        return {"ok": True, "remotes": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remote list failed: {exc}"}
+
+
+async def _media_player_seek(
+    hass: HomeAssistant, entity_id: str, seek_position: float,
+) -> dict[str, Any]:
+    """Seek to a position in media player."""
+    try:
+        await hass.services.async_call(
+            "media_player", "media_seek",
+            {"entity_id": entity_id, "seek_position": seek_position},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Media player seek failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "seek_position": seek_position}
+
+
+# ---------------------------------------------------------------------------
 # Wave 49: humidifier list, light brightness/color_temp/rgb
 # ---------------------------------------------------------------------------
 
@@ -15779,6 +15843,27 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 50 dispatch ---
+        if name == "climate_set_preset_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_set_preset_mode(
+                hass, args.get("entity_id", ""),
+                args.get("preset_mode", ""),
+            )
+        if name == "vacuum_pause":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_pause(hass, args.get("entity_id", ""))
+        if name == "remote_list":
+            return await _remote_list(hass)
+        if name == "media_player_seek":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_seek(
+                hass, args.get("entity_id", ""),
+                float(args.get("seek_position", 0)),
+            )
         # --- Wave 49 dispatch ---
         if name == "humidifier_list":
             return await _humidifier_list(hass)
@@ -21806,6 +21891,57 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 50 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_set_preset_mode",
+            "description": "Set climate preset mode.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "preset_mode": {"type": "string"},
+                },
+                "required": ["entity_id", "preset_mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_pause",
+            "description": "Pause a vacuum.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remote_list",
+            "description": "List all remote entities.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_seek",
+            "description": "Seek to a position in media player.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "seek_position": {"type": "number"},
+                },
+                "required": ["entity_id", "seek_position"],
             },
         },
     },
