@@ -574,12 +574,14 @@ async def search_zigbee_devices(
             score = 1000
         else:
             hits = sum(1 for w in words if w in hay)
-            if hits < len(words):
+            if hits == 0:
                 continue
-            score = hits
+            # Strict AND first; OR fallback gets lower score.
+            score = hits * 100 if hits == len(words) else hits
         scored.append((score, d))
 
     scored.sort(key=lambda t: t[0], reverse=True)
+    total_matched = len(scored)
     results = []
     for _, d in scored[: max(1, limit)]:
         compatible = d.get("compatible") or []
@@ -598,6 +600,7 @@ async def search_zigbee_devices(
         "ok": True,
         "query": q,
         "count": len(results),
+        "total_matched": total_matched,
         "results": results,
         "source": "blakadder zigbee database",
         "note": (
@@ -732,12 +735,14 @@ async def search_tasmota_devices(
             score = 1000
         else:
             hits = sum(1 for w in words if w in hay)
-            if hits < len(words):
+            if hits == 0:
                 continue
-            score = hits
+            # Strict AND ranks higher; OR fallback at lower score.
+            score = hits * 100 if hits == len(words) else hits
         scored.append((score, d))
 
     scored.sort(key=lambda t: t[0], reverse=True)
+    total_matched = len(scored)
     results = []
     for _, d in scored[: max(1, limit)]:
         link = d.get("link") or ""
@@ -753,6 +758,7 @@ async def search_tasmota_devices(
         "ok": True,
         "query": q,
         "count": len(results),
+        "total_matched": total_matched,
         "results": results,
         "source": "blakadder tasmota template database",
         "note": (
@@ -820,8 +826,17 @@ async def search_esphome_devices(
         return {"error": "esphome device index unavailable or empty"}
 
     words = _query_words(q)
-    matched = [s for s in slugs if all(w in s.lower().replace("-", " ") for w in words)]
-    matched.sort(key=lambda s: len(s))  # shorter slug = closer match
+    # Strict AND first; OR fallback if AND yields nothing.
+    scored_slugs: list[tuple[int, str]] = []
+    for s in slugs:
+        hay = s.lower().replace("-", " ")
+        hits = sum(1 for w in words if w in hay)
+        if hits == 0:
+            continue
+        score = hits * 100 if hits == len(words) else hits
+        scored_slugs.append((score, s))
+    scored_slugs.sort(key=lambda t: (-t[0], len(t[1])))
+    matched = [s for _, s in scored_slugs]
 
     results = []
     for slug in matched[: max(1, limit)]:
