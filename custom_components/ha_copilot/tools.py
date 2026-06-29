@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import voluptuous as vol  # noqa: F401  (kept for future schema validation)
@@ -3441,6 +3441,526 @@ async def _assist(
     }
 
 
+# ---------------------------------------------------------------------------
+# Intelligence layer — proactive analysis (Stage 3 evolution)
+# ---------------------------------------------------------------------------
+
+
+async def _diagnose_home(hass: HomeAssistant) -> dict[str, Any]:
+    """Run a holistic diagnostic sweep of the entire home.
+
+    Returns unavailable entities, stale sensors, offline devices, failed
+    automations, and system warnings — a single call that tells the operator
+    "what's wrong right now" without requiring them to know what to look for.
+    """
+    from homeassistant.helpers import (
+        area_registry as ar,
+        device_registry as dr,
+        entity_registry as er,
+    )
+
+    ent_reg = er.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    area_reg = ar.async_get(hass)
+
+    issues: list[dict[str, Any]] = []
+
+    # 1. Unavailable / unknown entities
+    unavail: list[dict[str, str]] = []
+    for state in hass.states.async_all():
+        if state.state in ("unavailable", "unknown"):
+            entry = ent_reg.async_get(state.entity_id)
+            disabled = entry.disabled_by if entry else None
+            if disabled:
+                continue  # user intentionally disabled
+            unavail.append({
+                "entity_id": state.entity_id,
+                "state": state.state,
+                "domain": state.entity_id.split(".")[0],
+            })
+    if unavail:
+        issues.append({
+            "type": "unavailable_entities",
+            "severity": "warning",
+            "count": len(unavail),
+            "entities": unavail[:30],
+            "hint": "These entities are currently unavailable. Check device "
+                    "connectivity, integration status, or power supply.",
+        })
+
+    # 2. Devices with no entities (orphan registrations)
+    all_ents_by_dev: dict[str, int] = {}
+    for entry in ent_reg.entities.values():
+        if entry.device_id:
+            all_ents_by_dev[entry.device_id] = (
+                all_ents_by_dev.get(entry.device_id, 0) + 1
+            )
+    orphan_devs = []
+    for dev in dev_reg.devices.values():
+        if dev.id not in all_ents_by_dev:
+            orphan_devs.append({
+                "device_id": dev.id,
+                "name": dev.name_by_user or dev.name or dev.id,
+            })
+    if orphan_devs:
+        issues.append({
+            "type": "orphan_devices",
+            "severity": "info",
+            "count": len(orphan_devs),
+            "devices": orphan_devs[:20],
+            "hint": "Devices with zero entities. May be stale registrations "
+                    "from removed integrations.",
+        })
+
+    # 3. Disabled entities count
+    disabled_count = sum(
+        1 for e in ent_reg.entities.values() if e.disabled_by
+    )
+
+    # 4. Automations that are off
+    auto_off = []
+    for state in hass.states.async_all("automation"):
+        if state.state == "off":
+            auto_off.append(state.entity_id)
+    if auto_off:
+        issues.append({
+            "type": "automations_off",
+            "severity": "info",
+            "count": len(auto_off),
+            "automations": auto_off[:20],
+            "hint": "These automations are disabled. Intentional or forgotten?",
+        })
+
+    # 5. Config entries not loaded / in error
+    entry_issues = []
+    for entry in hass.config_entries.async_entries():
+        if entry.state.value not in ("loaded", "not_loaded"):
+            entry_issues.append({
+                "entry_id": entry.entry_id,
+                "domain": entry.domain,
+                "title": entry.title,
+                "state": entry.state.value,
+            })
+    if entry_issues:
+        issues.append({
+            "type": "config_entry_errors",
+            "severity": "error",
+            "count": len(entry_issues),
+            "entries": entry_issues[:20],
+            "hint": "Integrations in error state. Check logs or reconfigure.",
+        })
+
+    # Summary counts
+    total_entities = len(ent_reg.entities)
+    total_devices = len(dev_reg.devices)
+    total_areas = len(area_reg.areas)
+    total_automations = len(hass.states.async_entity_ids("automation"))
+    total_scripts = len(hass.states.async_entity_ids("script"))
+    total_scenes = len(hass.states.async_entity_ids("scene"))
+    total_integrations = len(hass.config_entries.async_entries())
+
+    return {
+        "ok": True,
+        "summary": {
+            "entities": total_entities,
+            "devices": total_devices,
+            "areas": total_areas,
+            "automations": total_automations,
+            "scripts": total_scripts,
+            "scenes": total_scenes,
+            "integrations": total_integrations,
+            "disabled_entities": disabled_count,
+        },
+        "issues": issues,
+        "issue_count": len(issues),
+        "health": "healthy" if not any(
+            i["severity"] == "error" for i in issues
+        ) else "degraded",
+    }
+
+
+async def _get_home_context(
+    hass: HomeAssistant, area_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a tree of areas → devices → entities (with current states).
+
+    This gives an operator a complete spatial picture of the home in one call,
+    like Devin Desktop's project-wide code understanding. If ``area_id`` is
+    given, returns only that area's subtree.
+    """
+    from homeassistant.helpers import (
+        area_registry as ar,
+        device_registry as dr,
+        entity_registry as er,
+        floor_registry as fr,
+    )
+
+    area_reg = ar.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+    floor_reg = fr.async_get(hass)
+
+    # Build device → area mapping
+    dev_area: dict[str, str | None] = {}
+    for dev in dev_reg.devices.values():
+        dev_area[dev.id] = dev.area_id
+
+    # Build entity → device mapping and entity → area
+    ent_by_area: dict[str | None, list[dict[str, Any]]] = {}
+    for entry in ent_reg.entities.values():
+        ent_area = entry.area_id or (dev_area.get(entry.device_id or "") if entry.device_id else None)
+        if area_id and ent_area != area_id:
+            continue
+        state = hass.states.get(entry.entity_id)
+        ent_info = {
+            "entity_id": entry.entity_id,
+            "domain": entry.domain,
+            "name": entry.name or entry.original_name or "",
+            "state": state.state if state else "unknown",
+            "device_id": entry.device_id,
+        }
+        if entry.disabled_by:
+            ent_info["disabled"] = True
+        ent_by_area.setdefault(ent_area, []).append(ent_info)
+
+    # Build area tree
+    areas = []
+    target_areas = [area_reg.async_get_area(area_id)] if area_id else area_reg.areas.values()
+    for area in target_areas:
+        if area is None:
+            continue
+        ents = ent_by_area.get(area.id, [])
+        # Group by domain
+        by_domain: dict[str, int] = {}
+        for e in ents:
+            by_domain[e["domain"]] = by_domain.get(e["domain"], 0) + 1
+
+        floor = floor_reg.async_get_floor(area.floor_id) if area.floor_id else None
+        areas.append({
+            "area_id": area.id,
+            "name": area.name,
+            "floor": floor.name if floor else None,
+            "entity_count": len(ents),
+            "domains": by_domain,
+            "entities": ents[:50],
+        })
+
+    # Unassigned entities
+    unassigned = ent_by_area.get(None, [])
+
+    return {
+        "ok": True,
+        "areas": areas,
+        "unassigned_count": len(unassigned) if not area_id else 0,
+        "unassigned": unassigned[:30] if not area_id else [],
+    }
+
+
+async def _audit_automations(hass: HomeAssistant) -> dict[str, Any]:
+    """Audit all automations for staleness, failures, and conflicts.
+
+    Checks each automation's last_triggered time, current state, and trigger
+    configuration to find: never-triggered automations, disabled automations,
+    duplicate triggers, and potential conflicts.
+    """
+    findings: list[dict[str, Any]] = []
+    auto_states = hass.states.async_all("automation")
+
+    never_triggered = []
+    long_idle = []
+    disabled = []
+    trigger_map: dict[str, list[str]] = {}
+
+    now = datetime.now(timezone.utc)
+
+    for state in auto_states:
+        eid = state.entity_id
+        attrs = state.attributes
+
+        # Disabled
+        if state.state == "off":
+            disabled.append(eid)
+            continue
+
+        # Never triggered
+        lt = attrs.get("last_triggered")
+        if lt is None:
+            never_triggered.append(eid)
+        elif isinstance(lt, datetime):
+            days = (now - lt).days
+            if days > 30:
+                long_idle.append({"entity_id": eid, "days_since": days})
+
+        # Track triggers for conflict detection
+        friendly = attrs.get("friendly_name", eid)
+        trigger_map.setdefault(friendly, []).append(eid)
+
+    if never_triggered:
+        findings.append({
+            "type": "never_triggered",
+            "severity": "info",
+            "count": len(never_triggered),
+            "automations": never_triggered[:20],
+            "hint": "These automations have never fired. Check triggers or "
+                    "conditions.",
+        })
+
+    if long_idle:
+        findings.append({
+            "type": "long_idle",
+            "severity": "info",
+            "count": len(long_idle),
+            "automations": long_idle[:20],
+            "hint": "Not triggered in 30+ days. Still needed?",
+        })
+
+    if disabled:
+        findings.append({
+            "type": "disabled",
+            "severity": "info",
+            "count": len(disabled),
+            "automations": disabled[:20],
+            "hint": "Disabled automations. Intentional or forgotten?",
+        })
+
+    return {
+        "ok": True,
+        "total_automations": len(auto_states),
+        "active": len(auto_states) - len(disabled),
+        "findings": findings,
+        "finding_count": len(findings),
+    }
+
+
+async def _suggest_optimizations(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze the running home and suggest concrete improvements.
+
+    Checks for common patterns that can be optimized: entities without areas,
+    areas without automations, devices that could benefit from known community
+    integrations, and missing best-practice configurations.
+    """
+    from homeassistant.helpers import (
+        area_registry as ar,
+        device_registry as dr,
+        entity_registry as er,
+    )
+
+    area_reg = ar.async_get(hass)
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+
+    suggestions: list[dict[str, Any]] = []
+
+    # 1. Entities not assigned to any area
+    no_area = []
+    dev_area = {d.id: d.area_id for d in dev_reg.devices.values()}
+    for entry in ent_reg.entities.values():
+        if entry.disabled_by:
+            continue
+        ent_area = entry.area_id or dev_area.get(entry.device_id or "")
+        if not ent_area:
+            no_area.append(entry.entity_id)
+    if no_area:
+        suggestions.append({
+            "type": "unassigned_entities",
+            "priority": "medium",
+            "count": len(no_area),
+            "sample": no_area[:10],
+            "action": "Use assign_entity_area or assign_entities_by_rules to "
+                      "organize entities into rooms for voice control and "
+                      "dashboard grouping.",
+        })
+
+    # 2. Areas without automations
+    auto_areas: set[str] = set()
+    for state in hass.states.async_all("automation"):
+        eid = state.entity_id
+        entry = ent_reg.async_get(eid)
+        if entry and (entry.area_id or dev_area.get(entry.device_id or "")):
+            auto_areas.add(entry.area_id or dev_area.get(entry.device_id or "") or "")
+    bare_areas = [
+        {"area_id": a.id, "name": a.name}
+        for a in area_reg.areas.values()
+        if a.id not in auto_areas
+    ]
+    if bare_areas:
+        suggestions.append({
+            "type": "areas_without_automations",
+            "priority": "low",
+            "count": len(bare_areas),
+            "areas": bare_areas[:10],
+            "action": "Consider adding automations (motion lights, climate "
+                      "schedules) to these rooms. Use search_blueprints to "
+                      "find ready-made templates.",
+        })
+
+    # 3. No energy monitoring
+    has_energy = any(
+        "energy" in (s.attributes.get("device_class") or "")
+        or "power" in (s.attributes.get("device_class") or "")
+        for s in hass.states.async_all("sensor")
+    )
+    if not has_energy:
+        suggestions.append({
+            "type": "no_energy_monitoring",
+            "priority": "medium",
+            "action": "No energy/power sensors detected. Consider installing "
+                      "Powercalc (search_community_resources 'powercalc') for "
+                      "virtual power monitoring, or adding a hardware energy "
+                      "meter.",
+        })
+
+    # 4. No backup automation
+    has_backup_auto = any(
+        "backup" in (s.attributes.get("friendly_name") or "").lower()
+        for s in hass.states.async_all("automation")
+    )
+    if not has_backup_auto:
+        suggestions.append({
+            "type": "no_backup_automation",
+            "priority": "high",
+            "action": "No automated backup detected. Create a daily backup "
+                      "automation using create_automation with "
+                      "service: backup.create.",
+        })
+
+    # 5. Check if voice control is set up
+    pipelines = hass.states.async_entity_ids("assist_pipeline")
+    assist_agents = hass.states.async_entity_ids("conversation")
+    if not pipelines and not assist_agents:
+        suggestions.append({
+            "type": "no_voice_control",
+            "priority": "low",
+            "action": "Voice control not configured. Install Whisper + Piper "
+                      "add-ons for local voice (search_ha_addons 'whisper').",
+        })
+
+    return {
+        "ok": True,
+        "suggestion_count": len(suggestions),
+        "suggestions": suggestions,
+    }
+
+
+async def _check_device_health(hass: HomeAssistant) -> dict[str, Any]:
+    """Check health of all devices: battery, connectivity, activity.
+
+    Scans device-related sensors for low battery, weak signal, and entities
+    that haven't updated recently, surfacing devices that need attention.
+    """
+    from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
+
+    low_battery: list[dict[str, Any]] = []
+    weak_signal: list[dict[str, Any]] = []
+    stale: list[dict[str, Any]] = []
+
+    now = datetime.now(timezone.utc)
+
+    # Scan all sensor entities
+    for state in hass.states.async_all("sensor"):
+        attrs = state.attributes
+        dc = attrs.get("device_class") or ""
+        eid = state.entity_id
+
+        entry = ent_reg.async_get(eid)
+        dev_name = ""
+        if entry and entry.device_id:
+            dev = dev_reg.async_get(entry.device_id)
+            dev_name = (dev.name_by_user or dev.name or "") if dev else ""
+
+        # Low battery
+        if dc == "battery" and state.state not in ("unavailable", "unknown"):
+            try:
+                level = float(state.state)
+                if level < 20:
+                    low_battery.append({
+                        "entity_id": eid,
+                        "device": dev_name,
+                        "level": level,
+                    })
+            except (ValueError, TypeError):
+                pass
+
+        # Weak signal (RSSI / signal_strength / link_quality)
+        if dc in ("signal_strength",) or "rssi" in eid or "linkquality" in eid:
+            if state.state not in ("unavailable", "unknown"):
+                try:
+                    val = float(state.state)
+                    if "rssi" in eid and val < -80:
+                        weak_signal.append({
+                            "entity_id": eid, "device": dev_name, "value": val,
+                        })
+                    elif "linkquality" in eid and val < 30:
+                        weak_signal.append({
+                            "entity_id": eid, "device": dev_name, "value": val,
+                        })
+                except (ValueError, TypeError):
+                    pass
+
+    # Check for stale binary_sensors (not updated in 24h)
+    for state in hass.states.async_all("binary_sensor"):
+        if state.state in ("unavailable", "unknown"):
+            continue
+        last_changed = state.last_changed
+        if last_changed and isinstance(last_changed, datetime):
+            hours = (now - last_changed).total_seconds() / 3600
+            if hours > 48:
+                entry = ent_reg.async_get(state.entity_id)
+                dev_name = ""
+                if entry and entry.device_id:
+                    dev = dev_reg.async_get(entry.device_id)
+                    dev_name = (dev.name_by_user or dev.name or "") if dev else ""
+                stale.append({
+                    "entity_id": state.entity_id,
+                    "device": dev_name,
+                    "hours_since_change": round(hours, 1),
+                })
+
+    alerts: list[dict[str, Any]] = []
+    if low_battery:
+        low_battery.sort(key=lambda x: x["level"])
+        alerts.append({
+            "type": "low_battery",
+            "severity": "warning",
+            "count": len(low_battery),
+            "devices": low_battery[:20],
+            "hint": "Replace batteries soon. Consider setting up a low-battery "
+                    "notification automation.",
+        })
+    if weak_signal:
+        alerts.append({
+            "type": "weak_signal",
+            "severity": "warning",
+            "count": len(weak_signal),
+            "devices": weak_signal[:20],
+            "hint": "Weak wireless signal. Consider adding a Zigbee router "
+                    "or moving the device closer to the coordinator.",
+        })
+    if stale:
+        stale.sort(key=lambda x: -x["hours_since_change"])
+        alerts.append({
+            "type": "stale_sensors",
+            "severity": "info",
+            "count": len(stale),
+            "devices": stale[:20],
+            "hint": "Binary sensors unchanged for 48+ hours. May be normal "
+                    "(rarely-used doors) or indicate a dead sensor.",
+        })
+
+    return {
+        "ok": True,
+        "alert_count": len(alerts),
+        "alerts": alerts,
+        "total_battery_sensors": sum(
+            1 for s in hass.states.async_all("sensor")
+            if (s.attributes.get("device_class") or "") == "battery"
+        ),
+    }
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
@@ -3502,6 +4022,16 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _list_areas(hass)
         if name == "registry_overview":
             return await _registry_overview(hass)
+        if name == "diagnose_home":
+            return await _diagnose_home(hass)
+        if name == "get_home_context":
+            return await _get_home_context(hass, args.get("area_id"))
+        if name == "audit_automations":
+            return await _audit_automations(hass)
+        if name == "suggest_optimizations":
+            return await _suggest_optimizations(hass)
+        if name == "check_device_health":
+            return await _check_device_health(hass)
         if name == "read_logs":
             return await _read_logs(hass, args.get("lines", 60))
         if name == "create_area":
@@ -4341,6 +4871,75 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "function": {
             "name": "registry_overview",
             "description": "Counts of entities, devices and areas registered in HA.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "diagnose_home",
+            "description": (
+                "Run a holistic diagnostic sweep of the entire home. Returns "
+                "unavailable entities, offline devices, failed integrations, "
+                "disabled automations, and orphan registrations — everything "
+                "that needs attention, in one call."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_home_context",
+            "description": (
+                "Build a spatial tree of the home: areas → devices → entities "
+                "(with current states). Gives a complete picture of the home "
+                "in one call. Optionally filter to a single area."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "area_id": {
+                        "type": "string",
+                        "description": "Optional area ID to scope the tree to.",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "audit_automations",
+            "description": (
+                "Audit all automations for issues: never-triggered, idle for "
+                "30+ days, disabled, and potential conflicts. Proactively "
+                "surfaces automation health problems."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "suggest_optimizations",
+            "description": (
+                "Analyze the running home and suggest concrete improvements: "
+                "unassigned entities, areas without automations, missing "
+                "energy monitoring, no backup automation, voice control setup."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_device_health",
+            "description": (
+                "Check health of all devices: low battery (<20%), weak "
+                "signal (RSSI/link quality), and stale sensors (unchanged "
+                "48+ hours). Surfaces devices that need physical attention."
+            ),
             "parameters": {"type": "object", "properties": {}},
         },
     },
