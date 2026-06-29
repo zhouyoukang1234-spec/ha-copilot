@@ -7232,6 +7232,249 @@ async def _list_intent_handlers(hass: HomeAssistant) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Wave 14: vacuum, number, button, select, text, valve, lawn_mower, remote,
+#           input_button
+# ---------------------------------------------------------------------------
+
+
+async def _vacuum_start(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Start a vacuum."""
+    try:
+        await hass.services.async_call(
+            "vacuum", "start", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum start failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "start"}
+
+
+async def _vacuum_stop(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Stop a vacuum."""
+    try:
+        await hass.services.async_call(
+            "vacuum", "stop", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum stop failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "stop"}
+
+
+async def _vacuum_return_home(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Send a vacuum back to its dock."""
+    try:
+        await hass.services.async_call(
+            "vacuum", "return_to_base", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum return_home failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "return_to_base"}
+
+
+async def _vacuum_locate(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Locate a vacuum (play sound)."""
+    try:
+        await hass.services.async_call(
+            "vacuum", "locate", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum locate failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "locate"}
+
+
+async def _vacuum_set_fan_speed(
+    hass: HomeAssistant, entity_id: str, fan_speed: str,
+) -> dict[str, Any]:
+    """Set vacuum fan speed (quiet/balanced/turbo/max)."""
+    try:
+        await hass.services.async_call(
+            "vacuum", "set_fan_speed",
+            {"entity_id": entity_id, "fan_speed": fan_speed}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum set fan speed failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "fan_speed": fan_speed}
+
+
+async def _vacuum_send_command(
+    hass: HomeAssistant, entity_id: str, command: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send a custom command to a vacuum."""
+    data: dict[str, Any] = {"entity_id": entity_id, "command": command}
+    if params:
+        data["params"] = params
+    try:
+        await hass.services.async_call("vacuum", "send_command", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Vacuum send command failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _number_set_value(
+    hass: HomeAssistant, entity_id: str, value: float,
+) -> dict[str, Any]:
+    """Set a number entity value."""
+    try:
+        await hass.services.async_call(
+            "number", "set_value",
+            {"entity_id": entity_id, "value": float(value)}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Number set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _button_press(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Press a button entity."""
+    try:
+        await hass.services.async_call(
+            "button", "press", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Button press failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "pressed"}
+
+
+async def _select_set_option(
+    hass: HomeAssistant, entity_id: str, option: str,
+) -> dict[str, Any]:
+    """Set a select entity option."""
+    try:
+        await hass.services.async_call(
+            "select", "select_option",
+            {"entity_id": entity_id, "option": option}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Select set option failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "option": option}
+
+
+async def _text_set_value(
+    hass: HomeAssistant, entity_id: str, value: str,
+) -> dict[str, Any]:
+    """Set a text entity value."""
+    try:
+        await hass.services.async_call(
+            "text", "set_value",
+            {"entity_id": entity_id, "value": value}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Text set value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _valve_open(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Open a valve."""
+    try:
+        await hass.services.async_call(
+            "valve", "open_valve", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Valve open failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "open"}
+
+
+async def _valve_close(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Close a valve."""
+    try:
+        await hass.services.async_call(
+            "valve", "close_valve", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Valve close failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "close"}
+
+
+async def _valve_set_position(
+    hass: HomeAssistant, entity_id: str, position: int,
+) -> dict[str, Any]:
+    """Set valve position (0=closed, 100=open)."""
+    try:
+        await hass.services.async_call(
+            "valve", "set_valve_position",
+            {"entity_id": entity_id, "position": position}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Valve set position failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "position": position}
+
+
+async def _lawn_mower_start(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Start mowing."""
+    try:
+        await hass.services.async_call(
+            "lawn_mower", "start_mowing", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Lawn mower start failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "start_mowing"}
+
+
+async def _lawn_mower_dock(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Send lawn mower back to dock."""
+    try:
+        await hass.services.async_call(
+            "lawn_mower", "dock", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Lawn mower dock failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "dock"}
+
+
+async def _remote_send_command(
+    hass: HomeAssistant, entity_id: str, command: str,
+    device: str | None = None, num_repeats: int | None = None,
+    delay_secs: float | None = None,
+) -> dict[str, Any]:
+    """Send a command via a remote entity."""
+    data: dict[str, Any] = {"entity_id": entity_id, "command": command}
+    if device:
+        data["device"] = device
+    if num_repeats is not None:
+        data["num_repeats"] = num_repeats
+    if delay_secs is not None:
+        data["delay_secs"] = delay_secs
+    try:
+        await hass.services.async_call("remote", "send_command", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remote send command failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "command": command}
+
+
+async def _remote_learn_command(
+    hass: HomeAssistant, entity_id: str,
+    device: str | None = None, command_type: str | None = None,
+    timeout: int | None = None,
+) -> dict[str, Any]:
+    """Put a remote entity into learning mode."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if device:
+        data["device"] = device
+    if command_type:
+        data["command_type"] = command_type
+    if timeout is not None:
+        data["timeout"] = timeout
+    try:
+        await hass.services.async_call("remote", "learn_command", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remote learn command failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "learning"}
+
+
+async def _press_input_button(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Press an input_button entity."""
+    try:
+        await hass.services.async_call(
+            "input_button", "press", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Press input_button failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "pressed"}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -9224,6 +9467,100 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _homeassistant_toggle(hass, args.get("entity_id", ""))
         if name == "list_intent_handlers":
             return await _list_intent_handlers(hass)
+        # --- Wave 14 dispatch ---
+        if name == "vacuum_start":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_start(hass, args.get("entity_id", ""))
+        if name == "vacuum_stop":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_stop(hass, args.get("entity_id", ""))
+        if name == "vacuum_return_home":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_return_home(hass, args.get("entity_id", ""))
+        if name == "vacuum_locate":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_locate(hass, args.get("entity_id", ""))
+        if name == "vacuum_set_fan_speed":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_set_fan_speed(
+                hass, args.get("entity_id", ""), args.get("fan_speed", ""),
+            )
+        if name == "vacuum_send_command":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _vacuum_send_command(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("params"),
+            )
+        if name == "number_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _number_set_value(
+                hass, args.get("entity_id", ""), float(args.get("value", 0)),
+            )
+        if name == "button_press":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _button_press(hass, args.get("entity_id", ""))
+        if name == "select_set_option":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _select_set_option(
+                hass, args.get("entity_id", ""), args.get("option", ""),
+            )
+        if name == "text_set_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _text_set_value(
+                hass, args.get("entity_id", ""), args.get("value", ""),
+            )
+        if name == "valve_open":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _valve_open(hass, args.get("entity_id", ""))
+        if name == "valve_close":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _valve_close(hass, args.get("entity_id", ""))
+        if name == "valve_set_position":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _valve_set_position(
+                hass, args.get("entity_id", ""), int(args.get("position", 0)),
+            )
+        if name == "lawn_mower_start":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _lawn_mower_start(hass, args.get("entity_id", ""))
+        if name == "lawn_mower_dock":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _lawn_mower_dock(hass, args.get("entity_id", ""))
+        if name == "remote_send_command":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remote_send_command(
+                hass, args.get("entity_id", ""), args.get("command", ""),
+                args.get("device"), args.get("num_repeats"),
+                args.get("delay_secs"),
+            )
+        if name == "remote_learn_command":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remote_learn_command(
+                hass, args.get("entity_id", ""),
+                args.get("device"), args.get("command_type"),
+                args.get("timeout"),
+            )
+        if name == "press_input_button":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _press_input_button(hass, args.get("entity_id", ""))
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -12605,6 +12942,253 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "list_intent_handlers",
             "description": "List registered conversation intent handlers.",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    # --- Wave 14 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_start",
+            "description": "Start a vacuum.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_stop",
+            "description": "Stop a vacuum.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_return_home",
+            "description": "Send a vacuum back to its dock.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_locate",
+            "description": "Locate a vacuum (play sound).",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_set_fan_speed",
+            "description": "Set vacuum fan speed (quiet/balanced/turbo/max).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "fan_speed": {"type": "string", "description": "quiet|balanced|turbo|max"},
+                },
+                "required": ["entity_id", "fan_speed"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "vacuum_send_command",
+            "description": "Send a custom command to a vacuum.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string"},
+                    "params": {"type": "object", "description": "Command parameters"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "number_set_value",
+            "description": "Set a number entity value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "number"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "button_press",
+            "description": "Press a button entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "select_set_option",
+            "description": "Set a select entity option.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "option": {"type": "string"},
+                },
+                "required": ["entity_id", "option"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "text_set_value",
+            "description": "Set a text entity value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "string"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "valve_open",
+            "description": "Open a valve.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "valve_close",
+            "description": "Close a valve.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "valve_set_position",
+            "description": "Set valve position (0=closed, 100=open).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "position": {"type": "integer", "description": "0-100"},
+                },
+                "required": ["entity_id", "position"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lawn_mower_start",
+            "description": "Start mowing.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lawn_mower_dock",
+            "description": "Send lawn mower back to dock.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remote_send_command",
+            "description": "Send a command via a remote entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "command": {"type": "string"},
+                    "device": {"type": "string"},
+                    "num_repeats": {"type": "integer"},
+                    "delay_secs": {"type": "number"},
+                },
+                "required": ["entity_id", "command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remote_learn_command",
+            "description": "Put a remote entity into learning mode.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "device": {"type": "string"},
+                    "command_type": {"type": "string"},
+                    "timeout": {"type": "integer"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "press_input_button",
+            "description": "Press an input_button entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
         },
     },
     {
