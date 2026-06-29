@@ -20856,6 +20856,51 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _notify_send_to_device(hass, args.get("target", ""), args.get("message", ""), args.get("title", ""))
+        # --- Wave 72 dispatch ---
+        if name == "entity_statistics_summary":
+            return await _entity_statistics_summary(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "entity_state_duration":
+            return await _entity_state_duration(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "entity_change_rate":
+            return await _entity_change_rate(hass, args.get("entity_id", ""), args.get("hours", 24))
+        if name == "scene_compare_current":
+            return await _scene_compare_current(hass, args.get("entity_id", ""))
+        if name == "scene_apply_preview":
+            return await _scene_apply_preview(hass, args.get("entity_id", ""))
+        if name == "automation_execution_history":
+            return await _automation_execution_history(hass, args.get("entity_id", ""))
+        if name == "automation_error_log":
+            return await _automation_error_log(hass, args.get("entity_id", ""))
+        if name == "automation_create_simple":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _automation_create_simple(hass, args.get("alias", ""), args.get("trigger", {}), args.get("action", {}))
+        if name == "input_boolean_toggle_all":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_boolean_toggle_all(hass)
+        if name == "dashboard_entity_usage":
+            return await _dashboard_entity_usage(hass)
+        if name == "dashboard_card_count":
+            return await _dashboard_card_count(hass)
+        if name == "backup_list_all":
+            return await _backup_list_all(hass)
+        if name == "log_filter_by_domain":
+            return await _log_filter_by_domain(hass, args.get("domain", ""), args.get("limit", 50))
+        if name == "log_search_keyword":
+            return await _log_search_keyword(hass, args.get("keyword", ""), args.get("limit", 50))
+        if name == "entity_registry_cleanup":
+            return await _entity_registry_cleanup(hass)
+        if name == "entity_registry_stats":
+            return await _entity_registry_stats(hass)
+        if name == "system_restart_ha":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _system_restart_ha(hass)
+        if name == "system_reload_core":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _system_reload_core(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -25793,6 +25838,455 @@ async def _notify_send_to_device(
         return {"ok": True, "target": target, "message": message}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Notify device failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 72 — entity analytics, scene compare, automation create, dashboard
+# analysis, backup, log search, entity registry, system control
+# ---------------------------------------------------------------------------
+
+
+async def _entity_statistics_summary(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Get min/max/avg/median statistics for a numeric entity over time."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        values = []
+        for s in items:
+            try:
+                values.append(float(s.state))
+            except (ValueError, TypeError):
+                pass
+        if not values:
+            return {"ok": True, "entity_id": entity_id, "hours": hours,
+                    "note": "No numeric data", "data_points": 0}
+        values.sort()
+        n = len(values)
+        median = values[n // 2] if n % 2 else (values[n // 2 - 1] + values[n // 2]) / 2
+        return {
+            "ok": True, "entity_id": entity_id, "hours": hours,
+            "data_points": n,
+            "min": min(values), "max": max(values),
+            "avg": round(sum(values) / n, 3),
+            "median": round(median, 3),
+            "range": round(max(values) - min(values), 3),
+        }
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity statistics failed: {exc}"}
+
+
+async def _entity_state_duration(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Calculate how long an entity was in each state."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        if not items:
+            return {"ok": True, "entity_id": entity_id, "hours": hours,
+                    "note": "No state changes", "durations": {}}
+        durations: dict[str, float] = {}
+        for i, s in enumerate(items):
+            t_start = s.last_changed if hasattr(s, "last_changed") else start
+            t_end = items[i + 1].last_changed if i + 1 < len(items) and hasattr(items[i + 1], "last_changed") else end
+            secs = (t_end - t_start).total_seconds()
+            durations[s.state] = durations.get(s.state, 0) + secs
+        total = sum(durations.values())
+        result = {}
+        for state_val, secs in sorted(durations.items(), key=lambda x: x[1], reverse=True):
+            result[state_val] = {
+                "seconds": round(secs),
+                "hours": round(secs / 3600, 2),
+                "percent": round(secs / max(total, 1) * 100, 1),
+            }
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "total_seconds": round(total), "durations": result}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity state duration failed: {exc}"}
+
+
+async def _entity_change_rate(
+    hass: HomeAssistant, entity_id: str, hours: int = 24,
+) -> dict[str, Any]:
+    """Calculate state changes per hour for an entity."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        from homeassistant.components.recorder.history import state_changes_during_period
+        changes = await hass.async_add_executor_job(
+            state_changes_during_period, hass, start, end, entity_id,
+        )
+        items = changes.get(entity_id, [])
+        count = len(items)
+        rate = round(count / max(hours, 1), 2)
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "total_changes": count, "changes_per_hour": rate}
+    except ImportError:
+        return {"error": "recorder not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity change rate failed: {exc}"}
+
+
+async def _scene_compare_current(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Compare scene entity states with current states."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Scene '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    entity_ids = attrs.get("entity_id", [])
+    diffs = []
+    matching = 0
+    if isinstance(entity_ids, list):
+        for eid in entity_ids:
+            current = hass.states.get(eid)
+            if current:
+                diffs.append({
+                    "entity_id": eid,
+                    "current_state": current.state,
+                })
+                matching += 1
+    return {
+        "ok": True,
+        "scene": entity_id,
+        "friendly_name": attrs.get("friendly_name"),
+        "scene_entities": len(entity_ids) if isinstance(entity_ids, list) else 0,
+        "checked": matching,
+        "entities": diffs[:50],
+    }
+
+
+async def _scene_apply_preview(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Preview what a scene would change without applying it."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Scene '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    entity_ids = attrs.get("entity_id", [])
+    preview = []
+    if isinstance(entity_ids, list):
+        for eid in entity_ids:
+            current = hass.states.get(eid)
+            preview.append({
+                "entity_id": eid,
+                "current_state": current.state if current else "unknown",
+            })
+    return {
+        "ok": True,
+        "scene": entity_id,
+        "friendly_name": attrs.get("friendly_name"),
+        "would_affect": len(preview),
+        "preview": preview[:50],
+    }
+
+
+async def _automation_execution_history(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get automation execution trace history."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"error": f"Automation '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    auto_id = entity_id.replace("automation.", "")
+    traces_data = hass.data.get("automation_trace", {})
+    traces = []
+    if isinstance(traces_data, dict):
+        auto_traces = traces_data.get(auto_id, [])
+        for trace in auto_traces[-20:]:
+            traces.append({
+                "run_id": getattr(trace, "run_id", str(trace)[:50]),
+                "state": getattr(trace, "state", ""),
+                "timestamp": str(getattr(trace, "timestamp", "")),
+            })
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "last_triggered": str(attrs.get("last_triggered", "")),
+        "current_running": attrs.get("current", 0),
+        "trace_count": len(traces),
+        "traces": traces,
+    }
+
+
+async def _automation_error_log(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get automation-specific errors from system log."""
+    auto_id = entity_id.replace("automation.", "")
+    log_data = hass.data.get("system_log")
+    errors = []
+    if log_data and hasattr(log_data, "records"):
+        for rec in log_data.records:
+            msg = str(getattr(rec, "message", ""))
+            if auto_id in msg or entity_id in msg:
+                errors.append({
+                    "message": msg[:500],
+                    "level": getattr(rec, "level", ""),
+                    "timestamp": str(getattr(rec, "timestamp", "")),
+                })
+    return {"ok": True, "entity_id": entity_id, "error_count": len(errors),
+            "errors": errors[:20]}
+
+
+async def _automation_create_simple(
+    hass: HomeAssistant, alias: str,
+    trigger: dict[str, Any], action: dict[str, Any],
+) -> dict[str, Any]:
+    """Create a simple automation via YAML append."""
+    try:
+        config_dir = hass.config.config_dir
+        path = os.path.join(config_dir, "automations.yaml")
+
+        def _create():
+            existing = []
+            if os.path.exists(path):
+                with open(path, encoding="utf-8") as f:
+                    raw = yaml.safe_load(f)
+                if isinstance(raw, list):
+                    existing = raw
+            new_auto = {
+                "id": str(int(datetime.now(timezone.utc).timestamp())),
+                "alias": alias,
+                "trigger": [trigger] if isinstance(trigger, dict) else trigger,
+                "action": [action] if isinstance(action, dict) else action,
+            }
+            existing.append(new_auto)
+            with open(path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(existing, f, allow_unicode=True, default_flow_style=False)
+            return new_auto["id"]
+
+        auto_id = await hass.async_add_executor_job(_create)
+        return {"ok": True, "alias": alias, "id": auto_id}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Automation create failed: {exc}"}
+
+
+async def _input_boolean_toggle_all(hass: HomeAssistant) -> dict[str, Any]:
+    """Toggle all input_boolean helpers."""
+    booleans = hass.states.async_all("input_boolean")
+    results = []
+    for state in booleans:
+        try:
+            await hass.services.async_call(
+                "input_boolean", "toggle", {"entity_id": state.entity_id},
+            )
+            results.append({"entity_id": state.entity_id, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": state.entity_id, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _dashboard_entity_usage(hass: HomeAssistant) -> dict[str, Any]:
+    """Analyze which entities are used in Lovelace dashboards."""
+    try:
+        config_dir = hass.config.config_dir
+        paths = [os.path.join(config_dir, "ui-lovelace.yaml")]
+        for f in os.listdir(config_dir):
+            if f.startswith("lovelace-") and f.endswith(".yaml"):
+                paths.append(os.path.join(config_dir, f))
+
+        def _analyze():
+            entity_refs: dict[str, int] = {}
+            for p in paths:
+                if not os.path.exists(p):
+                    continue
+                with open(p, encoding="utf-8") as fh:
+                    content = fh.read()
+                import re
+                matches = re.findall(r'[a-z_]+\.[a-z0-9_]+', content)
+                for m in matches:
+                    if "." in m and not m.startswith(("http.", "www.", "ui.", "yaml.")):
+                        entity_refs[m] = entity_refs.get(m, 0) + 1
+            return entity_refs
+
+        refs = await hass.async_add_executor_job(_analyze)
+        sorted_refs = sorted(refs.items(), key=lambda x: x[1], reverse=True)
+        return {"ok": True, "unique_entities": len(refs),
+                "top_entities": [{"entity_id": k, "references": v} for k, v in sorted_refs[:50]]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dashboard entity usage failed: {exc}"}
+
+
+async def _dashboard_card_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Count cards in Lovelace dashboards."""
+    try:
+        config_dir = hass.config.config_dir
+
+        def _count():
+            results = []
+            for f in os.listdir(config_dir):
+                if (f == "ui-lovelace.yaml" or f.startswith("lovelace-")) and f.endswith(".yaml"):
+                    path = os.path.join(config_dir, f)
+                    with open(path, encoding="utf-8") as fh:
+                        config = yaml.safe_load(fh)
+                    if not isinstance(config, dict):
+                        continue
+                    views = config.get("views", [])
+                    total_cards = sum(
+                        len(v.get("cards", [])) for v in views if isinstance(v, dict)
+                    )
+                    results.append({
+                        "file": f,
+                        "views": len(views),
+                        "cards": total_cards,
+                    })
+            return results
+
+        dashboards = await hass.async_add_executor_job(_count)
+        return {"ok": True, "dashboard_count": len(dashboards),
+                "dashboards": dashboards}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dashboard card count failed: {exc}"}
+
+
+async def _backup_list_all(hass: HomeAssistant) -> dict[str, Any]:
+    """List all available backups."""
+    try:
+        config_dir = hass.config.config_dir
+        backup_dir = os.path.join(config_dir, "backups")
+
+        def _list():
+            results = []
+            if not os.path.isdir(backup_dir):
+                return results
+            for f in os.listdir(backup_dir):
+                path = os.path.join(backup_dir, f)
+                stat = os.stat(path)
+                results.append({
+                    "filename": f,
+                    "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                    "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                })
+            results.sort(key=lambda x: x["modified"], reverse=True)
+            return results
+
+        backups = await hass.async_add_executor_job(_list)
+        return {"ok": True, "count": len(backups), "backups": backups}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Backup list failed: {exc}"}
+
+
+async def _log_filter_by_domain(
+    hass: HomeAssistant, domain: str, limit: int = 50,
+) -> dict[str, Any]:
+    """Filter system log entries by domain."""
+    log_data = hass.data.get("system_log")
+    results = []
+    if log_data and hasattr(log_data, "records"):
+        for rec in log_data.records:
+            name = str(getattr(rec, "name", ""))
+            msg = str(getattr(rec, "message", ""))
+            if domain in name or domain in msg:
+                results.append({
+                    "name": name,
+                    "message": msg[:500],
+                    "level": getattr(rec, "level", ""),
+                })
+    return {"ok": True, "domain": domain, "count": len(results[-limit:]),
+            "entries": results[-limit:]}
+
+
+async def _log_search_keyword(
+    hass: HomeAssistant, keyword: str, limit: int = 50,
+) -> dict[str, Any]:
+    """Search system log entries by keyword."""
+    log_data = hass.data.get("system_log")
+    results = []
+    kw_lower = keyword.lower()
+    if log_data and hasattr(log_data, "records"):
+        for rec in log_data.records:
+            msg = str(getattr(rec, "message", ""))
+            name = str(getattr(rec, "name", ""))
+            if kw_lower in msg.lower() or kw_lower in name.lower():
+                results.append({
+                    "name": name,
+                    "message": msg[:500],
+                    "level": getattr(rec, "level", ""),
+                })
+    return {"ok": True, "keyword": keyword, "count": len(results[-limit:]),
+            "entries": results[-limit:]}
+
+
+async def _entity_registry_cleanup(hass: HomeAssistant) -> dict[str, Any]:
+    """Find orphaned entity registry entries (no matching state)."""
+    reg = er.async_get(hass)
+    orphaned = []
+    for entry in reg.entities.values():
+        state = hass.states.get(entry.entity_id)
+        if state is None:
+            orphaned.append({
+                "entity_id": entry.entity_id,
+                "platform": entry.platform,
+                "domain": entry.domain,
+                "name": entry.name or entry.original_name,
+                "disabled": entry.disabled_by is not None,
+            })
+    return {"ok": True, "orphaned_count": len(orphaned),
+            "entities": orphaned[:100]}
+
+
+async def _entity_registry_stats(hass: HomeAssistant) -> dict[str, Any]:
+    """Get entity registry statistics."""
+    reg = er.async_get(hass)
+    total = 0
+    by_domain: dict[str, int] = {}
+    by_platform: dict[str, int] = {}
+    disabled = 0
+    hidden = 0
+    for entry in reg.entities.values():
+        total += 1
+        by_domain[entry.domain] = by_domain.get(entry.domain, 0) + 1
+        by_platform[entry.platform] = by_platform.get(entry.platform, 0) + 1
+        if entry.disabled_by:
+            disabled += 1
+        if entry.hidden_by:
+            hidden += 1
+    return {
+        "ok": True,
+        "total": total,
+        "disabled": disabled,
+        "hidden": hidden,
+        "by_domain": dict(sorted(by_domain.items(), key=lambda x: x[1], reverse=True)),
+        "by_platform": dict(sorted(by_platform.items(), key=lambda x: x[1], reverse=True)[:20]),
+    }
+
+
+async def _system_restart_ha(hass: HomeAssistant) -> dict[str, Any]:
+    """Restart Home Assistant."""
+    try:
+        await hass.services.async_call("homeassistant", "restart")
+        return {"ok": True, "action": "restart", "note": "HA is restarting"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Restart failed: {exc}"}
+
+
+async def _system_reload_core(hass: HomeAssistant) -> dict[str, Any]:
+    """Reload core configuration."""
+    try:
+        await hass.services.async_call("homeassistant", "reload_core_config")
+        return {"ok": True, "action": "reload_core_config"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Core reload failed: {exc}"}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -37488,4 +37982,23 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "media_player_play_url", "description": "Play a URL on a media player. Write op.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "url": {"type": "string", "description": "Media URL to play"}}, "required": ["entity_id", "url"]}}},
     {"type": "function", "function": {"name": "notify_send_all", "description": "Send notification to all registered targets. Write op.", "parameters": {"type": "object", "properties": {"message": {"type": "string"}, "title": {"type": "string"}}, "required": ["message"]}}},
     {"type": "function", "function": {"name": "notify_send_to_device", "description": "Send notification to a specific mobile device. Write op.", "parameters": {"type": "object", "properties": {"target": {"type": "string", "description": "Device name"}, "message": {"type": "string"}, "title": {"type": "string"}}, "required": ["target", "message"]}}},
+    # --- Wave 72 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "entity_statistics_summary", "description": "Get min/max/avg/median statistics for a numeric entity over time.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "entity_state_duration", "description": "Calculate how long an entity was in each state (hours, percent).", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "entity_change_rate", "description": "Calculate state changes per hour for an entity.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}, "hours": {"type": "integer", "default": 24}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "scene_compare_current", "description": "Compare scene entity states with current actual states.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Scene entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "scene_apply_preview", "description": "Preview what a scene would change without applying it.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string", "description": "Scene entity ID"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_execution_history", "description": "Get automation execution trace history.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_error_log", "description": "Get automation-specific errors from system log.", "parameters": {"type": "object", "properties": {"entity_id": {"type": "string"}}, "required": ["entity_id"]}}},
+    {"type": "function", "function": {"name": "automation_create_simple", "description": "Create a simple automation via YAML. Write op.", "parameters": {"type": "object", "properties": {"alias": {"type": "string"}, "trigger": {"type": "object"}, "action": {"type": "object"}}, "required": ["alias", "trigger", "action"]}}},
+    {"type": "function", "function": {"name": "input_boolean_toggle_all", "description": "Toggle all input_boolean helpers. Write op.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "dashboard_entity_usage", "description": "Analyze which entities are referenced in Lovelace dashboards.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "dashboard_card_count", "description": "Count views and cards in Lovelace dashboards.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "backup_list_all", "description": "List all available backups with size and date.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "log_filter_by_domain", "description": "Filter system log entries by domain.", "parameters": {"type": "object", "properties": {"domain": {"type": "string"}, "limit": {"type": "integer", "default": 50}}, "required": ["domain"]}}},
+    {"type": "function", "function": {"name": "log_search_keyword", "description": "Search system log entries by keyword.", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}, "limit": {"type": "integer", "default": 50}}, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "entity_registry_cleanup", "description": "Find orphaned entity registry entries with no matching state.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "entity_registry_stats", "description": "Get entity registry statistics (by domain, platform, disabled, hidden).", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_restart_ha", "description": "Restart Home Assistant. Write op.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "system_reload_core", "description": "Reload core configuration. Write op.", "parameters": {"type": "object", "properties": {}}}},
 ]
