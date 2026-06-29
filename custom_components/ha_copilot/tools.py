@@ -8339,6 +8339,92 @@ async def _media_player_repeat_set(
 
 
 # ---------------------------------------------------------------------------
+# Wave 26: TTS, recorder, logger, reload domain configs
+# ---------------------------------------------------------------------------
+
+
+async def _tts_speak(
+    hass: HomeAssistant, entity_id: str, message: str,
+    language: str | None = None, cache: bool | None = None,
+) -> dict[str, Any]:
+    """Speak text via TTS entity."""
+    data: dict[str, Any] = {"entity_id": entity_id, "message": message}
+    if language:
+        data["language"] = language
+    if cache is not None:
+        data["cache"] = cache
+    try:
+        await hass.services.async_call("tts", "speak", data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"TTS speak failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "message": message}
+
+
+async def _tts_clear_cache(hass: HomeAssistant) -> dict[str, Any]:
+    """Clear TTS cache."""
+    try:
+        await hass.services.async_call("tts", "clear_cache", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"TTS clear cache failed: {exc}"}
+    return {"ok": True, "action": "cache_cleared"}
+
+
+async def _recorder_purge(
+    hass: HomeAssistant, keep_days: int = 10,
+    repack: bool = False,
+) -> dict[str, Any]:
+    """Purge old recorder data."""
+    try:
+        await hass.services.async_call(
+            "recorder", "purge",
+            {"keep_days": keep_days, "repack": repack}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder purge failed: {exc}"}
+    return {"ok": True, "keep_days": keep_days, "action": "purged"}
+
+
+async def _recorder_disable(hass: HomeAssistant) -> dict[str, Any]:
+    """Disable the recorder."""
+    try:
+        await hass.services.async_call("recorder", "disable", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder disable failed: {exc}"}
+    return {"ok": True, "action": "disabled"}
+
+
+async def _recorder_enable(hass: HomeAssistant) -> dict[str, Any]:
+    """Enable the recorder."""
+    try:
+        await hass.services.async_call("recorder", "enable", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Recorder enable failed: {exc}"}
+    return {"ok": True, "action": "enabled"}
+
+
+async def _logger_set_level(
+    hass: HomeAssistant, levels: dict[str, str],
+) -> dict[str, Any]:
+    """Set logger levels (e.g. {'homeassistant.core': 'debug'})."""
+    try:
+        await hass.services.async_call("logger", "set_level", levels, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logger set level failed: {exc}"}
+    return {"ok": True, "levels": levels}
+
+
+async def _reload_domain(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Reload a specific domain config from YAML."""
+    try:
+        await hass.services.async_call(domain, "reload", {}, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reload {domain} failed: {exc}"}
+    return {"ok": True, "domain": domain, "action": "reloaded"}
+
+
+# ---------------------------------------------------------------------------
 # Wave 25: humidifier toggle, alarm custom bypass/trigger, remote,
 #           input button, group set/remove, counter set value
 # ---------------------------------------------------------------------------
@@ -11169,6 +11255,57 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _press_input_button(hass, args.get("entity_id", ""))
+        # --- Wave 26 dispatch ---
+        if name == "tts_speak":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _tts_speak(
+                hass, args.get("entity_id", ""), args.get("message", ""),
+                args.get("language"), args.get("cache"),
+            )
+        if name == "tts_clear_cache":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _tts_clear_cache(hass)
+        if name == "recorder_purge":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _recorder_purge(
+                hass, int(args.get("keep_days", 10)),
+                bool(args.get("repack", False)),
+            )
+        if name == "recorder_disable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _recorder_disable(hass)
+        if name == "recorder_enable":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _recorder_enable(hass)
+        if name == "logger_set_level":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _logger_set_level(hass, args.get("levels", {}))
+        if name in (
+            "reload_scenes", "reload_groups", "reload_input_booleans",
+            "reload_input_numbers", "reload_input_texts",
+            "reload_input_selects", "reload_input_datetimes",
+            "reload_timers", "reload_counters",
+        ):
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            domain_map = {
+                "reload_scenes": "scene",
+                "reload_groups": "group",
+                "reload_input_booleans": "input_boolean",
+                "reload_input_numbers": "input_number",
+                "reload_input_texts": "input_text",
+                "reload_input_selects": "input_select",
+                "reload_input_datetimes": "input_datetime",
+                "reload_timers": "timer",
+                "reload_counters": "counter",
+            }
+            return await _reload_domain(hass, domain_map[name])
         # --- Wave 25 dispatch ---
         if name == "humidifier_toggle":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -15976,6 +16113,148 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
+        },
+    },
+    # --- Wave 26 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "tts_speak",
+            "description": "Speak text via a TTS entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "message": {"type": "string"},
+                    "language": {"type": "string"},
+                    "cache": {"type": "boolean"},
+                },
+                "required": ["entity_id", "message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tts_clear_cache",
+            "description": "Clear TTS cache.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_purge",
+            "description": "Purge old recorder data.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keep_days": {"type": "integer", "description": "Days to keep"},
+                    "repack": {"type": "boolean"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_disable",
+            "description": "Disable the recorder.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recorder_enable",
+            "description": "Enable the recorder.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "logger_set_level",
+            "description": "Set logger levels (e.g. {'homeassistant.core': 'debug'}).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "levels": {"type": "object", "description": "Component→level map"},
+                },
+                "required": ["levels"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_scenes",
+            "description": "Reload scenes from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_groups",
+            "description": "Reload groups from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_input_booleans",
+            "description": "Reload input_boolean from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_input_numbers",
+            "description": "Reload input_number from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_input_texts",
+            "description": "Reload input_text from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_input_selects",
+            "description": "Reload input_select from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_input_datetimes",
+            "description": "Reload input_datetime from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_timers",
+            "description": "Reload timer from YAML.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reload_counters",
+            "description": "Reload counter from YAML.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     # --- Wave 25 TOOL_SPECS ---
