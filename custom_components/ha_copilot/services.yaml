@@ -1,22 +1,232 @@
 run_tool:
-  name: Run a copilot tool
-  description: >-
-    Directly execute one HA-Copilot tool by name against Home Assistant. This is
-    the deterministic capability-layer entry point — no model is involved. Useful
-    for automations/scripts and for external agents that know exactly which
-    low-level operation they want.
+  name: Run tool
+  description: Invoke any HA-Copilot tool by name (generic dispatcher).
   fields:
     tool:
-      name: Tool
-      description: Tool name, e.g. list_states, call_service, create_area, render_template.
+      name: Tool name
+      description: The tool to invoke (e.g. 'list_entities', 'search_zigbee_devices').
       required: true
-      example: render_template
       selector:
         text:
     args:
       name: Arguments
-      description: Object of arguments for the tool.
+      description: Tool arguments as a dictionary.
       required: false
-      example: '{"template": "{{ states.light | selectattr(''state'',''eq'',''on'') | list | count }}"}'
       selector:
         object:
+
+discover_resources:
+  name: Discover resources
+  description: >-
+    One free-text query, all 9 sources at once (HACS, GitHub, blueprints,
+    Zigbee, Z-Wave, Tasmota, ESPHome, native integrations, add-ons).
+    Returns per-source results plus a fused top list.
+  fields:
+    query:
+      name: Query
+      description: "Brand, device, or need (e.g. 'xiaomi vacuum', 'low battery notification')."
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      description: Max results per source.
+      default: 8
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_hacs:
+  name: Search HACS
+  description: Search the HACS catalog (integrations, cards, themes).
+  fields:
+    query:
+      name: Query
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_github:
+  name: Search GitHub
+  description: Search GitHub for HA-related repositories by stars.
+  fields:
+    query:
+      name: Query
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_blueprints:
+  name: Search blueprints
+  description: Search community automation/script blueprints.
+  fields:
+    query:
+      name: Query
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_zigbee_devices:
+  name: Search Zigbee devices
+  description: "Search the community Zigbee device database (~2700 devices) for brand/model compatibility."
+  fields:
+    query:
+      name: Query
+      description: "Brand or model (e.g. 'aqara motion sensor')."
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_zwave_devices:
+  name: Search Z-Wave devices
+  description: "Search the Z-Wave device database (zwave-js, ~2375 devices) for brand/model."
+  fields:
+    query:
+      name: Query
+      description: "Brand or model (e.g. 'aeotec', 'fibaro fgs213')."
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_tasmota_devices:
+  name: Search Tasmota devices
+  description: "Search the Tasmota template database (~2800 devices)."
+  fields:
+    query:
+      name: Query
+      description: "Brand or model (e.g. 'sonoff basic')."
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_esphome_devices:
+  name: Search ESPHome devices
+  description: "Search the ESPHome device database (~770 devices)."
+  fields:
+    query:
+      name: Query
+      description: "Brand or model (e.g. 'athom plug', 'shelly')."
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_ha_integrations:
+  name: Search HA integrations
+  description: "Search Home Assistant's built-in integration catalog (~1470 integrations)."
+  fields:
+    query:
+      name: Query
+      description: "Brand or need (e.g. 'aqara', 'tuya', 'vacuum')."
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+search_ha_addons:
+  name: Search HA add-ons
+  description: Search Home Assistant add-on stores (official + community).
+  fields:
+    query:
+      name: Query
+      description: "Need (e.g. 'mqtt', 'zigbee2mqtt', 'matter', 'backup')."
+      required: true
+      selector:
+        text:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+
+recommend_resources:
+  name: Recommend resources
+  description: >-
+    Read the running HA's real devices and recommend matching HACS
+    integrations, frontend cards, and automation blueprints.
+  fields:
+    limit:
+      name: Limit
+      description: Max recommendations per kind.
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 50
+    include_blueprints:
+      name: Include blueprints
+      description: Also include device-matched blueprint recommendations.
+      default: true
+      selector:
+        boolean:
+
+recommend_blueprints:
+  name: Recommend blueprints
+  description: >-
+    Map real entity domains to intents and suggest matching community
+    automation blueprints for your devices.
+  fields:
+    limit:
+      name: Limit
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 30
