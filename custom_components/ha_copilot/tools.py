@@ -5226,6 +5226,350 @@ async def _install_update(
 
 
 # ---------------------------------------------------------------------------
+# Device control — lock, alarm, fan, water heater, humidifier, siren, button
+# ---------------------------------------------------------------------------
+
+
+async def _lock_door(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Lock a smart lock."""
+    try:
+        await hass.services.async_call(
+            "lock", "lock", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Lock failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "locked"}
+
+
+async def _unlock_door(
+    hass: HomeAssistant, entity_id: str, code: str | None = None,
+) -> dict[str, Any]:
+    """Unlock a smart lock (optional PIN code)."""
+    try:
+        svc_data: dict[str, Any] = {"entity_id": entity_id}
+        if code:
+            svc_data["code"] = code
+        await hass.services.async_call(
+            "lock", "unlock", svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Unlock failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "unlocked"}
+
+
+async def _arm_alarm(
+    hass: HomeAssistant, entity_id: str,
+    mode: str = "arm_away", code: str | None = None,
+) -> dict[str, Any]:
+    """Arm an alarm control panel (arm_away, arm_home, arm_night, arm_vacation)."""
+    valid = {"arm_away", "arm_home", "arm_night", "arm_vacation", "arm_custom_bypass"}
+    if mode not in valid:
+        return {"error": f"Invalid mode '{mode}'. Valid: {sorted(valid)}"}
+    try:
+        svc_data: dict[str, Any] = {"entity_id": entity_id}
+        if code:
+            svc_data["code"] = code
+        await hass.services.async_call(
+            "alarm_control_panel", mode, svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Arm alarm failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "mode": mode}
+
+
+async def _disarm_alarm(
+    hass: HomeAssistant, entity_id: str, code: str | None = None,
+) -> dict[str, Any]:
+    """Disarm an alarm control panel."""
+    try:
+        svc_data: dict[str, Any] = {"entity_id": entity_id}
+        if code:
+            svc_data["code"] = code
+        await hass.services.async_call(
+            "alarm_control_panel", "alarm_disarm", svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Disarm alarm failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "disarmed"}
+
+
+async def _get_alarm_state(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get alarm control panel state and supported features."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Alarm '{entity_id}' not found"}
+    attrs = state.attributes
+    return {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "name": attrs.get("friendly_name", ""),
+        "code_arm_required": attrs.get("code_arm_required", False),
+        "supported_features": attrs.get("supported_features", 0),
+    }
+
+
+async def _set_fan_speed(
+    hass: HomeAssistant, entity_id: str, percentage: int,
+) -> dict[str, Any]:
+    """Set fan speed percentage (0=off, 100=max)."""
+    try:
+        await hass.services.async_call(
+            "fan", "set_percentage",
+            {"entity_id": entity_id, "percentage": max(0, min(100, percentage))},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set fan speed failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "percentage": percentage}
+
+
+async def _set_fan_direction(
+    hass: HomeAssistant, entity_id: str, direction: str,
+) -> dict[str, Any]:
+    """Set fan rotation direction (forward or reverse)."""
+    if direction not in ("forward", "reverse"):
+        return {"error": f"Invalid direction '{direction}'. Valid: forward, reverse"}
+    try:
+        await hass.services.async_call(
+            "fan", "set_direction",
+            {"entity_id": entity_id, "direction": direction},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set fan direction failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "direction": direction}
+
+
+async def _set_water_heater_temperature(
+    hass: HomeAssistant, entity_id: str, temperature: float,
+) -> dict[str, Any]:
+    """Set water heater target temperature."""
+    try:
+        await hass.services.async_call(
+            "water_heater", "set_temperature",
+            {"entity_id": entity_id, "temperature": temperature},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set water heater temp failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "temperature": temperature}
+
+
+async def _set_humidifier_mode(
+    hass: HomeAssistant, entity_id: str, mode: str,
+) -> dict[str, Any]:
+    """Set humidifier/dehumidifier mode."""
+    try:
+        await hass.services.async_call(
+            "humidifier", "set_mode",
+            {"entity_id": entity_id, "mode": mode},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set humidifier mode failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "mode": mode}
+
+
+async def _activate_siren(
+    hass: HomeAssistant, entity_id: str, turn_on: bool = True,
+    duration: int | None = None, tone: str | None = None,
+) -> dict[str, Any]:
+    """Activate or deactivate a siren."""
+    try:
+        if turn_on:
+            svc_data: dict[str, Any] = {"entity_id": entity_id}
+            if duration:
+                svc_data["duration"] = duration
+            if tone:
+                svc_data["tone"] = tone
+            await hass.services.async_call("siren", "turn_on", svc_data, blocking=True)
+        else:
+            await hass.services.async_call(
+                "siren", "turn_off", {"entity_id": entity_id}, blocking=True,
+            )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Siren {'on' if turn_on else 'off'} failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "on" if turn_on else "off"}
+
+
+async def _press_button(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Press a button entity."""
+    try:
+        await hass.services.async_call(
+            "button", "press", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Press button failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "pressed"}
+
+
+# ---------------------------------------------------------------------------
+# Data & scheduling — calendar, weather forecast, conversation, todo, utility
+# ---------------------------------------------------------------------------
+
+
+async def _list_calendar_events(
+    hass: HomeAssistant, entity_id: str,
+    start: str | None = None, end: str | None = None,
+) -> dict[str, Any]:
+    """List upcoming events from a calendar entity."""
+    try:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        s = start or now.isoformat()
+        e = end or (now + datetime.timedelta(days=7)).isoformat()
+        result = await hass.services.async_call(
+            "calendar", "get_events",
+            {"entity_id": entity_id, "start_date_time": s, "end_date_time": e},
+            blocking=True, return_response=True,
+        )
+        if result:
+            return {"ok": True, "entity_id": entity_id, "events": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"List calendar events failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "events": []}
+
+
+async def _create_calendar_event(
+    hass: HomeAssistant, entity_id: str,
+    summary: str, start: str, end: str,
+    description: str | None = None, location: str | None = None,
+) -> dict[str, Any]:
+    """Create a new event on a calendar entity."""
+    try:
+        svc_data: dict[str, Any] = {
+            "entity_id": entity_id,
+            "summary": summary,
+            "start_date_time": start,
+            "end_date_time": end,
+        }
+        if description:
+            svc_data["description"] = description
+        if location:
+            svc_data["location"] = location
+        await hass.services.async_call(
+            "calendar", "create_event", svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Create calendar event failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "summary": summary}
+
+
+async def _get_weather_forecast(
+    hass: HomeAssistant, entity_id: str, forecast_type: str = "daily",
+) -> dict[str, Any]:
+    """Get weather forecast (daily or hourly)."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Weather entity '{entity_id}' not found"}
+    attrs = state.attributes
+    result: dict[str, Any] = {
+        "ok": True,
+        "entity_id": entity_id,
+        "state": state.state,
+        "temperature": attrs.get("temperature"),
+        "humidity": attrs.get("humidity"),
+        "wind_speed": attrs.get("wind_speed"),
+        "wind_bearing": attrs.get("wind_bearing"),
+        "pressure": attrs.get("pressure"),
+    }
+    try:
+        svc = f"get_{forecast_type}_forecast"
+        resp = await hass.services.async_call(
+            "weather", svc,
+            {"entity_id": entity_id, "type": forecast_type},
+            blocking=True, return_response=True,
+        )
+        if resp:
+            result["forecast"] = resp
+    except Exception:  # noqa: BLE001
+        result["forecast"] = attrs.get("forecast", [])
+    return result
+
+
+async def _set_number_value(
+    hass: HomeAssistant, entity_id: str, value: float,
+) -> dict[str, Any]:
+    """Set a number entity value."""
+    try:
+        await hass.services.async_call(
+            "number", "set_value",
+            {"entity_id": entity_id, "value": value},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set number value failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": value}
+
+
+async def _set_select_option(
+    hass: HomeAssistant, entity_id: str, option: str,
+) -> dict[str, Any]:
+    """Set a select entity option."""
+    try:
+        await hass.services.async_call(
+            "select", "select_option",
+            {"entity_id": entity_id, "option": option},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set select option failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "option": option}
+
+
+async def _conversation_query(
+    hass: HomeAssistant, text: str, language: str | None = None,
+) -> dict[str, Any]:
+    """Send a query to the HA conversation agent."""
+    try:
+        svc_data: dict[str, Any] = {"text": text}
+        if language:
+            svc_data["language"] = language
+        result = await hass.services.async_call(
+            "conversation", "process", svc_data,
+            blocking=True, return_response=True,
+        )
+        if result:
+            return {"ok": True, "text": text, "response": result}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Conversation query failed: {exc}"}
+    return {"ok": True, "text": text, "response": None}
+
+
+async def _complete_todo_item(
+    hass: HomeAssistant, entity_id: str, item: str,
+    status: str = "completed",
+) -> dict[str, Any]:
+    """Update a to-do list item status."""
+    try:
+        await hass.services.async_call(
+            "todo", "update_item",
+            {"entity_id": entity_id, "item": item, "status": status},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Complete todo item failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "item": item, "status": status}
+
+
+async def _reset_utility_meter(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Reset a utility meter sensor."""
+    try:
+        await hass.services.async_call(
+            "utility_meter", "reset",
+            {"entity_id": entity_id},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Reset utility meter failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -6664,6 +7008,112 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _install_update(
                 hass, args.get("entity_id", ""), bool(args.get("backup", True)),
             )
+        if name == "lock_door":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _lock_door(hass, args.get("entity_id", ""))
+        if name == "unlock_door":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _unlock_door(
+                hass, args.get("entity_id", ""), args.get("code"),
+            )
+        if name == "arm_alarm":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _arm_alarm(
+                hass, args.get("entity_id", ""),
+                args.get("mode", "arm_away"), args.get("code"),
+            )
+        if name == "disarm_alarm":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _disarm_alarm(
+                hass, args.get("entity_id", ""), args.get("code"),
+            )
+        if name == "get_alarm_state":
+            return await _get_alarm_state(hass, args.get("entity_id", ""))
+        if name == "set_fan_speed":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_fan_speed(
+                hass, args.get("entity_id", ""), int(args.get("percentage", 50)),
+            )
+        if name == "set_fan_direction":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_fan_direction(
+                hass, args.get("entity_id", ""), args.get("direction", "forward"),
+            )
+        if name == "set_water_heater_temperature":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_water_heater_temperature(
+                hass, args.get("entity_id", ""), float(args.get("temperature", 50)),
+            )
+        if name == "set_humidifier_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_humidifier_mode(
+                hass, args.get("entity_id", ""), args.get("mode", ""),
+            )
+        if name == "activate_siren":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _activate_siren(
+                hass, args.get("entity_id", ""), bool(args.get("turn_on", True)),
+                args.get("duration"), args.get("tone"),
+            )
+        if name == "press_button":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _press_button(hass, args.get("entity_id", ""))
+        if name == "list_calendar_events":
+            return await _list_calendar_events(
+                hass, args.get("entity_id", ""),
+                args.get("start"), args.get("end"),
+            )
+        if name == "create_calendar_event":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _create_calendar_event(
+                hass, args.get("entity_id", ""),
+                args.get("summary", ""), args.get("start", ""),
+                args.get("end", ""), args.get("description"),
+                args.get("location"),
+            )
+        if name == "get_weather_forecast":
+            return await _get_weather_forecast(
+                hass, args.get("entity_id", ""),
+                args.get("forecast_type", "daily"),
+            )
+        if name == "set_number_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_number_value(
+                hass, args.get("entity_id", ""), float(args.get("value", 0)),
+            )
+        if name == "set_select_option":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_select_option(
+                hass, args.get("entity_id", ""), args.get("option", ""),
+            )
+        if name == "conversation_query":
+            return await _conversation_query(
+                hass, args.get("text", ""), args.get("language"),
+            )
+        if name == "complete_todo_item":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _complete_todo_item(
+                hass, args.get("entity_id", ""),
+                args.get("item", ""), args.get("status", "completed"),
+            )
+        if name == "reset_utility_meter":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _reset_utility_meter(hass, args.get("entity_id", ""))
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -8475,6 +8925,288 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "entity_id": {"type": "string"},
                     "backup": {"type": "boolean", "description": "Create backup before update (default true)"},
                 },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lock_door",
+            "description": "Lock a smart lock.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "unlock_door",
+            "description": "Unlock a smart lock (optional PIN code).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "code": {"type": "string", "description": "Optional PIN code"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "arm_alarm",
+            "description": "Arm an alarm control panel (arm_away, arm_home, arm_night, arm_vacation).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "mode": {"type": "string", "enum": ["arm_away", "arm_home", "arm_night", "arm_vacation", "arm_custom_bypass"]},
+                    "code": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "disarm_alarm",
+            "description": "Disarm an alarm control panel.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "code": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_alarm_state",
+            "description": "Get alarm control panel state, features, and code requirement.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_fan_speed",
+            "description": "Set fan speed percentage (0=off, 100=max).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "percentage": {"type": "integer", "minimum": 0, "maximum": 100},
+                },
+                "required": ["entity_id", "percentage"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_fan_direction",
+            "description": "Set fan rotation direction (forward or reverse).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "direction": {"type": "string", "enum": ["forward", "reverse"]},
+                },
+                "required": ["entity_id", "direction"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_water_heater_temperature",
+            "description": "Set water heater target temperature.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "temperature": {"type": "number"},
+                },
+                "required": ["entity_id", "temperature"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_humidifier_mode",
+            "description": "Set humidifier/dehumidifier operating mode.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "mode": {"type": "string"},
+                },
+                "required": ["entity_id", "mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "activate_siren",
+            "description": "Activate or deactivate a siren with optional duration and tone.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "turn_on": {"type": "boolean", "description": "true=activate, false=deactivate"},
+                    "duration": {"type": "integer", "description": "Duration in seconds"},
+                    "tone": {"type": "string"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "press_button",
+            "description": "Press a button entity (trigger a one-shot action).",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_calendar_events",
+            "description": "List upcoming events from a calendar entity (default: next 7 days).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "start": {"type": "string", "description": "ISO datetime start"},
+                    "end": {"type": "string", "description": "ISO datetime end"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_calendar_event",
+            "description": "Create a new event on a calendar entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "start": {"type": "string", "description": "ISO datetime start"},
+                    "end": {"type": "string", "description": "ISO datetime end"},
+                    "description": {"type": "string"},
+                    "location": {"type": "string"},
+                },
+                "required": ["entity_id", "summary", "start", "end"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather_forecast",
+            "description": "Get weather forecast (daily or hourly) for a weather entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "forecast_type": {"type": "string", "enum": ["daily", "hourly"]},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_number_value",
+            "description": "Set a number entity value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "number"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_select_option",
+            "description": "Set a select entity option.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "option": {"type": "string"},
+                },
+                "required": ["entity_id", "option"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "conversation_query",
+            "description": "Send a natural language query to the HA conversation agent.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "language": {"type": "string", "description": "Language code (e.g. zh-CN, en)"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_todo_item",
+            "description": "Mark a to-do list item as completed or update its status.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "item": {"type": "string"},
+                    "status": {"type": "string", "enum": ["completed", "needs_action"]},
+                },
+                "required": ["entity_id", "item"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reset_utility_meter",
+            "description": "Reset a utility meter sensor to zero.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
             },
         },
