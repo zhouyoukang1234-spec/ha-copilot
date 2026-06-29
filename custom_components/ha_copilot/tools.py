@@ -20164,6 +20164,81 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             )
         if name == "backup_info":
             return await _backup_info(hass)
+        # --- Wave 61 dispatch ---
+        if name == "automation_trace_contexts":
+            return await _automation_trace_contexts(
+                hass, args.get("entity_id", ""),
+            )
+        if name == "entity_state_diff":
+            return await _entity_state_diff(
+                hass, args.get("entity_id", ""),
+                args.get("hours", 24),
+            )
+        if name == "logbook_get_events":
+            return await _logbook_get_events(
+                hass, args.get("hours", 24),
+                args.get("entity_id"), args.get("domain"),
+                args.get("limit", 100),
+            )
+        if name == "config_check_advanced":
+            return await _config_check_advanced(hass)
+        if name == "integration_diagnostics":
+            return await _integration_diagnostics(
+                hass, args.get("domain", ""),
+            )
+        if name == "input_number_batch_set":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_number_batch_set(
+                hass, args.get("entity_values", {}),
+            )
+        if name == "input_select_batch_select":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_select_batch_select(
+                hass, args.get("entity_options", {}),
+            )
+        if name == "input_text_batch_set":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _input_text_batch_set(
+                hass, args.get("entity_values", {}),
+            )
+        if name == "light_group_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _light_group_control(
+                hass, args.get("entity_ids", []),
+                args.get("action", "turn_on"),
+                args.get("brightness"), args.get("color_temp"),
+                args.get("rgb_color"),
+            )
+        if name == "cover_group_control":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _cover_group_control(
+                hass, args.get("entity_ids", []),
+                args.get("action", "open_cover"),
+                args.get("position"),
+            )
+        if name == "notify_group":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _notify_group(
+                hass, args.get("targets", []),
+                args.get("message", ""),
+                args.get("title"), args.get("data"),
+            )
+        if name == "state_snapshot":
+            return await _state_snapshot(
+                hass, args.get("entity_ids", []),
+            )
+        if name == "state_restore":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _state_restore(
+                hass, args.get("snapshot", []),
+            )
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -20399,6 +20474,318 @@ async def _backup_info(hass: HomeAssistant) -> dict[str, Any]:
         return {"ok": True, "count": len(items), "backups": items}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Backup info failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Wave 61 — automation trace contexts, entity state diff, logbook events,
+# config check advanced, integration diagnostics, input batch ops, light/
+# cover group control, notify group, state snapshot/restore
+# ---------------------------------------------------------------------------
+
+
+async def _automation_trace_contexts(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get automation trace context IDs for recent runs."""
+    try:
+        from homeassistant.components.trace import async_list_contexts
+        contexts = await async_list_contexts(hass, {"automation": entity_id})
+        items = []
+        for ctx in contexts:
+            items.append({
+                "run_id": ctx.get("run_id"),
+                "domain": ctx.get("domain"),
+                "item_id": ctx.get("item_id"),
+                "context_id": ctx.get("context", {}).get("id"),
+            })
+        return {"ok": True, "entity_id": entity_id, "count": len(items),
+                "contexts": items[:100]}
+    except ImportError:
+        return {"error": "trace component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Trace contexts failed: {exc}"}
+
+
+async def _entity_state_diff(
+    hass: HomeAssistant, entity_id: str,
+    hours: int = 24,
+) -> dict[str, Any]:
+    """Compute state changes (diff) for an entity over a time period."""
+    try:
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        hist = await _recorder_get_instance(hass).async_add_executor_job(
+            _recorder_history.state_changes_during_period,
+            hass, start, end, entity_id,
+        )
+        states_list = hist.get(entity_id, [])
+        transitions = []
+        prev = None
+        for s in states_list:
+            if prev is not None and s.state != prev.state:
+                transitions.append({
+                    "from": prev.state,
+                    "to": s.state,
+                    "when": s.last_changed.isoformat(),
+                })
+            prev = s
+        return {"ok": True, "entity_id": entity_id, "hours": hours,
+                "transition_count": len(transitions),
+                "transitions": transitions[:200]}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"State diff failed: {exc}"}
+
+
+async def _logbook_get_events(
+    hass: HomeAssistant,
+    hours: int = 24,
+    entity_id: str | None = None,
+    domain: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Get logbook events with optional entity/domain filter."""
+    try:
+        from homeassistant.components.logbook import async_log_entries
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        entries = await async_log_entries(
+            hass, start, end, entity_ids=[entity_id] if entity_id else None,
+        )
+        items = []
+        for e in entries[:limit]:
+            entry = {
+                "when": getattr(e, "when", None),
+                "name": getattr(e, "name", None),
+                "message": getattr(e, "message", None),
+                "entity_id": getattr(e, "entity_id", None),
+                "domain": getattr(e, "domain", None),
+            }
+            if domain and entry.get("domain") != domain:
+                continue
+            items.append(entry)
+        return {"ok": True, "count": len(items), "events": items}
+    except ImportError:
+        return {"error": "logbook component not available"}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Logbook events failed: {exc}"}
+
+
+async def _config_check_advanced(hass: HomeAssistant) -> dict[str, Any]:
+    """Run advanced config validation and return detailed results."""
+    try:
+        result = await async_check_ha_config_file(hass)
+        errors = []
+        for err in (result.errors or []):
+            errors.append({
+                "message": str(err.message) if hasattr(err, "message") else str(err),
+                "domain": getattr(err, "domain", None),
+            })
+        warnings = []
+        for warn in (getattr(result, "warnings", None) or []):
+            warnings.append({
+                "message": str(warn.message) if hasattr(warn, "message") else str(warn),
+                "domain": getattr(warn, "domain", None),
+            })
+        return {
+            "ok": True,
+            "valid": len(errors) == 0,
+            "error_count": len(errors),
+            "warning_count": len(warnings),
+            "errors": errors,
+            "warnings": warnings,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Config check advanced failed: {exc}"}
+
+
+async def _integration_diagnostics(
+    hass: HomeAssistant, domain: str,
+) -> dict[str, Any]:
+    """Get diagnostics info for an integration domain."""
+    entries = hass.config_entries.async_entries(domain)
+    if not entries:
+        return {"error": f"No config entries for domain '{domain}'"}
+    results = []
+    for entry in entries:
+        info = {
+            "entry_id": entry.entry_id,
+            "title": entry.title,
+            "state": str(entry.state),
+            "version": getattr(entry, "version", None),
+            "source": getattr(entry, "source", None),
+            "unique_id": entry.unique_id,
+            "options_keys": list(entry.options.keys()),
+        }
+        results.append(info)
+    return {"ok": True, "domain": domain, "count": len(results),
+            "entries": results}
+
+
+async def _input_number_batch_set(
+    hass: HomeAssistant, entity_values: dict[str, float],
+) -> dict[str, Any]:
+    """Set multiple input_number entities at once."""
+    results = []
+    for eid, val in entity_values.items():
+        try:
+            await hass.services.async_call(
+                "input_number", "set_value",
+                {"entity_id": eid, "value": val},
+            )
+            results.append({"entity_id": eid, "value": val, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _input_select_batch_select(
+    hass: HomeAssistant, entity_options: dict[str, str],
+) -> dict[str, Any]:
+    """Select options for multiple input_select entities at once."""
+    results = []
+    for eid, option in entity_options.items():
+        try:
+            await hass.services.async_call(
+                "input_select", "select_option",
+                {"entity_id": eid, "option": option},
+            )
+            results.append({"entity_id": eid, "option": option, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _input_text_batch_set(
+    hass: HomeAssistant, entity_values: dict[str, str],
+) -> dict[str, Any]:
+    """Set values for multiple input_text entities at once."""
+    results = []
+    for eid, val in entity_values.items():
+        try:
+            await hass.services.async_call(
+                "input_text", "set_value",
+                {"entity_id": eid, "value": val},
+            )
+            results.append({"entity_id": eid, "value": val, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _light_group_control(
+    hass: HomeAssistant,
+    entity_ids: list[str],
+    action: str = "turn_on",
+    brightness: int | None = None,
+    color_temp: int | None = None,
+    rgb_color: list[int] | None = None,
+) -> dict[str, Any]:
+    """Control multiple lights as a group (turn_on/turn_off/toggle with shared params)."""
+    if action not in ("turn_on", "turn_off", "toggle"):
+        return {"error": f"Invalid action '{action}'. Use turn_on/turn_off/toggle"}
+    data: dict[str, Any] = {"entity_id": entity_ids}
+    if action == "turn_on":
+        if brightness is not None:
+            data["brightness"] = brightness
+        if color_temp is not None:
+            data["color_temp"] = color_temp
+        if rgb_color is not None:
+            data["rgb_color"] = rgb_color
+    try:
+        await hass.services.async_call("light", action, data)
+        return {"ok": True, "action": action, "count": len(entity_ids),
+                "entity_ids": entity_ids}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Light group control failed: {exc}"}
+
+
+async def _cover_group_control(
+    hass: HomeAssistant,
+    entity_ids: list[str],
+    action: str = "open_cover",
+    position: int | None = None,
+) -> dict[str, Any]:
+    """Control multiple covers as a group."""
+    valid = ("open_cover", "close_cover", "stop_cover", "toggle",
+             "set_cover_position")
+    if action not in valid:
+        return {"error": f"Invalid action '{action}'. Use: {', '.join(valid)}"}
+    data: dict[str, Any] = {"entity_id": entity_ids}
+    if action == "set_cover_position" and position is not None:
+        data["position"] = position
+    try:
+        await hass.services.async_call("cover", action, data)
+        return {"ok": True, "action": action, "count": len(entity_ids),
+                "entity_ids": entity_ids}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Cover group control failed: {exc}"}
+
+
+async def _notify_group(
+    hass: HomeAssistant,
+    targets: list[str],
+    message: str,
+    title: str | None = None,
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Send notification to multiple targets at once."""
+    results = []
+    for target in targets:
+        svc_data: dict[str, Any] = {"message": message}
+        if title:
+            svc_data["title"] = title
+        if data:
+            svc_data["data"] = data
+        try:
+            await hass.services.async_call(
+                "notify", target, svc_data,
+            )
+            results.append({"target": target, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            results.append({"target": target, "error": str(exc)})
+    return {"ok": True, "count": len(results), "results": results}
+
+
+async def _state_snapshot(
+    hass: HomeAssistant,
+    entity_ids: list[str],
+) -> dict[str, Any]:
+    """Capture current state of multiple entities as a snapshot."""
+    snapshot = []
+    for eid in entity_ids:
+        state = hass.states.get(eid)
+        if state:
+            snapshot.append({
+                "entity_id": eid,
+                "state": state.state,
+                "attributes": dict(state.attributes),
+                "last_changed": state.last_changed.isoformat(),
+            })
+        else:
+            snapshot.append({"entity_id": eid, "state": None})
+    return {"ok": True, "count": len(snapshot), "snapshot": snapshot}
+
+
+async def _state_restore(
+    hass: HomeAssistant,
+    snapshot: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Restore entity states from a previously captured snapshot."""
+    restored = 0
+    errors = []
+    for entry in snapshot:
+        eid = entry.get("entity_id", "")
+        state = entry.get("state")
+        attrs = entry.get("attributes", {})
+        if not eid or state is None:
+            continue
+        try:
+            hass.states.async_set(eid, state, attrs)
+            restored += 1
+        except Exception as exc:  # noqa: BLE001
+            errors.append({"entity_id": eid, "error": str(exc)})
+    return {"ok": True, "restored": restored, "error_count": len(errors),
+            "errors": errors}
 
 
 # --- Tool safety classification (single source) ------------------------------
@@ -31068,6 +31455,148 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "name": "backup_info",
             "description": "Get info about existing backups from the backup manager.",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    # --- Wave 61 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "automation_trace_contexts",
+            "description": "Get automation trace context IDs for recent runs of an automation.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Automation entity ID"},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "entity_state_diff",
+            "description": "Compute state transitions (from/to/when) for an entity over a time period using recorder history.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "Entity ID"},
+                "hours": {"type": "integer", "description": "Hours to look back (default 24)", "default": 24},
+            }, "required": ["entity_id"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "logbook_get_events",
+            "description": "Get logbook events with optional entity/domain filter.",
+            "parameters": {"type": "object", "properties": {
+                "hours": {"type": "integer", "description": "Hours to look back (default 24)", "default": 24},
+                "entity_id": {"type": "string", "description": "Filter by entity ID"},
+                "domain": {"type": "string", "description": "Filter by domain"},
+                "limit": {"type": "integer", "description": "Max events (default 100)", "default": 100},
+            }},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "config_check_advanced",
+            "description": "Run advanced config validation returning detailed errors and warnings with domain info.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "integration_diagnostics",
+            "description": "Get diagnostics info for all config entries of an integration domain (state, version, source, options).",
+            "parameters": {"type": "object", "properties": {
+                "domain": {"type": "string", "description": "Integration domain (e.g. hue, mqtt)"},
+            }, "required": ["domain"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_number_batch_set",
+            "description": "Set multiple input_number entities at once. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_values": {"type": "object", "description": "Map of entity_id -> numeric value"},
+            }, "required": ["entity_values"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_select_batch_select",
+            "description": "Select options for multiple input_select entities at once. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_options": {"type": "object", "description": "Map of entity_id -> option string"},
+            }, "required": ["entity_options"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "input_text_batch_set",
+            "description": "Set values for multiple input_text entities at once. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_values": {"type": "object", "description": "Map of entity_id -> text value"},
+            }, "required": ["entity_values"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "light_group_control",
+            "description": "Control multiple lights as a group: turn_on/turn_off/toggle with shared brightness/color_temp/rgb_color. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Light entity IDs"},
+                "action": {"type": "string", "enum": ["turn_on", "turn_off", "toggle"], "default": "turn_on"},
+                "brightness": {"type": "integer", "description": "Brightness 0-255"},
+                "color_temp": {"type": "integer", "description": "Color temperature in mireds"},
+                "rgb_color": {"type": "array", "items": {"type": "integer"}, "description": "[r, g, b] 0-255"},
+            }, "required": ["entity_ids"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cover_group_control",
+            "description": "Control multiple covers as a group: open/close/stop/toggle/set_position. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Cover entity IDs"},
+                "action": {"type": "string", "enum": ["open_cover", "close_cover", "stop_cover", "toggle", "set_cover_position"], "default": "open_cover"},
+                "position": {"type": "integer", "description": "Cover position 0-100 (for set_cover_position)"},
+            }, "required": ["entity_ids"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "notify_group",
+            "description": "Send notification to multiple notify targets at once. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "targets": {"type": "array", "items": {"type": "string"}, "description": "Notify service targets"},
+                "message": {"type": "string", "description": "Notification message"},
+                "title": {"type": "string", "description": "Optional title"},
+                "data": {"type": "object", "description": "Optional extra data"},
+            }, "required": ["targets", "message"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "state_snapshot",
+            "description": "Capture current state of multiple entities as a snapshot (for later restore).",
+            "parameters": {"type": "object", "properties": {
+                "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Entity IDs to snapshot"},
+            }, "required": ["entity_ids"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "state_restore",
+            "description": "Restore entity states from a previously captured snapshot. Write op — gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "snapshot": {"type": "array", "items": {"type": "object"}, "description": "Array of {entity_id, state, attributes} from state_snapshot"},
+            }, "required": ["snapshot"]},
         },
     },
 ]
