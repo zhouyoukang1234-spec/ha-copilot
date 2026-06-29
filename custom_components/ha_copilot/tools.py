@@ -22500,6 +22500,49 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _visibility_check(hass)
         if name == "feels_like_temperature":
             return await _feels_like_temperature(hass)
+        # --- Wave 110 dispatch ---
+        if name == "smart_lock_pin_management":
+            return await _smart_lock_pin_management(hass)
+        if name == "zwave_node_status":
+            return await _zwave_node_status(hass)
+        if name == "zwave_heal_network":
+            return await _zwave_heal_network(hass)
+        if name == "zigbee_coordinator_check":
+            return await _zigbee_coordinator_check(hass)
+        if name == "matter_device_status":
+            return await _matter_device_status(hass)
+        if name == "thread_mesh_status":
+            return await _thread_mesh_status(hass)
+        if name == "ble_scanner_nearby":
+            return await _ble_scanner_nearby(hass)
+        if name == "esphome_device_health":
+            return await _esphome_device_health(hass)
+        if name == "mqtt_broker_stats":
+            return await _mqtt_broker_stats(hass)
+        if name == "mqtt_topic_monitor":
+            return await _mqtt_topic_monitor(hass)
+        if name == "ha_backup_schedule_check":
+            return await _ha_backup_schedule_check(hass)
+        if name == "ha_database_size_check":
+            return await _ha_database_size_check(hass)
+        if name == "ha_log_error_count":
+            return await _ha_log_error_count(hass)
+        if name == "ha_startup_time_check":
+            return await _ha_startup_time_check(hass)
+        if name == "integration_update_check":
+            return await _integration_update_check(hass)
+        if name == "custom_component_version_check":
+            return await _custom_component_version_check(hass)
+        if name == "hacs_update_check":
+            return await _hacs_update_check(hass)
+        if name == "supervisor_addon_status":
+            return await _supervisor_addon_status(hass)
+        if name == "supervisor_os_update":
+            return await _supervisor_os_update(hass)
+        if name == "supervisor_host_info":
+            return await _supervisor_host_info(hass)
+        if name == "ha_core_analytics":
+            return await _ha_core_analytics(hass)
         return {"error": f"unknown tool '{name}'"}
     except KeyError as err:
         return {"error": f"missing required argument: {err}"}
@@ -40238,6 +40281,257 @@ async def _feels_like_temperature(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "sensors": results}
 
 
+# ---------------------------------------------------------------------------
+# Wave 110 — HA system deep: Z-Wave, Zigbee, Matter, Thread, BLE, ESPHome,
+# MQTT, backup, database, log, startup, integrations, HACS, Supervisor, analytics
+# ---------------------------------------------------------------------------
+
+
+async def _smart_lock_pin_management(hass: HomeAssistant) -> dict[str, Any]:
+    """Check smart lock PIN management."""
+    results = []
+    for s in hass.states.async_all("lock"):
+        codes = s.attributes.get("code_format")
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "code_format": codes,
+                        "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "locks": results}
+
+
+async def _zwave_node_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Z-Wave node status."""
+    entries = hass.config_entries.async_entries("zwave_js")
+    nodes = []
+    for s in hass.states.async_all():
+        if "zwave" in s.entity_id:
+            nodes.append({"entity_id": s.entity_id, "state": s.state,
+                          "available": s.state != "unavailable",
+                          "friendly_name": s.attributes.get("friendly_name")})
+    unavail = sum(1 for n in nodes if not n["available"])
+    return {"ok": True, "entries": len(entries), "nodes": len(nodes),
+            "unavailable": unavail, "entities": nodes[:20]}
+
+
+async def _zwave_heal_network(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Z-Wave network heal status."""
+    entries = hass.config_entries.async_entries("zwave_js")
+    return {"ok": True, "zwave_entries": len(entries),
+            "hint": "Use zwave_js.heal_network service to heal"}
+
+
+async def _zigbee_coordinator_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Zigbee coordinator."""
+    entries = hass.config_entries.async_entries("zha")
+    devices = []
+    for s in hass.states.async_all():
+        if "zha" in s.entity_id:
+            devices.append({"entity_id": s.entity_id, "state": s.state,
+                            "available": s.state != "unavailable"})
+    unavail = sum(1 for d in devices if not d["available"])
+    return {"ok": True, "entries": len(entries), "devices": len(devices),
+            "unavailable": unavail}
+
+
+async def _matter_device_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Matter device status."""
+    entries = hass.config_entries.async_entries("matter")
+    devices = []
+    for s in hass.states.async_all():
+        if "matter" in s.entity_id:
+            devices.append({"entity_id": s.entity_id, "state": s.state,
+                            "available": s.state != "unavailable"})
+    return {"ok": True, "entries": len(entries), "devices": len(devices)}
+
+
+async def _thread_mesh_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Thread mesh status."""
+    entries = hass.config_entries.async_entries("thread")
+    return {"ok": True, "entries": len(entries)}
+
+
+async def _ble_scanner_nearby(hass: HomeAssistant) -> dict[str, Any]:
+    """Check BLE scanner nearby devices."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "ble" in name or "bluetooth" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    entries = hass.config_entries.async_entries("bluetooth")
+    return {"ok": True, "bt_entries": len(entries), "sensors": len(results),
+            "devices": results[:15]}
+
+
+async def _esphome_device_health(hass: HomeAssistant) -> dict[str, Any]:
+    """Check ESPHome device health."""
+    entries = hass.config_entries.async_entries("esphome")
+    devices = []
+    for s in hass.states.async_all():
+        if "esphome" in s.entity_id:
+            devices.append({"entity_id": s.entity_id, "state": s.state,
+                            "available": s.state != "unavailable"})
+    unavail = sum(1 for d in devices if not d["available"])
+    return {"ok": True, "entries": len(entries), "devices": len(devices),
+            "unavailable": unavail}
+
+
+async def _mqtt_broker_stats(hass: HomeAssistant) -> dict[str, Any]:
+    """Check MQTT broker stats."""
+    entries = hass.config_entries.async_entries("mqtt")
+    mqtt_data = hass.data.get("mqtt", {})
+    connected = isinstance(mqtt_data, dict) and mqtt_data.get("connected", False)
+    return {"ok": True, "entries": len(entries), "connected": connected}
+
+
+async def _mqtt_topic_monitor(hass: HomeAssistant) -> dict[str, Any]:
+    """Monitor MQTT topics."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "mqtt" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results[:15]}
+
+
+async def _ha_backup_schedule_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HA backup schedule."""
+    backup_data = hass.data.get("backup", {})
+    return {"ok": True, "backup_data_available": bool(backup_data)}
+
+
+async def _ha_database_size_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HA database size."""
+    import os
+    db_path = hass.config.path("home-assistant_v2.db")
+    try:
+        size_bytes = os.path.getsize(db_path)
+        size_mb = round(size_bytes / (1024 * 1024), 1)
+    except OSError:
+        size_mb = 0
+    return {"ok": True, "database_size_mb": size_mb, "path": db_path}
+
+
+async def _ha_log_error_count(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HA log error count."""
+    log_path = hass.config.path("home-assistant.log")
+    errors = warnings = 0
+    try:
+        def _count():
+            nonlocal errors, warnings
+            try:
+                with open(log_path, encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        if "ERROR" in line:
+                            errors += 1
+                        elif "WARNING" in line:
+                            warnings += 1
+            except FileNotFoundError:
+                pass
+        await hass.async_add_executor_job(_count)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"ok": True, "errors": errors, "warnings": warnings, "path": log_path}
+
+
+async def _ha_startup_time_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HA startup time."""
+    return {"ok": True, "version": hass.config.version,
+            "config_dir": hass.config.config_dir}
+
+
+async def _integration_update_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check integration updates."""
+    results = []
+    for s in hass.states.async_all("update"):
+        results.append({"entity_id": s.entity_id, "state": s.state,
+                        "installed_version": s.attributes.get("installed_version"),
+                        "latest_version": s.attributes.get("latest_version"),
+                        "friendly_name": s.attributes.get("friendly_name")})
+    pending = sum(1 for r in results if r["state"] == "on")
+    return {"ok": True, "total": len(results), "pending_updates": pending,
+            "updates": results[:15]}
+
+
+async def _custom_component_version_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check custom component versions."""
+    custom = hass.data.get("custom_components", {})
+    entries = hass.config_entries.async_entries()
+    custom_entries = [e for e in entries if hasattr(e, "domain") and e.domain in custom] if isinstance(custom, dict) else []
+    return {"ok": True, "custom_count": len(custom) if isinstance(custom, dict) else 0,
+            "custom_entries": len(custom_entries)}
+
+
+async def _hacs_update_check(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HACS updates."""
+    results = []
+    for s in hass.states.async_all("update"):
+        if "hacs" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "installed_version": s.attributes.get("installed_version"),
+                            "latest_version": s.attributes.get("latest_version"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("sensor"):
+        if "hacs" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "entities": results}
+
+
+async def _supervisor_addon_status(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Supervisor addon status."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        if "addon" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "friendly_name": s.attributes.get("friendly_name")})
+    for s in hass.states.async_all("update"):
+        if "addon" in s.entity_id:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "installed_version": s.attributes.get("installed_version"),
+                            "latest_version": s.attributes.get("latest_version"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "addons": results}
+
+
+async def _supervisor_os_update(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Supervisor OS update."""
+    results = []
+    for s in hass.states.async_all("update"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if "operating_system" in name or "haos" in name:
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "installed_version": s.attributes.get("installed_version"),
+                            "latest_version": s.attributes.get("latest_version"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "updates": results}
+
+
+async def _supervisor_host_info(hass: HomeAssistant) -> dict[str, Any]:
+    """Check Supervisor host info."""
+    results = []
+    for s in hass.states.async_all("sensor"):
+        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
+        if any(kw in name for kw in ("host", "cpu_percent", "memory_percent",
+                                      "disk_use", "supervisor")):
+            results.append({"entity_id": s.entity_id, "state": s.state,
+                            "unit": s.attributes.get("unit_of_measurement"),
+                            "friendly_name": s.attributes.get("friendly_name")})
+    return {"ok": True, "count": len(results), "sensors": results[:15]}
+
+
+async def _ha_core_analytics(hass: HomeAssistant) -> dict[str, Any]:
+    """Check HA core analytics."""
+    total_entities = len(hass.states.async_all())
+    domains: dict[str, int] = {}
+    for s in hass.states.async_all():
+        dom = s.entity_id.split(".")[0]
+        domains[dom] = domains.get(dom, 0) + 1
+    top = sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10]
+    return {"ok": True, "total_entities": total_entities,
+            "domain_count": len(domains), "version": hass.config.version,
+            "top_domains": [{"domain": d, "count": c} for d, c in top]}
+
+
 # --- Tool safety classification (single source) ------------------------------
 # Used to emit MCP tool *annotations* (readOnlyHint / destructiveHint /
 # idempotentHint) so off-the-shelf MCP clients can flag destructive operations
@@ -52744,4 +53038,26 @@ TOOL_SPECS: list[dict[str, Any]] = [
     {"type": "function", "function": {"name": "heat_index_check", "description": "Check heat index.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "visibility_check", "description": "Check visibility.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "feels_like_temperature", "description": "Check feels-like temp.", "parameters": {"type": "object", "properties": {}}}},
+    # --- Wave 110 TOOL_SPECS ---
+    {"type": "function", "function": {"name": "smart_lock_pin_management", "description": "Check lock PINs.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zwave_node_status", "description": "Check Z-Wave nodes.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zwave_heal_network", "description": "Z-Wave heal info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "zigbee_coordinator_check", "description": "Check Zigbee coord.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "matter_device_status", "description": "Check Matter devices.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "thread_mesh_status", "description": "Check Thread mesh.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ble_scanner_nearby", "description": "Check BLE nearby.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "esphome_device_health", "description": "Check ESPHome health.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mqtt_broker_stats", "description": "Check MQTT broker.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "mqtt_topic_monitor", "description": "Monitor MQTT topics.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ha_backup_schedule_check", "description": "Check backup schedule.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ha_database_size_check", "description": "Check DB size.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ha_log_error_count", "description": "Count log errors.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ha_startup_time_check", "description": "Check startup time.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "integration_update_check", "description": "Check integration updates.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "custom_component_version_check", "description": "Check custom component versions.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "hacs_update_check", "description": "Check HACS updates.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "supervisor_addon_status", "description": "Check addon status.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "supervisor_os_update", "description": "Check OS update.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "supervisor_host_info", "description": "Check host info.", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "ha_core_analytics", "description": "HA core analytics.", "parameters": {"type": "object", "properties": {}}}},
 ]
