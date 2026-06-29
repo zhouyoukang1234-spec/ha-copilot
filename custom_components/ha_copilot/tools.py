@@ -6805,6 +6805,183 @@ async def _execute_device_action(
 
 
 # ---------------------------------------------------------------------------
+# Wave 11: group, persistent notification, timer remaining, sun, input
+#           datetime, climate swing/fan modes, media TTS, device tracker see
+# ---------------------------------------------------------------------------
+
+
+async def _set_group_members(
+    hass: HomeAssistant, entity_id: str, members: list[str],
+) -> dict[str, Any]:
+    """Set the members of a group entity."""
+    try:
+        await hass.services.async_call(
+            "group", "set",
+            {"object_id": entity_id.replace("group.", ""), "entities": members},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set group members failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "members": members}
+
+
+async def _dismiss_persistent_notification(
+    hass: HomeAssistant, notification_id: str,
+) -> dict[str, Any]:
+    """Dismiss a persistent notification by ID."""
+    try:
+        await hass.services.async_call(
+            "persistent_notification", "dismiss",
+            {"notification_id": notification_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dismiss persistent notification failed: {exc}"}
+    return {"ok": True, "notification_id": notification_id, "action": "dismissed"}
+
+
+async def _get_timer_remaining(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """Get the remaining time on a timer entity."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Entity '{entity_id}' not found"}
+    attrs = state.attributes
+    return {
+        "ok": True, "entity_id": entity_id, "state": state.state,
+        "duration": attrs.get("duration"), "remaining": attrs.get("remaining"),
+        "finishes_at": attrs.get("finishes_at"),
+    }
+
+
+async def _get_sun_position(hass: HomeAssistant) -> dict[str, Any]:
+    """Get current sun position (elevation, azimuth, next rising/setting)."""
+    state = hass.states.get("sun.sun")
+    if not state:
+        return {"ok": True, "note": "Sun entity not available", "state": None}
+    attrs = state.attributes
+    return {
+        "ok": True, "state": state.state,
+        "elevation": attrs.get("elevation"),
+        "azimuth": attrs.get("azimuth"),
+        "next_rising": str(attrs.get("next_rising", "")),
+        "next_setting": str(attrs.get("next_setting", "")),
+        "next_dawn": str(attrs.get("next_dawn", "")),
+        "next_dusk": str(attrs.get("next_dusk", "")),
+        "next_noon": str(attrs.get("next_noon", "")),
+        "next_midnight": str(attrs.get("next_midnight", "")),
+    }
+
+
+async def _set_input_datetime(
+    hass: HomeAssistant, entity_id: str,
+    date: str | None = None, time: str | None = None,
+    datetime_val: str | None = None,
+) -> dict[str, Any]:
+    """Set an input_datetime entity value."""
+    data: dict[str, Any] = {"entity_id": entity_id}
+    if datetime_val:
+        data["datetime"] = datetime_val
+    else:
+        if date:
+            data["date"] = date
+        if time:
+            data["time"] = time
+    try:
+        await hass.services.async_call(
+            "input_datetime", "set_datetime", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set input_datetime failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id}
+
+
+async def _climate_set_swing_mode(
+    hass: HomeAssistant, entity_id: str, swing_mode: str,
+) -> dict[str, Any]:
+    """Set climate swing mode (on/off/vertical/horizontal/both)."""
+    try:
+        await hass.services.async_call(
+            "climate", "set_swing_mode",
+            {"entity_id": entity_id, "swing_mode": swing_mode}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate set swing mode failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "swing_mode": swing_mode}
+
+
+async def _climate_set_fan_mode(
+    hass: HomeAssistant, entity_id: str, fan_mode: str,
+) -> dict[str, Any]:
+    """Set climate fan mode (auto/low/medium/high/off/on/diffuse)."""
+    try:
+        await hass.services.async_call(
+            "climate", "set_fan_mode",
+            {"entity_id": entity_id, "fan_mode": fan_mode}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate set fan mode failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "fan_mode": fan_mode}
+
+
+async def _media_player_tts(
+    hass: HomeAssistant, entity_id: str, message: str,
+    engine: str | None = None, language: str | None = None,
+    cache: bool = True,
+) -> dict[str, Any]:
+    """Play a text-to-speech message on a media player."""
+    data: dict[str, Any] = {"entity_id": entity_id, "message": message}
+    if engine:
+        data["engine_id"] = engine
+    if language:
+        data["language"] = language
+    data["cache"] = cache
+    try:
+        await hass.services.async_call("tts", "speak", data, blocking=True)
+    except Exception:  # noqa: BLE001
+        try:
+            await hass.services.async_call(
+                "tts", "google_translate_say", data, blocking=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return {"error": f"TTS playback failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "message": message}
+
+
+async def _device_tracker_see(
+    hass: HomeAssistant, dev_id: str | None = None,
+    mac: str | None = None, location_name: str | None = None,
+    gps: list[float] | None = None, gps_accuracy: int | None = None,
+    battery: int | None = None, host_name: str | None = None,
+) -> dict[str, Any]:
+    """Manually update device_tracker location (legacy see service)."""
+    data: dict[str, Any] = {}
+    if dev_id:
+        data["dev_id"] = dev_id
+    if mac:
+        data["mac"] = mac
+    if location_name:
+        data["location_name"] = location_name
+    if gps:
+        data["gps"] = gps
+    if gps_accuracy is not None:
+        data["gps_accuracy"] = gps_accuracy
+    if battery is not None:
+        data["battery"] = battery
+    if host_name:
+        data["host_name"] = host_name
+    if not data:
+        return {"error": "At least one of dev_id/mac is required"}
+    try:
+        await hass.services.async_call(
+            "device_tracker", "see", data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Device tracker see failed: {exc}"}
+    return {"ok": True, "data": data}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -8668,6 +8845,59 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _execute_device_action(hass, args.get("action", {}))
+        # --- Wave 11 dispatch ---
+        if name == "set_group_members":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_group_members(
+                hass, args.get("entity_id", ""), args.get("members", []),
+            )
+        if name == "dismiss_persistent_notification":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _dismiss_persistent_notification(
+                hass, args.get("notification_id", ""),
+            )
+        if name == "get_timer_remaining":
+            return await _get_timer_remaining(hass, args.get("entity_id", ""))
+        if name == "get_sun_position":
+            return await _get_sun_position(hass)
+        if name == "set_input_datetime":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_input_datetime(
+                hass, args.get("entity_id", ""),
+                args.get("date"), args.get("time"), args.get("datetime"),
+            )
+        if name == "climate_set_swing_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_set_swing_mode(
+                hass, args.get("entity_id", ""), args.get("swing_mode", ""),
+            )
+        if name == "climate_set_fan_mode":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_set_fan_mode(
+                hass, args.get("entity_id", ""), args.get("fan_mode", ""),
+            )
+        if name == "media_player_tts":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _media_player_tts(
+                hass, args.get("entity_id", ""), args.get("message", ""),
+                args.get("engine"), args.get("language"),
+                bool(args.get("cache", True)),
+            )
+        if name == "device_tracker_see":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _device_tracker_see(
+                hass, args.get("dev_id"), args.get("mac"),
+                args.get("location_name"), args.get("gps"),
+                args.get("gps_accuracy"), args.get("battery"),
+                args.get("host_name"),
+            )
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -11521,7 +11751,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
             },
         },
     },
-    # --- Wave 9 TOOL_SPECS ---
+    # --- Wave 9 TOOL_SPECS --- (below)
     {
         "type": "function",
         "function": {
@@ -11702,6 +11932,138 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "action": {"type": "object", "description": "Action config dict from list_device_actions"},
                 },
                 "required": ["action"],
+            },
+        },
+    },
+    # --- Wave 11 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "set_group_members",
+            "description": "Set the members of a group entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "members": {"type": "array", "items": {"type": "string"}, "description": "List of entity_ids"},
+                },
+                "required": ["entity_id", "members"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dismiss_persistent_notification",
+            "description": "Dismiss a persistent notification by ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {"notification_id": {"type": "string"}},
+                "required": ["notification_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_timer_remaining",
+            "description": "Get the remaining time on a timer entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_sun_position",
+            "description": "Get current sun position (elevation, azimuth, next rising/setting/dawn/dusk).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_input_datetime",
+            "description": "Set an input_datetime entity value (date, time, or datetime).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "date": {"type": "string", "description": "Date (YYYY-MM-DD)"},
+                    "time": {"type": "string", "description": "Time (HH:MM:SS)"},
+                    "datetime": {"type": "string", "description": "Full datetime (YYYY-MM-DD HH:MM:SS)"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_set_swing_mode",
+            "description": "Set climate swing mode (on/off/vertical/horizontal/both).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "swing_mode": {"type": "string", "description": "on|off|vertical|horizontal|both"},
+                },
+                "required": ["entity_id", "swing_mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_set_fan_mode",
+            "description": "Set climate fan mode (auto/low/medium/high/off/on/diffuse).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "fan_mode": {"type": "string", "description": "auto|low|medium|high|off|on|diffuse"},
+                },
+                "required": ["entity_id", "fan_mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "media_player_tts",
+            "description": "Play a text-to-speech message on a media player.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "message": {"type": "string"},
+                    "engine": {"type": "string", "description": "TTS engine ID"},
+                    "language": {"type": "string"},
+                    "cache": {"type": "boolean", "description": "Cache audio (default true)"},
+                },
+                "required": ["entity_id", "message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "device_tracker_see",
+            "description": "Manually update device_tracker location (legacy see service).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dev_id": {"type": "string", "description": "Device ID"},
+                    "mac": {"type": "string", "description": "MAC address"},
+                    "location_name": {"type": "string", "description": "Location name (home/not_home/zone)"},
+                    "gps": {"type": "array", "items": {"type": "number"}, "description": "[lat, lon]"},
+                    "gps_accuracy": {"type": "integer"},
+                    "battery": {"type": "integer"},
+                    "host_name": {"type": "string"},
+                },
             },
         },
     },
