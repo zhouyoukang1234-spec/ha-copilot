@@ -48,6 +48,7 @@ from .http_api import (
     CopilotToolsView,
 )
 from .llm_api import async_register_llm_api
+from .services import async_register_services
 from .tools import dispatch as dispatch_tool
 
 _LOGGER = logging.getLogger(__name__)
@@ -123,6 +124,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         ),
         supports_response="only",
     )
+
+    # Individual named services for each resource-discovery tool.
+    await async_register_services(hass)
 
     _LOGGER.info(
         "HA-Copilot ready - capability layer (write=%s restart=%s); "
