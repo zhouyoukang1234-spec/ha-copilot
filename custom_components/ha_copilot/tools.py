@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -4663,6 +4664,268 @@ async def _snapshot_scene(
 
 
 # ---------------------------------------------------------------------------
+# Protocol & system deep integration — MQTT, Zigbee, Z-Wave, network, notify
+# ---------------------------------------------------------------------------
+
+
+async def _publish_mqtt(
+    hass: HomeAssistant, topic: str, payload: str,
+    qos: int = 0, retain: bool = False,
+) -> dict[str, Any]:
+    """Publish a message to an MQTT topic."""
+    try:
+        await hass.services.async_call(
+            "mqtt", "publish",
+            {"topic": topic, "payload": payload, "qos": qos, "retain": retain},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"MQTT publish failed: {exc}"}
+    return {"ok": True, "topic": topic, "payload_len": len(payload),
+            "qos": qos, "retain": retain}
+
+
+async def _subscribe_mqtt(
+    hass: HomeAssistant, topic: str, timeout: float = 5.0,
+) -> dict[str, Any]:
+    """Subscribe to an MQTT topic and return messages received within timeout."""
+    messages: list[dict[str, Any]] = []
+
+    try:
+        from homeassistant.components.mqtt import async_subscribe
+
+        def _callback(msg: Any) -> None:
+            messages.append({
+                "topic": msg.topic,
+                "payload": msg.payload,
+                "qos": msg.qos,
+                "retain": msg.retain,
+            })
+
+        unsub = await async_subscribe(hass, topic, _callback, qos=0)
+        await asyncio.sleep(min(timeout, 10.0))
+        unsub()
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"MQTT subscribe failed: {exc}"}
+
+    return {"ok": True, "topic": topic, "count": len(messages), "messages": messages[:50]}
+
+
+async def _list_mqtt_devices(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """List devices discovered via MQTT integration."""
+    from homeassistant.helpers import device_registry as dr
+
+    reg = dr.async_get(hass)
+    mqtt_devices = []
+    for device in reg.devices.values():
+        for ident in (device.identifiers or set()):
+            if isinstance(ident, tuple) and len(ident) >= 2 and ident[0] == "mqtt":
+                mqtt_devices.append({
+                    "device_id": device.id,
+                    "name": device.name,
+                    "model": device.model,
+                    "manufacturer": device.manufacturer,
+                    "sw_version": device.sw_version,
+                    "identifier": ident[1] if len(ident) > 1 else str(ident),
+                })
+                break
+
+    return {"ok": True, "count": len(mqtt_devices), "devices": mqtt_devices}
+
+
+async def _permit_zigbee_join(
+    hass: HomeAssistant, duration: int = 60,
+) -> dict[str, Any]:
+    """Enable Zigbee pairing mode (works with ZHA or Zigbee2MQTT)."""
+    try:
+        await hass.services.async_call(
+            "zha", "permit",
+            {"duration": duration},
+            blocking=True,
+        )
+        return {"ok": True, "method": "zha", "duration": duration}
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        await hass.services.async_call(
+            "mqtt", "publish",
+            {"topic": "zigbee2mqtt/bridge/request/permit_join",
+             "payload": json.dumps({"value": True, "time": duration})},
+            blocking=True,
+        )
+        return {"ok": True, "method": "zigbee2mqtt", "duration": duration}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Zigbee permit join failed (tried ZHA + Z2M): {exc}"}
+
+
+async def _rename_zigbee_device(
+    hass: HomeAssistant, old_name: str, new_name: str,
+) -> dict[str, Any]:
+    """Rename a Zigbee device via Zigbee2MQTT bridge API."""
+    try:
+        await hass.services.async_call(
+            "mqtt", "publish",
+            {"topic": "zigbee2mqtt/bridge/request/device/rename",
+             "payload": json.dumps({"from": old_name, "to": new_name})},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Rename Zigbee device failed: {exc}"}
+    return {"ok": True, "old_name": old_name, "new_name": new_name}
+
+
+async def _heal_zwave_network(hass: HomeAssistant) -> dict[str, Any]:
+    """Trigger Z-Wave network heal (rebuilds routing tables)."""
+    try:
+        await hass.services.async_call(
+            "zwave_js", "heal_network", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Z-Wave heal failed: {exc}"}
+    return {"ok": True, "status": "heal_initiated",
+            "note": "Full heal may take minutes depending on network size."}
+
+
+async def _get_zwave_node_info(
+    hass: HomeAssistant, entity_id: str | None = None,
+) -> dict[str, Any]:
+    """Get detailed Z-Wave node information for a device."""
+    from homeassistant.helpers import device_registry as dr
+
+    reg = dr.async_get(hass)
+    nodes = []
+    for device in reg.devices.values():
+        is_zwave = False
+        node_id = None
+        for ident in (device.identifiers or set()):
+            if isinstance(ident, tuple) and len(ident) >= 2:
+                if ident[0] in ("zwave_js", "ozw", "zwave"):
+                    is_zwave = True
+                    node_id = ident[1]
+                    break
+        if not is_zwave:
+            continue
+
+        node = {
+            "device_id": device.id,
+            "name": device.name,
+            "model": device.model,
+            "manufacturer": device.manufacturer,
+            "sw_version": device.sw_version,
+            "node_id": node_id,
+        }
+        nodes.append(node)
+
+    if entity_id:
+        state = hass.states.get(entity_id)
+        if state:
+            node_id_attr = state.attributes.get("node_id")
+            if node_id_attr:
+                nodes = [n for n in nodes if str(n.get("node_id")) == str(node_id_attr)]
+
+    return {"ok": True, "count": len(nodes), "nodes": nodes}
+
+
+async def _wake_on_lan(
+    hass: HomeAssistant, mac: str, broadcast_address: str | None = None,
+) -> dict[str, Any]:
+    """Send Wake-on-LAN magic packet to a MAC address."""
+    try:
+        svc_data: dict[str, Any] = {"mac": mac}
+        if broadcast_address:
+            svc_data["broadcast_address"] = broadcast_address
+        await hass.services.async_call(
+            "wake_on_lan", "send_magic_packet", svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"WoL failed: {exc}"}
+    return {"ok": True, "mac": mac}
+
+
+async def _ping_device(
+    hass: HomeAssistant, host: str, count: int = 3,
+) -> dict[str, Any]:
+    """Ping a network host to check reachability."""
+    import subprocess
+
+    try:
+        result = await hass.async_add_executor_job(
+            lambda: subprocess.run(
+                ["ping", "-c", str(min(count, 10)), "-W", "2", host],
+                capture_output=True, text=True, timeout=30,
+            )
+        )
+        lines = result.stdout.strip().split("\n")
+        summary = lines[-2:] if len(lines) >= 2 else lines
+        return {"ok": result.returncode == 0,
+                "host": host, "reachable": result.returncode == 0,
+                "summary": "\n".join(summary)}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Ping failed: {exc}"}
+
+
+async def _list_notification_services(
+    hass: HomeAssistant,
+) -> dict[str, Any]:
+    """List available notification service targets."""
+    services_list = []
+    for svc_name in sorted(hass.services.async_services().get("notify", {}).keys()):
+        services_list.append(f"notify.{svc_name}")
+
+    return {"ok": True, "count": len(services_list), "services": services_list}
+
+
+async def _dismiss_notification(
+    hass: HomeAssistant, notification_id: str,
+) -> dict[str, Any]:
+    """Dismiss a persistent notification by ID."""
+    try:
+        await hass.services.async_call(
+            "persistent_notification", "dismiss",
+            {"notification_id": notification_id},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dismiss notification failed: {exc}"}
+    return {"ok": True, "dismissed": notification_id}
+
+
+async def _create_persistent_notification(
+    hass: HomeAssistant, message: str, title: str | None = None,
+    notification_id: str | None = None,
+) -> dict[str, Any]:
+    """Create a persistent notification in HA UI."""
+    svc_data: dict[str, Any] = {"message": message}
+    if title:
+        svc_data["title"] = title
+    if notification_id:
+        svc_data["notification_id"] = notification_id
+    try:
+        await hass.services.async_call(
+            "persistent_notification", "create", svc_data, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Create notification failed: {exc}"}
+    return {"ok": True, "message": message, "title": title}
+
+
+async def _list_entity_domains(hass: HomeAssistant) -> dict[str, Any]:
+    """List all active entity domains with counts."""
+    domains: dict[str, int] = {}
+    for state in hass.states.async_all():
+        domain = state.entity_id.split(".")[0]
+        domains[domain] = domains.get(domain, 0) + 1
+
+    sorted_domains = sorted(domains.items(), key=lambda x: -x[1])
+    return {"ok": True, "count": len(sorted_domains),
+            "total_entities": sum(domains.values()),
+            "domains": [{"domain": d, "entities": c} for d, c in sorted_domains]}
+
+
+# ---------------------------------------------------------------------------
 # Workflow orchestration — batch & config operations (Stage 4 evolution)
 # ---------------------------------------------------------------------------
 
@@ -5667,6 +5930,60 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 return {"error": "writes are disabled (allow_write: false)"}
             eids = args.get("entity_ids") or args.get("entities") or []
             return await _snapshot_scene(hass, eids, args.get("scene_name", "Snapshot"))
+        if name == "publish_mqtt":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _publish_mqtt(
+                hass, args.get("topic", ""), args.get("payload", ""),
+                int(args.get("qos", 0)), bool(args.get("retain", False)),
+            )
+        if name == "subscribe_mqtt":
+            return await _subscribe_mqtt(
+                hass, args.get("topic", "#"), float(args.get("timeout", 5.0)),
+            )
+        if name == "list_mqtt_devices":
+            return await _list_mqtt_devices(hass)
+        if name == "permit_zigbee_join":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _permit_zigbee_join(hass, int(args.get("duration", 60)))
+        if name == "rename_zigbee_device":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _rename_zigbee_device(
+                hass, args.get("old_name", ""), args.get("new_name", ""),
+            )
+        if name == "heal_zwave_network":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _heal_zwave_network(hass)
+        if name == "get_zwave_node_info":
+            return await _get_zwave_node_info(hass, args.get("entity_id"))
+        if name == "wake_on_lan":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _wake_on_lan(
+                hass, args.get("mac", ""), args.get("broadcast_address"),
+            )
+        if name == "ping_device":
+            return await _ping_device(
+                hass, args.get("host", ""), int(args.get("count", 3)),
+            )
+        if name == "list_notification_services":
+            return await _list_notification_services(hass)
+        if name == "dismiss_notification":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _dismiss_notification(hass, args.get("notification_id", ""))
+        if name == "create_persistent_notification":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _create_persistent_notification(
+                hass, args.get("message", ""), args.get("title"),
+                args.get("notification_id"),
+            )
+        if name == "list_entity_domains":
+            return await _list_entity_domains(hass)
         if name == "read_logs":
             return await _read_logs(hass, args.get("lines", 60))
         if name == "create_area":
@@ -7086,6 +7403,171 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 },
                 "required": ["entity_ids", "scene_name"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "publish_mqtt",
+            "description": "Publish a message to an MQTT topic.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string"},
+                    "payload": {"type": "string"},
+                    "qos": {"type": "integer", "enum": [0, 1, 2]},
+                    "retain": {"type": "boolean"},
+                },
+                "required": ["topic", "payload"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "subscribe_mqtt",
+            "description": "Subscribe to an MQTT topic and return messages received within a timeout window.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "MQTT topic (supports wildcards)"},
+                    "timeout": {"type": "number", "description": "Seconds to listen (default 5, max 10)"},
+                },
+                "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_mqtt_devices",
+            "description": "List all devices discovered via the MQTT integration.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "permit_zigbee_join",
+            "description": "Enable Zigbee pairing mode (tries ZHA first, then Zigbee2MQTT).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "duration": {"type": "integer", "description": "Seconds to keep join open (default 60)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rename_zigbee_device",
+            "description": "Rename a Zigbee device via Zigbee2MQTT bridge API.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "old_name": {"type": "string"},
+                    "new_name": {"type": "string"},
+                },
+                "required": ["old_name", "new_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "heal_zwave_network",
+            "description": "Trigger Z-Wave network heal to rebuild routing tables.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_zwave_node_info",
+            "description": "Get detailed Z-Wave node information for devices in the registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Filter by entity (optional)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wake_on_lan",
+            "description": "Send Wake-on-LAN magic packet to wake a network device.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mac": {"type": "string", "description": "MAC address (e.g. AA:BB:CC:DD:EE:FF)"},
+                    "broadcast_address": {"type": "string"},
+                },
+                "required": ["mac"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ping_device",
+            "description": "Ping a network host to check reachability.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "host": {"type": "string"},
+                    "count": {"type": "integer", "description": "Number of pings (default 3, max 10)"},
+                },
+                "required": ["host"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_notification_services",
+            "description": "List all available notification service targets.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dismiss_notification",
+            "description": "Dismiss a persistent notification by ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "notification_id": {"type": "string"},
+                },
+                "required": ["notification_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_persistent_notification",
+            "description": "Create a persistent notification in the HA UI.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "title": {"type": "string"},
+                    "notification_id": {"type": "string", "description": "Optional ID for later dismissal"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_entity_domains",
+            "description": "List all active entity domains with entity counts.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
