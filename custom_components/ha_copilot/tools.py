@@ -6606,6 +6606,205 @@ async def _toggle_input_boolean(
 
 
 # ---------------------------------------------------------------------------
+# Wave 9: camera, climate presets, notify targets, system log, input select/
+#          number, utility meter, logbook, device actions, batch reload
+# ---------------------------------------------------------------------------
+
+
+async def _camera_turn_on(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Turn on a camera."""
+    try:
+        await hass.services.async_call(
+            "camera", "turn_on", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Camera turn_on failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+
+
+async def _camera_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Turn off a camera."""
+    try:
+        await hass.services.async_call(
+            "camera", "turn_off", {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Camera turn_off failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+
+
+async def _climate_set_preset(
+    hass: HomeAssistant, entity_id: str, preset_mode: str,
+) -> dict[str, Any]:
+    """Set climate preset mode (home/away/eco/sleep/boost/comfort/etc.)."""
+    try:
+        await hass.services.async_call(
+            "climate", "set_preset_mode",
+            {"entity_id": entity_id, "preset_mode": preset_mode}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate set preset failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "preset_mode": preset_mode}
+
+
+async def _climate_set_aux_heat(
+    hass: HomeAssistant, entity_id: str, aux_heat: bool,
+) -> dict[str, Any]:
+    """Toggle auxiliary/emergency heat on a climate entity."""
+    try:
+        await hass.services.async_call(
+            "climate", "set_aux_heat",
+            {"entity_id": entity_id, "aux_heat": aux_heat}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Climate set aux heat failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "aux_heat": aux_heat}
+
+
+async def _list_notify_targets(hass: HomeAssistant) -> dict[str, Any]:
+    """List all available notification service targets."""
+    svcs = hass.services.async_services()
+    notify_svcs = svcs.get("notify", {})
+    targets = [{"service": f"notify.{name}", "name": name}
+               for name in sorted(notify_svcs.keys())]
+    return {"ok": True, "count": len(targets), "targets": targets}
+
+
+async def _clear_system_log(hass: HomeAssistant) -> dict[str, Any]:
+    """Clear the system log."""
+    try:
+        await hass.services.async_call(
+            "system_log", "clear", {}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Clear system log failed: {exc}"}
+    return {"ok": True, "action": "system_log_cleared"}
+
+
+async def _batch_reload_integrations(
+    hass: HomeAssistant, domains: list[str] | None = None,
+) -> dict[str, Any]:
+    """Reload multiple integration domains at once."""
+    entries = hass.config_entries.async_entries()
+    if domains:
+        entries = [e for e in entries if e.domain in domains]
+    reloaded = []
+    errors = []
+    for entry in entries[:50]:
+        try:
+            await hass.config_entries.async_reload(entry.entry_id)
+            reloaded.append(entry.domain)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{entry.domain}: {exc}")
+    return {"ok": True, "reloaded": reloaded, "count": len(reloaded),
+            "errors": errors if errors else None}
+
+
+async def _set_input_select_option(
+    hass: HomeAssistant, entity_id: str, option: str,
+) -> dict[str, Any]:
+    """Set an input_select entity to a specific option."""
+    try:
+        await hass.services.async_call(
+            "input_select", "select_option",
+            {"entity_id": entity_id, "option": option}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set input_select failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "option": option}
+
+
+async def _list_input_select_options(
+    hass: HomeAssistant, entity_id: str,
+) -> dict[str, Any]:
+    """List available options for an input_select entity."""
+    state = hass.states.get(entity_id)
+    if not state:
+        return {"error": f"Entity '{entity_id}' not found"}
+    options = state.attributes.get("options", [])
+    return {
+        "ok": True, "entity_id": entity_id,
+        "current": state.state, "options": options, "count": len(options),
+    }
+
+
+async def _set_input_number_value(
+    hass: HomeAssistant, entity_id: str, value: float,
+) -> dict[str, Any]:
+    """Set an input_number entity value."""
+    try:
+        await hass.services.async_call(
+            "input_number", "set_value",
+            {"entity_id": entity_id, "value": float(value)}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Set input_number failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "value": float(value)}
+
+
+async def _calibrate_utility_meter(
+    hass: HomeAssistant, entity_id: str, value: float,
+) -> dict[str, Any]:
+    """Calibrate a utility meter to a specific value."""
+    try:
+        await hass.services.async_call(
+            "utility_meter", "calibrate",
+            {"entity_id": entity_id, "value": float(value)}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Calibrate utility meter failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "calibrated_to": float(value)}
+
+
+async def _log_custom_event(
+    hass: HomeAssistant, name: str, message: str,
+    entity_id: str | None = None, domain: str | None = None,
+) -> dict[str, Any]:
+    """Fire a logbook entry event for custom logging."""
+    event_data: dict[str, Any] = {"name": name, "message": message}
+    if entity_id:
+        event_data["entity_id"] = entity_id
+    if domain:
+        event_data["domain"] = domain
+    hass.bus.async_fire("logbook_entry", event_data)
+    return {"ok": True, "name": name, "message": message}
+
+
+async def _list_device_actions(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List available automation actions for a device."""
+    try:
+        from homeassistant.components.device_automation import (
+            async_get_device_automations,
+        )
+        actions = await async_get_device_automations(
+            hass, "action", device_id,
+        )
+        items = [dict(a) for a in (actions or [])[:30]]
+        return {"ok": True, "device_id": device_id, "count": len(items), "actions": items}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": True, "device_id": device_id,
+                "note": f"Device actions unavailable ({exc})", "actions": []}
+
+
+async def _execute_device_action(
+    hass: HomeAssistant, action: dict[str, Any],
+) -> dict[str, Any]:
+    """Execute a device automation action."""
+    try:
+        from homeassistant.components.device_automation.action import (
+            async_call_action_from_config,
+        )
+        await async_call_action_from_config(
+            hass, action, {}, None,
+        )
+        return {"ok": True, "action": action}
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Execute device action failed: {exc}"}
+
+
+# ---------------------------------------------------------------------------
 # HA core internals — addons, areas, config entries, system, blueprints
 # ---------------------------------------------------------------------------
 
@@ -8405,6 +8604,70 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _toggle_input_boolean(hass, args.get("entity_id", ""))
+        # --- Wave 9 dispatch ---
+        if name == "camera_turn_on":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _camera_turn_on(hass, args.get("entity_id", ""))
+        if name == "camera_turn_off":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _camera_turn_off(hass, args.get("entity_id", ""))
+        if name == "climate_set_preset":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_set_preset(
+                hass, args.get("entity_id", ""), args.get("preset_mode", ""),
+            )
+        if name == "climate_set_aux_heat":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _climate_set_aux_heat(
+                hass, args.get("entity_id", ""), bool(args.get("aux_heat", False)),
+            )
+        if name == "list_notify_targets":
+            return await _list_notify_targets(hass)
+        if name == "clear_system_log":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _clear_system_log(hass)
+        if name == "batch_reload_integrations":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _batch_reload_integrations(hass, args.get("domains"))
+        if name == "set_input_select_option":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_input_select_option(
+                hass, args.get("entity_id", ""), args.get("option", ""),
+            )
+        if name == "list_input_select_options":
+            return await _list_input_select_options(hass, args.get("entity_id", ""))
+        if name == "set_input_number_value":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _set_input_number_value(
+                hass, args.get("entity_id", ""), float(args.get("value", 0)),
+            )
+        if name == "calibrate_utility_meter":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _calibrate_utility_meter(
+                hass, args.get("entity_id", ""), float(args.get("value", 0)),
+            )
+        if name == "log_custom_event":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _log_custom_event(
+                hass, args.get("name", ""), args.get("message", ""),
+                args.get("entity_id"), args.get("domain"),
+            )
+        if name == "list_device_actions":
+            return await _list_device_actions(hass, args.get("device_id", ""))
+        if name == "execute_device_action":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _execute_device_action(hass, args.get("action", {}))
         if name == "start_addon":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -11255,6 +11518,190 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "type": "object",
                 "properties": {"entity_id": {"type": "string"}},
                 "required": ["entity_id"],
+            },
+        },
+    },
+    # --- Wave 9 TOOL_SPECS ---
+    {
+        "type": "function",
+        "function": {
+            "name": "camera_turn_on",
+            "description": "Turn on a camera entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "camera_turn_off",
+            "description": "Turn off a camera entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_set_preset",
+            "description": "Set climate preset mode (home/away/eco/sleep/boost/comfort/activity).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "preset_mode": {"type": "string", "description": "Preset: home|away|eco|sleep|boost|comfort|activity|none"},
+                },
+                "required": ["entity_id", "preset_mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "climate_set_aux_heat",
+            "description": "Toggle auxiliary/emergency heat on a climate entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "aux_heat": {"type": "boolean"},
+                },
+                "required": ["entity_id", "aux_heat"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_notify_targets",
+            "description": "List all available notification service targets.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "clear_system_log",
+            "description": "Clear the Home Assistant system log.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "batch_reload_integrations",
+            "description": "Reload multiple integration domains at once.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domains": {"type": "array", "items": {"type": "string"}, "description": "Filter by specific domains (optional, reloads all if omitted)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_input_select_option",
+            "description": "Set an input_select entity to a specific option.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "option": {"type": "string"},
+                },
+                "required": ["entity_id", "option"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_input_select_options",
+            "description": "List available options for an input_select entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {"entity_id": {"type": "string"}},
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_input_number_value",
+            "description": "Set an input_number entity value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "number"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calibrate_utility_meter",
+            "description": "Calibrate a utility meter to a specific value.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "value": {"type": "number"},
+                },
+                "required": ["entity_id", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "log_custom_event",
+            "description": "Fire a logbook entry event for custom logging.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Event source name"},
+                    "message": {"type": "string", "description": "Log message"},
+                    "entity_id": {"type": "string", "description": "Associated entity (optional)"},
+                    "domain": {"type": "string", "description": "Domain (optional)"},
+                },
+                "required": ["name", "message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_device_actions",
+            "description": "List available automation actions for a device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "execute_device_action",
+            "description": "Execute a device automation action (from list_device_actions output).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "object", "description": "Action config dict from list_device_actions"},
+                },
+                "required": ["action"],
             },
         },
     },
