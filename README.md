@@ -4,11 +4,11 @@
 
 本仓库的本源是：**让操作者本身（强 AI / 外部 agent）全链路操作 Home Assistant 的底层**。这里的"智能体"是操作者自己，**不是**一个被塞进聊天框、寄生在外接模型上的弱模型。基础设施只是适配于操作者的"工具层"，操作者直接驱动它，在不断实践中操作到底、验证到底。
 
-因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（210 个工具），并经**五条本源底层**暴露给外部操作者：
+因此本组件**不内置任何模型，也不调用任何推理端点**（无 Ollama、无 OpenAI Key、无 base_url）。它只把整台 Home Assistant 的操作面收敛成**一套确定性工具层**（287 个工具），并经**五条本源底层**暴露给外部操作者：
 
 - **底层一 · 原生 HA 服务**：`ha_copilot.run_tool` 通用服务 + 12 个原生资源服务（`ha_copilot.discover_resources` / `ha_copilot.search_zwave_devices` 等），自动化/脚本/开发者工具可直调。每次调用自动发射 `ha_copilot_tool_called` 事件。
 - **底层二 · MCP**：鉴权的 MCP 服务器端点 `/api/ha_copilot/mcp`（JSON-RPC 2.0），任意 MCP 客户端即可发现并操作整台 HA。
-- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 210 个确定性工具。
+- **底层三 · 原生 LLM API**：注册为 HA 原生 LLM API，任何对话代理（OpenAI/Anthropic/Google/Ollama/本地模型）可选择 **HA-Copilot** 作为控制 API，直接获得全部 287 个确定性工具。
 - **底层四 · HTTP**：鉴权 HTTP 端点 `/api/ha_copilot/tools`（列目录）、`/api/ha_copilot/run_tool`（执行工具）。
 - **底层五 · WebSocket**：HA 原生 WebSocket 命令 `ha_copilot/tools`（列目录）、`ha_copilot/run_tool`（执行工具）、`ha_copilot/info`（集成状态）——前端面板和 WS 客户端的实时通道。
 
@@ -20,7 +20,7 @@
         ├── MCP 客户端 ──▶ /api/ha_copilot/mcp ────────┐
         ├── 原生 LLM API ──▶ HA 对话代理框架 ────────────┤
         ├── HA 服务 ──▶ 13 个原生服务（自动化可直调）──────┤
-        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（210 确定性工具）──▶ 运行中的 HA
+        ├── WebSocket ──▶ ha_copilot/* 命令 ────────────────┤──▶ tools.py（287 确定性工具）──▶ 运行中的 HA
         └── HTTP ──▶ /api/ha_copilot/run_tool ────────────┘
 ```
 
@@ -114,6 +114,31 @@ response_variable: zwave_results
 | `get_hardware_info` / `get_os_info` | **系统信息**：CPU/内存/磁盘/运行时间、HA OS/Supervisor 版本 |
 | `list_template_entities` | 列出所有模板集成创建的实体 |
 | `list_credentials` | 列出认证提供者 |
+| `media_player_control` | **媒体播放器控制**（14 指令：play/pause/stop/next/previous/volume/source/shuffle/repeat/turn_on/turn_off） |
+| `list_media_players` | 列出所有媒体播放器（状态、音源、音量、媒体信息） |
+| `send_mobile_notification` | 发送富文本移动推送（支持 actions/images/channels） |
+| `get_person_location` / `list_device_trackers` / `get_nearest_person` | **位置追踪**：人物 GPS 坐标、设备追踪器、距区域最近的人 |
+| `reload_yaml` / `reload_all_integrations` | **配置重载**：YAML 配置（10 目标）、逐条重载集成 |
+| `get_entity_history_summary` / `get_entity_logbook` | **历史/日志**：状态变化摘要、实体日志（recorder 降级容错） |
+| `get_states_by_domain` | 按域列出所有实体（含完整属性） |
+| `assign_device_label` / `assign_entity_category` | **注册表**：设备标签、实体分类（config/diagnostic） |
+| `assign_area_floor` | **楼层管理**：将区域分配到楼层 |
+| `scan_tag` | **NFC 标签**：触发 tag_scanned 事件 |
+| `add_todo_item` / `remove_todo_item` | **待办事项** CRUD |
+| `list_assist_pipelines` / `run_assist_pipeline` | **Assist 语音管道**：列出配置、运行文本 |
+| `list_thread_networks` / `get_matter_nodes` | **Thread/Matter**：网络信息、设备节点 |
+| `restore_backup` / `download_backup` | **备份管理**：恢复/下载 |
+| `increment_counter` / `decrement_counter` / `reset_counter` | **计数器辅助** |
+| `start_timer` / `cancel_timer` / `pause_timer` / `finish_timer` | **计时器辅助** |
+| `mower_command` | **草坪割草机**：start/pause/dock |
+| `valve_control` | **阀门控制**：open/close/set_position/stop |
+| `list_event_entities` | 事件实体（最后事件类型） |
+| `set_date_value` / `set_time_value` / `set_text_value` | **日期/时间/文本**实体写入 |
+| `list_wake_words` / `list_stt_engines` / `list_tts_engines` | **语音系统**：唤醒词、STT/TTS 引擎 |
+| `list_conversation_agents` | 对话代理列表 |
+| `get_schedule` | 日程安排状态及下次事件 |
+| `get_statistics_metadata` / `clear_statistics` | **长期统计**：元数据查询/清除 |
+| `send_remote_command` | **红外/射频遥控**：IR/RF 命令发送 |
 
 ### Resource Hub · 把全网资源收敛为可调用的底层
 
@@ -146,7 +171,7 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
 |------|------|------|
 | `switch.ha_copilot_allow_write` | 开关 | 写配置文件能力开关——可从仪表盘/自动化/语音切换 |
 | `switch.ha_copilot_allow_restart` | 开关 | 重启 HA 能力开关 |
-| `sensor.ha_copilot_tool_count` | 传感器 | 当前工具目录大小（142） |
+| `sensor.ha_copilot_tool_count` | 传感器 | 当前工具目录大小（287） |
 | `sensor.ha_copilot_data_sources` | 传感器 | 免费数据源数量（9） |
 | `sensor.ha_copilot_native_services` | 传感器 | 原生 HA 服务数量（13） |
 
@@ -232,4 +257,4 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
 
 ## 状态
 
-v0.3 — **深度融合**：五路暴露（HA 服务 + MCP + 原生 LLM API + HTTP + WebSocket）；UI 配置流（无需 YAML）；安全开关实体（switch）+ 诊断传感器（sensor）+ Diagnostics；事件总线集成（`ha_copilot_tool_called`）；中文翻译；12 个原生资源服务可被自动化直调；9 个免费数据源（HACS 2628 · GitHub · 蓝图 · Zigbee 2700+ · Z-Wave 2375+ · Tasmota 2800+ · ESPHome 770+ · 内置集成 1470 · 加载项 78+）；品牌别名映射（Fibaro→Nice Polska 等）；查询分隔符归一化；142 工具 · 64 个 PR 持续迭代验证。
+v0.7 — **全域覆盖**：287 个确定性工具覆盖 HA 全部已知平台域——从基础状态/服务/自动化/脚本/场景到高级平台：媒体播放器（14 指令）、位置追踪（人/设备/最近距离）、YAML/集成重载、历史摘要/日志、设备注册表、楼层管理、NFC 标签、待办事项、Assist 语音管道、Thread/Matter 网格、备份管理、计数器/计时器辅助、草坪割草机、阀门控制、事件实体、日期/时间/文本实体、唤醒词、STT/TTS 引擎、对话代理、日程安排、长期统计、红外遥控。五路暴露（HA 服务 + MCP + 原生 LLM API + HTTP + WebSocket）；UI 配置流；安全开关实体 + 诊断传感器；事件总线集成；中文翻译；12 个原生资源服务；9 个免费数据源；品牌别名映射；查询归一化；写保护 + 破坏性操作分类 + MCP 注解。89 个 PR 持续迭代验证。
