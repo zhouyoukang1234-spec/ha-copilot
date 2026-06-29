@@ -4407,6 +4407,262 @@ async def _manage_schedule(
 
 
 # ---------------------------------------------------------------------------
+# Advanced operations — automation control, device mgmt, media, scene, history
+# ---------------------------------------------------------------------------
+
+
+async def _toggle_automation(
+    hass: HomeAssistant, entity_id: str, enable: bool,
+) -> dict[str, Any]:
+    """Enable or disable an automation without deleting it."""
+    svc = "turn_on" if enable else "turn_off"
+    try:
+        await hass.services.async_call(
+            "automation", svc, {"entity_id": entity_id}, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Toggle automation failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "enabled": enable}
+
+
+async def _trigger_automation(
+    hass: HomeAssistant, entity_id: str, skip_condition: bool = False,
+) -> dict[str, Any]:
+    """Manually trigger an automation."""
+    try:
+        await hass.services.async_call(
+            "automation", "trigger",
+            {"entity_id": entity_id, "skip_condition": skip_condition},
+            blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Trigger automation failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "skip_condition": skip_condition}
+
+
+async def _duplicate_automation(
+    hass: HomeAssistant, entity_id: str, new_alias: str | None = None,
+) -> dict[str, Any]:
+    """Duplicate an automation by reading its config and creating a copy."""
+    from ha_copilot.tools import _get_automation_config, _create_automation
+
+    config_result = await _get_automation_config(hass, entity_id)
+    if "error" in config_result:
+        return config_result
+
+    config = config_result.get("config") or config_result.get("automation") or {}
+    if not config:
+        return {"error": "Could not read automation config to duplicate"}
+
+    alias = new_alias or f"{config.get('alias', 'Automation')} (Copy)"
+    new_config = {**config, "alias": alias}
+    new_config.pop("id", None)
+
+    return await _create_automation(hass, new_config)
+
+
+async def _remove_device(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """Remove an orphan device from the device registry."""
+    from homeassistant.helpers import device_registry as dr
+
+    reg = dr.async_get(hass)
+    device = reg.async_get(device_id)
+    if not device:
+        return {"error": f"Device {device_id} not found"}
+
+    try:
+        reg.async_remove_device(device_id)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Remove device failed: {exc}"}
+    return {"ok": True, "removed": device_id, "name": device.name or device_id}
+
+
+async def _list_device_entities(
+    hass: HomeAssistant, device_id: str,
+) -> dict[str, Any]:
+    """List all entities belonging to a specific device."""
+    from homeassistant.helpers import entity_registry as er
+
+    reg = er.async_get(hass)
+    entities = []
+    for entry in reg.entities.values():
+        if entry.device_id == device_id:
+            state = hass.states.get(entry.entity_id)
+            entities.append({
+                "entity_id": entry.entity_id,
+                "name": entry.name or entry.original_name,
+                "platform": entry.platform,
+                "domain": entry.domain,
+                "disabled": entry.disabled_by is not None,
+                "state": state.state if state else None,
+            })
+
+    return {"ok": True, "device_id": device_id, "count": len(entities), "entities": entities}
+
+
+async def _compare_history(
+    hass: HomeAssistant,
+    entity_ids: list[str],
+    hours: int = 24,
+) -> dict[str, Any]:
+    """Compare state history of multiple entities side-by-side."""
+    results: dict[str, Any] = {}
+    for eid in entity_ids[:10]:
+        states_list = []
+        state = hass.states.get(eid)
+        if state:
+            states_list.append({
+                "state": state.state,
+                "last_changed": state.last_changed.isoformat() if state.last_changed else None,
+                "last_updated": state.last_updated.isoformat() if state.last_updated else None,
+                "attributes": {k: v for k, v in state.attributes.items()
+                               if k in ("friendly_name", "unit_of_measurement", "device_class")},
+            })
+        results[eid] = {"current": states_list[0] if states_list else None}
+
+    try:
+        from homeassistant.components.recorder.history import state_changes_during_period
+        start = datetime.now(timezone.utc) - timedelta(hours=hours)
+        history = await hass.async_add_executor_job(
+            lambda: state_changes_during_period(hass, start, None, entity_ids[:10])
+        )
+        for eid, states in (history or {}).items():
+            changes = []
+            for s in (states or [])[-20:]:
+                changes.append({
+                    "state": s.state,
+                    "when": s.last_changed.isoformat() if s.last_changed else None,
+                })
+            if eid in results:
+                results[eid]["history"] = changes
+                results[eid]["change_count"] = len(states or [])
+    except Exception as exc:  # noqa: BLE001
+        for eid in results:
+            results[eid]["history_note"] = f"History unavailable: {exc}"
+
+    return {"ok": True, "hours": hours, "entities": results}
+
+
+async def _send_tts(
+    hass: HomeAssistant,
+    message: str,
+    entity_id: str | None = None,
+    language: str | None = None,
+) -> dict[str, Any]:
+    """Send text-to-speech to a media player entity."""
+    if not entity_id:
+        players = [s.entity_id for s in hass.states.async_all("media_player")]
+        if not players:
+            return {"error": "No media_player entities found for TTS"}
+        entity_id = players[0]
+
+    svc_data: dict[str, Any] = {
+        "entity_id": entity_id,
+        "message": message,
+    }
+    if language:
+        svc_data["language"] = language
+
+    try:
+        await hass.services.async_call("tts", "speak", svc_data, blocking=True)
+    except Exception:  # noqa: BLE001
+        try:
+            await hass.services.async_call(
+                "tts", "google_translate_say", svc_data, blocking=True,
+            )
+        except Exception as exc2:  # noqa: BLE001
+            return {"error": f"TTS failed: {exc2}"}
+
+    return {"ok": True, "entity_id": entity_id, "message": message}
+
+
+async def _play_media(
+    hass: HomeAssistant,
+    entity_id: str,
+    media_content_id: str,
+    media_content_type: str = "music",
+) -> dict[str, Any]:
+    """Play media on a media_player entity."""
+    try:
+        await hass.services.async_call(
+            "media_player", "play_media", {
+                "entity_id": entity_id,
+                "media_content_id": media_content_id,
+                "media_content_type": media_content_type,
+            }, blocking=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Play media failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id,
+            "media_content_id": media_content_id,
+            "media_content_type": media_content_type}
+
+
+async def _activate_scene(
+    hass: HomeAssistant, entity_id: str, transition: float | None = None,
+) -> dict[str, Any]:
+    """Activate a scene."""
+    svc_data: dict[str, Any] = {"entity_id": entity_id}
+    if transition is not None:
+        svc_data["transition"] = transition
+    try:
+        await hass.services.async_call("scene", "turn_on", svc_data, blocking=True)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Activate scene failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id}
+
+
+async def _snapshot_scene(
+    hass: HomeAssistant, entity_ids: list[str], scene_name: str,
+) -> dict[str, Any]:
+    """Capture current states of entities and create a scene from them."""
+    snapshot_data: list[dict[str, Any]] = []
+    for eid in entity_ids:
+        state = hass.states.get(eid)
+        if state:
+            entry: dict[str, Any] = {"entity_id": eid, "state": state.state}
+            relevant_attrs = {}
+            for k, v in state.attributes.items():
+                if k in ("brightness", "color_temp", "rgb_color", "hs_color",
+                         "xy_color", "effect", "temperature", "hvac_mode",
+                         "fan_mode", "swing_mode", "target_temp_high",
+                         "target_temp_low", "position", "tilt_position",
+                         "volume_level", "source"):
+                    relevant_attrs[k] = v
+            if relevant_attrs:
+                entry["attributes"] = relevant_attrs
+            snapshot_data.append(entry)
+
+    if not snapshot_data:
+        return {"error": "No valid entities to snapshot"}
+
+    scene_config = {
+        "name": scene_name,
+        "entities": {e["entity_id"]: {**({"state": e["state"]}),
+                                       **e.get("attributes", {})}
+                     for e in snapshot_data},
+    }
+
+    path = hass.config.path("scenes.yaml")
+    try:
+        with open(path) as fh:
+            existing = yaml.safe_load(fh.read()) or []
+    except FileNotFoundError:
+        existing = []
+    if not isinstance(existing, list):
+        existing = [existing]
+    existing.append(scene_config)
+    with open(path, "w") as fh:
+        yaml.dump(existing, fh, default_flow_style=False, allow_unicode=True)
+
+    return {"ok": True, "scene_name": scene_name,
+            "entities_captured": len(snapshot_data), "path": path,
+            "hint": "Run reload(target='scene') to apply."}
+
+
+# ---------------------------------------------------------------------------
 # Workflow orchestration — batch & config operations (Stage 4 evolution)
 # ---------------------------------------------------------------------------
 
@@ -5363,6 +5619,54 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _get_camera_snapshot(hass, args.get("entity_id", ""))
         if name == "manage_schedule":
             return await _manage_schedule(hass, args.get("action", "list"), args.get("entity_id"))
+        if name == "toggle_automation":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _toggle_automation(
+                hass, args.get("entity_id", ""), bool(args.get("enable", True)),
+            )
+        if name == "trigger_automation":
+            return await _trigger_automation(
+                hass, args.get("entity_id", ""), bool(args.get("skip_condition", False)),
+            )
+        if name == "duplicate_automation":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _duplicate_automation(
+                hass, args.get("entity_id", ""), args.get("new_alias"),
+            )
+        if name == "remove_device":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remove_device(hass, args.get("device_id", ""))
+        if name == "list_device_entities":
+            return await _list_device_entities(hass, args.get("device_id", ""))
+        if name == "compare_history":
+            eids = args.get("entity_ids") or args.get("entities") or []
+            return await _compare_history(hass, eids, int(args.get("hours", 24)))
+        if name == "send_tts":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _send_tts(
+                hass, args.get("message", ""), args.get("entity_id"),
+                args.get("language"),
+            )
+        if name == "play_media":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _play_media(
+                hass, args.get("entity_id", ""), args.get("media_content_id", ""),
+                args.get("media_content_type", "music"),
+            )
+        if name == "activate_scene":
+            return await _activate_scene(
+                hass, args.get("entity_id", ""), args.get("transition"),
+            )
+        if name == "snapshot_scene":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            eids = args.get("entity_ids") or args.get("entities") or []
+            return await _snapshot_scene(hass, eids, args.get("scene_name", "Snapshot"))
         if name == "read_logs":
             return await _read_logs(hass, args.get("lines", 60))
         if name == "create_area":
@@ -6635,6 +6939,152 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "entity_id": {"type": "string"},
                 },
                 "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "toggle_automation",
+            "description": "Enable or disable an automation without deleting it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "enable": {"type": "boolean", "description": "true=enable, false=disable"},
+                },
+                "required": ["entity_id", "enable"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "trigger_automation",
+            "description": "Manually trigger an automation (optionally skip conditions).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "skip_condition": {"type": "boolean", "description": "Skip condition check (default false)"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "duplicate_automation",
+            "description": "Clone an automation: reads its config and creates a copy with a new alias.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "new_alias": {"type": "string", "description": "Name for the copy (default: original + ' (Copy)')"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_device",
+            "description": "Remove an orphan device from the device registry.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_device_entities",
+            "description": "List all entities belonging to a specific device.",
+            "parameters": {
+                "type": "object",
+                "properties": {"device_id": {"type": "string"}},
+                "required": ["device_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_history",
+            "description": "Compare state history of multiple entities side-by-side over a time window.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_ids": {"type": "array", "items": {"type": "string"}},
+                    "hours": {"type": "integer", "description": "Hours back (default 24)"},
+                },
+                "required": ["entity_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_tts",
+            "description": "Send text-to-speech to a media player entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "entity_id": {"type": "string", "description": "media_player entity (auto-selects first if omitted)"},
+                    "language": {"type": "string"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "play_media",
+            "description": "Play media on a media_player entity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "media_content_id": {"type": "string"},
+                    "media_content_type": {"type": "string", "enum": ["music", "video", "image", "playlist", "channel"]},
+                },
+                "required": ["entity_id", "media_content_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "activate_scene",
+            "description": "Activate a scene (optionally with transition time).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string"},
+                    "transition": {"type": "number", "description": "Transition time in seconds"},
+                },
+                "required": ["entity_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "snapshot_scene",
+            "description": "Capture current states of entities and save as a new scene.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_ids": {"type": "array", "items": {"type": "string"}},
+                    "scene_name": {"type": "string"},
+                },
+                "required": ["entity_ids", "scene_name"],
             },
         },
     },
