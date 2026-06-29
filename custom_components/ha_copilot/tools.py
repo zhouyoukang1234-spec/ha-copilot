@@ -11,6 +11,8 @@ import asyncio
 import functools
 import json
 import os
+import re
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -16420,11 +16422,215 @@ async def _check_device_health(hass: HomeAssistant) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# 為道日損 · 本源原語 (Source primitives)
+#
+# 為學者日益,聞道者日損。上一路把工具累加到兩千有餘(益);此處反其道,叠一層
+# 極小的本源:operator 守住極少數通用原語 + 一個按意圖檢索目錄的能力,即可推演
+# 出萬法,而不必把全部 spec 塞進上下文。知其雄,守其雌;損之又損,以至於無為。
+#
+#   query_entities  —— 一術演萬法:通用實體查詢,涵蓋數百個「掃描 states + 按
+#                       名字/device_class 過濾」的薄包裝工具的行為。
+#   search_tools    —— 按意圖在整個工具目錄裡檢索最相關的少數工具。
+#   describe_tool   —— 取單個工具的完整 schema。
+#   tool_catalog    —— 工具目錄全景/分組概覽。
+# 全部確定性、唯讀、無模型。
+# ---------------------------------------------------------------------------
+
+
+def _as_str_list(value: Any) -> list[str]:
+    """Normalise ``None`` / scalar / list into a list of strings."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(v) for v in value]
+    return [str(value)]
+
+
+def _tool_tokens(text: str) -> list[str]:
+    """Lowercase alphanumeric tokens of ``text`` (for tool-catalog search)."""
+    return [t for t in re.split(r"[^a-z0-9]+", (text or "").lower()) if t]
+
+
+async def _query_entities(
+    hass: HomeAssistant,
+    domain: Any = None,
+    name_contains: Any = None,
+    device_class: Any = None,
+    state: Any = None,
+    attributes: Any = None,
+    match: str = "any",
+    limit: Any = 200,
+) -> dict[str, Any]:
+    """Universal entity query — the one primitive that derives the many.
+
+    ``name_contains`` matches a substring against ``entity_id`` OR friendly
+    name; ``device_class`` matches the entity's device_class. These two compose
+    via ``match`` ("any" = OR, "all" = AND). ``state`` and ``attributes`` are
+    always applied as additional AND filters (``attributes`` value ``None``
+    means "key present"). With no filters at all (optionally just ``domain``)
+    it returns every entity in scope.
+    """
+    domains = _as_str_list(domain)
+    names = [n.lower() for n in _as_str_list(name_contains)]
+    dcs = [d.lower() for d in _as_str_list(device_class)]
+    states_f = [s.lower() for s in _as_str_list(state)]
+    attrs = attributes if isinstance(attributes, dict) else {}
+    match_all = str(match).lower() == "all"
+
+    if domains:
+        pool: list = []
+        for d in domains:
+            pool.extend(hass.states.async_all(d))
+    else:
+        pool = hass.states.async_all()
+
+    results = []
+    for s in pool:
+        friendly = s.attributes.get("friendly_name") or ""
+        haystack = f"{s.entity_id} {friendly}".lower()
+        sdc = str(s.attributes.get("device_class") or "").lower()
+
+        checks: list[bool] = []
+        if names:
+            checks.append(any(n in haystack for n in names))
+        if dcs:
+            checks.append(sdc in dcs)
+        if checks:
+            ok = all(checks) if match_all else any(checks)
+            if not ok:
+                continue
+        if states_f and s.state.lower() not in states_f:
+            continue
+        if attrs:
+            attr_ok = True
+            for key, val in attrs.items():
+                actual = s.attributes.get(key)
+                if val is None:
+                    if actual is None:
+                        attr_ok = False
+                        break
+                elif str(actual) != str(val):
+                    attr_ok = False
+                    break
+            if not attr_ok:
+                continue
+        results.append({
+            "entity_id": s.entity_id,
+            "state": s.state,
+            "friendly_name": s.attributes.get("friendly_name"),
+            "device_class": s.attributes.get("device_class"),
+            "unit": s.attributes.get("unit_of_measurement"),
+        })
+
+    results.sort(key=lambda r: r["entity_id"])
+    try:
+        lim = int(limit)
+    except (TypeError, ValueError):
+        lim = 200
+    lim = max(1, min(lim, 2000))
+    return {"ok": True, "count": len(results), "entities": results[:lim]}
+
+
+async def _search_tools(hass: HomeAssistant, query: str, limit: Any = 20) -> dict[str, Any]:
+    """Rank the whole tool catalog by relevance to ``query`` (deterministic).
+
+    Lets an operator with a bounded context discover the right tool by intent
+    instead of holding all TOOL_SPECS at once. Score = token overlap (name +
+    description) weighted, plus substring bonuses on the name.
+    """
+    q = str(query or "")
+    qtokens = set(_tool_tokens(q))
+    ql = q.lower().strip()
+    scored: list[tuple[int, str, str, dict]] = []
+    for spec in TOOL_SPECS:
+        fn = spec["function"]
+        nm = fn["name"]
+        desc = fn.get("description", "")
+        hay_tokens = set(_tool_tokens(f"{nm} {desc}"))
+        overlap = len(qtokens & hay_tokens)
+        partial = sum(1 for t in qtokens if t and t in nm.lower())
+        substr = 2 if (ql and ql in f"{nm} {desc}".lower()) else 0
+        score = overlap * 3 + partial + substr
+        if score > 0:
+            scored.append((score, nm, desc, fn.get("parameters", {})))
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    try:
+        lim = int(limit)
+    except (TypeError, ValueError):
+        lim = 20
+    lim = max(1, min(lim, 100))
+    top = scored[:lim]
+    return {
+        "ok": True,
+        "query": q,
+        "total_catalog": len(TOOL_SPECS),
+        "count": len(top),
+        "tools": [
+            {
+                "name": nm,
+                "description": desc,
+                "params": sorted((params.get("properties") or {}).keys()),
+                "read_only": _is_read_only(nm),
+            }
+            for _, nm, desc, params in top
+        ],
+    }
+
+
+async def _describe_tool(hass: HomeAssistant, name: str) -> dict[str, Any]:
+    """Return the full OpenAI-style spec + MCP annotations for one tool."""
+    for spec in TOOL_SPECS:
+        if spec["function"]["name"] == name:
+            return {"ok": True, "tool": spec["function"], "annotations": tool_annotations(name)}
+    return {"error": f"unknown tool '{name}'"}
+
+
+async def _tool_catalog(hass: HomeAssistant, prefix: str | None = None) -> dict[str, Any]:
+    """A map of the catalog: totals, read/write split, and leading-token groups.
+
+    With ``prefix`` it lists the tool names under that prefix instead.
+    """
+    names = [s["function"]["name"] for s in TOOL_SPECS]
+    if prefix:
+        matched = sorted(n for n in names if n.startswith(str(prefix)))
+        return {"ok": True, "total": len(names), "prefix": prefix,
+                "count": len(matched), "tools": matched[:300]}
+    read_only = sum(1 for n in names if _is_read_only(n))
+    groups = Counter(n.split("_")[0] for n in names)
+    top_groups = dict(sorted(groups.items(), key=lambda kv: (-kv[1], kv[0]))[:40])
+    return {"ok": True, "total": len(names), "read_only": read_only,
+            "write": len(names) - read_only, "groups": top_groups}
+
+
 async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> dict[str, Any]:
     """Execute a tool by name with the given arguments."""
     try:
         if name == "run_tools":
             return await _run_tools(hass, store, args)
+        if name == "query_entities":
+            return await _query_entities(
+                hass,
+                domain=args.get("domain"),
+                name_contains=(
+                    args.get("name_contains")
+                    or args.get("name")
+                    or args.get("keywords")
+                ),
+                device_class=args.get("device_class"),
+                state=args.get("state"),
+                attributes=args.get("attributes"),
+                match=args.get("match", "any"),
+                limit=args.get("limit", 200),
+            )
+        if name == "search_tools":
+            return await _search_tools(
+                hass, args.get("query") or args.get("q") or "", args.get("limit", 20)
+            )
+        if name == "describe_tool":
+            return await _describe_tool(hass, args.get("name") or args.get("tool") or "")
+        if name == "tool_catalog":
+            return await _tool_catalog(hass, args.get("prefix"))
         if name == "assist":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -44021,6 +44227,9 @@ _READ_ONLY_PREFIXES = (
     "list_", "get_", "read_", "describe_", "validate_", "wait_for_",
 )
 _READ_ONLY_TOOLS = frozenset({
+    "query_entities",
+    "search_tools",
+    "tool_catalog",
     "check_config",
     "registry_overview",
     "render_template",
@@ -44072,6 +44281,101 @@ def tool_annotations(name: str) -> dict[str, Any]:
 # OpenAI-style function specifications. Exposed to external agents verbatim via
 # the run_tool HTTP API and converted to MCP tool descriptors for the MCP server.
 TOOL_SPECS: list[dict[str, Any]] = [
+    # --- 為道日損 · 本源原語 (source primitives: derive the many from the few) ---
+    {
+        "type": "function",
+        "function": {
+            "name": "query_entities",
+            "description": (
+                "Universal entity query — one primitive that derives the many. "
+                "Find entities by domain, name substring (matched against "
+                "entity_id OR friendly name), device_class, exact state, and/or "
+                "attribute filters. 'name_contains' and 'device_class' compose "
+                "via 'match' (any=OR default, all=AND); 'state'/'attributes' are "
+                "additional AND filters. With no filters it returns every entity "
+                "in scope. Subsumes hundreds of fixed scan-and-filter tools — "
+                "prefer this over a specialised *_check/*_status/*_monitor tool."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Domain(s) to scope to, e.g. 'sensor' or ['light','switch']. Omit to scan all.",
+                    },
+                    "name_contains": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Substring(s) matched against entity_id or friendly name (case-insensitive).",
+                    },
+                    "device_class": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "device_class value(s) to match, e.g. 'temperature', 'energy'.",
+                    },
+                    "state": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Exact state(s) to require, e.g. 'on' or ['on','open'].",
+                    },
+                    "attributes": {
+                        "type": "object",
+                        "description": "Attribute filters as {key: value}; value null means 'key present'.",
+                    },
+                    "match": {
+                        "type": "string",
+                        "enum": ["any", "all"],
+                        "description": "Compose name_contains/device_class with OR (any) or AND (all). Default any.",
+                    },
+                    "limit": {"type": "integer", "description": "Max entities to return (default 200)."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_tools",
+            "description": (
+                "Search the whole tool catalog by intent and return the most "
+                "relevant tools (name, description, params). Use this to discover "
+                "the right tool without holding all specs in context — know the "
+                "few, derive the many."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Free-text intent, e.g. 'turn off lights' or 'energy usage'."},
+                    "limit": {"type": "integer", "description": "Max results (default 20, cap 100)."},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "describe_tool",
+            "description": "Return the full OpenAI-style spec (parameters schema) and MCP safety annotations for a single tool by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "The tool name to describe."}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tool_catalog",
+            "description": "Map of the tool catalog: total count, read-only/write split, and leading-token groups. Pass 'prefix' to list the tool names under that prefix instead.",
+            "parameters": {
+                "type": "object",
+                "properties": {"prefix": {"type": "string", "description": "Optional name prefix to list, e.g. 'list_' or 'energy'."}},
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
