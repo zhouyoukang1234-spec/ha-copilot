@@ -3837,6 +3837,13 @@ async def _manage_timer(
     if action in ("start", "pause", "cancel", "finish"):
         if not entity_id:
             return {"error": "entity_id required"}
+        # The timer.* services silently no-op on an unknown entity (the service
+        # itself exists, so no exception is raised), which would otherwise be
+        # reported as success. Verify the timer exists first so the result is
+        # honest.
+        if hass.states.get(entity_id) is None:
+            return {"error": f"Timer '{entity_id}' not found "
+                             "(create it and reload(target='timer') first)"}
         svc_data: dict[str, Any] = {"entity_id": entity_id}
         if action == "start" and duration:
             svc_data["duration"] = duration

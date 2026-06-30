@@ -541,6 +541,21 @@ async def main():
           "get_statistics resolves to the statistic_ids contract (no dup shadow)",
           params)
 
+    # 44) manage_timer start/pause/cancel/finish must not falsely report success
+    #     for a missing timer. The timer.* services silently no-op on an unknown
+    #     entity (the service exists, so no exception), so the tool has to verify
+    #     existence itself (live-practice defect; same honesty class as
+    #     trigger_automation). A ghost id errors; a present one succeeds.
+    g = await dispatch(hass, store, "manage_timer",
+                       {"action": "start", "entity_id": "timer.ghost_dao"})
+    check("error" in g and "not found" in g["error"],
+          "manage_timer reports missing timer instead of false success", g)
+    hass.states._s["timer.dao_real"] = FS("timer.dao_real", "idle", {})
+    okr = await dispatch(hass, store, "manage_timer",
+                         {"action": "start", "entity_id": "timer.dao_real"})
+    check(okr.get("ok") and okr.get("action") == "start",
+          "manage_timer starts an existing timer", okr)
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 
