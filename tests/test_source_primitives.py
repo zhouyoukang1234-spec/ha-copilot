@@ -1,7 +1,10 @@
-import sys, asyncio, datetime, os
+import asyncio
+import datetime
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "custom_components"))
-from ha_copilot.tools import dispatch
+from ha_copilot.tools import dispatch  # noqa: E402
 
 NOW = datetime.datetime.now(datetime.timezone.utc)
 
@@ -43,7 +46,8 @@ class FH:
         @classmethod
         async def async_call(cls, dom, svc, data=None, blocking=False, **k):
             cls.calls.append((dom, svc, data))
-    bus = FB(); data = {}
+    bus = FB()
+    data = {}
     @staticmethod
     async def async_add_executor_job(fn, *a): return fn(*a)
 
@@ -68,9 +72,11 @@ p = f = 0
 def check(cond, label, detail=""):
     global p, f
     if cond:
-        p += 1; print(f"  [PASS] {label}")
+        p += 1
+        print(f"  [PASS] {label}")
     else:
-        f += 1; print(f"  [FAIL] {label} — {detail}")
+        f += 1
+        print(f"  [FAIL] {label} — {detail}")
 
 
 async def main():
