@@ -1403,47 +1403,6 @@ async def _fire_event(hass: HomeAssistant, event_type: str,
     return {"ok": True, "event_type": event_type, "event_data": event_data or {}}
 
 
-async def _list_persons(hass: HomeAssistant) -> dict[str, Any]:
-    """List person entities and their tracked state/location."""
-    items = []
-    for s in hass.states.async_all("person"):
-        items.append({
-            "entity_id": s.entity_id,
-            "name": s.attributes.get("friendly_name"),
-            "state": s.state,
-            "user_id": s.attributes.get("user_id"),
-            "gps": [s.attributes.get("latitude"), s.attributes.get("longitude")]
-            if s.attributes.get("latitude") is not None else None,
-        })
-    return {"count": len(items), "persons": items}
-
-
-async def _get_logbook(hass: HomeAssistant, hours: int = 24,
-                       entity_id: str | None = None) -> dict[str, Any]:
-    """Humanised event timeline (logbook) over the recent window.
-
-    Wraps the logbook EventProcessor (state changes + logbook entries +
-    automation/script triggers + service calls) executed on the recorder.
-    """
-    from homeassistant.components.logbook.const import (
-        EVENT_AUTOMATION_TRIGGERED,
-        EVENT_LOGBOOK_ENTRY,
-        EVENT_SCRIPT_STARTED,
-    )
-    from homeassistant.components.logbook.processor import EventProcessor
-
-    end = dt_util.utcnow()
-    start = end - timedelta(hours=max(1, min(int(hours), 168)))
-    event_types = (EVENT_LOGBOOK_ENTRY, EVENT_AUTOMATION_TRIGGERED, EVENT_SCRIPT_STARTED)
-    entity_ids = [entity_id] if entity_id else None
-    processor = EventProcessor(hass, event_types, entity_ids=entity_ids,
-                               device_ids=None, context_id=None,
-                               timestamp=False, include_entity_name=True)
-    events = await _recorder_get_instance(hass).async_add_executor_job(
-        processor.get_events, start, end)
-    return {"hours": hours, "count": len(events), "entries": events[-400:]}
-
-
 async def _list_users(hass: HomeAssistant) -> dict[str, Any]:
     """List HA auth users (admin surface): id, name, flags, groups."""
     users = await hass.auth.async_get_users()
@@ -1663,20 +1622,6 @@ async def _list_todo_items(hass: HomeAssistant,
     return {"entity_id": entity_id, "count": len(items), "items": items}
 
 
-async def _add_todo_item(hass: HomeAssistant, entity_id: str | None,
-                         item: str) -> dict[str, Any]:
-    """Add an item to a todo list (defaults to the first todo entity)."""
-    if not entity_id:
-        todos = hass.states.async_entity_ids("todo")
-        if not todos:
-            return {"error": "no todo entities found"}
-        entity_id = sorted(todos)[0]
-    await hass.services.async_call(
-        "todo", "add_item", {"item": item}, target={"entity_id": entity_id},
-        blocking=True)
-    return {"ok": True, "entity_id": entity_id, "item": item}
-
-
 async def _wait_for_event(hass: HomeAssistant, event_type: str,
                           timeout: float = 10.0,
                           entity_id: str | None = None) -> dict[str, Any]:
@@ -1755,43 +1700,6 @@ async def _delete_tag(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
             break
     await coll.async_delete_item(tag_id)
     return {"ok": True, "deleted": tag_id}
-
-
-async def _get_system_health(hass: HomeAssistant) -> dict[str, Any]:
-    """Aggregate the system_health info of all integrations that report it."""
-    # HA 2025.x removed system_health.get_info(); aggregate the registrations
-    # stored at hass.data["system_health"] via get_integration_info() instead.
-    from homeassistant.components.system_health import (
-        DOMAIN as SH_DOMAIN,
-        get_integration_info,
-    )
-
-    def _safe(v: Any) -> Any:
-        if isinstance(v, (str, int, float, bool)) or v is None:
-            return v
-        if isinstance(v, dict):
-            return {k: _safe(x) for k, x in v.items()}
-        if isinstance(v, (list, tuple)):
-            return [_safe(x) for x in v]
-        return str(v)
-
-    registrations = hass.data.get(SH_DOMAIN) or {}
-    health: dict[str, Any] = {}
-    for domain, registration in registrations.items():
-        result = await get_integration_info(hass, registration)
-        raw = result.get("info") or {}
-        resolved: dict[str, Any] = {}
-        for key, value in raw.items():
-            # Some integrations report awaitable values (e.g. reachability
-            # probes); resolve them to concrete values for a one-shot report.
-            if asyncio.iscoroutine(value) or isinstance(value, asyncio.Task):
-                try:
-                    value = await value
-                except Exception as exc:  # noqa: BLE001
-                    value = f"error: {exc}"
-            resolved[key] = _safe(value)
-        health[domain] = resolved
-    return {"count": len(health), "health": health}
 
 
 async def _get_blueprint(hass: HomeAssistant, path: str,
@@ -2035,24 +1943,6 @@ async def _evaluate_condition(hass: HomeAssistant, condition: Any,
     if asyncio.iscoroutine(res):
         res = await res
     return {"result": bool(res), "raw": res}
-
-
-async def _list_zones(hass: HomeAssistant) -> dict[str, Any]:
-    """List zones with geo (lat/long/radius) and the persons currently inside."""
-    items = []
-    for s in sorted(hass.states.async_all("zone"), key=lambda s: s.entity_id):
-        a = s.attributes
-        items.append({
-            "entity_id": s.entity_id,
-            "name": a.get("friendly_name"),
-            "latitude": a.get("latitude"),
-            "longitude": a.get("longitude"),
-            "radius": a.get("radius"),
-            "passive": a.get("passive"),
-            "person_count": int(s.state) if s.state.isdigit() else None,
-            "persons": list(a.get("persons", [])),
-        })
-    return {"count": len(items), "zones": items}
 
 
 async def _get_automation_trace(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
@@ -5923,21 +5813,6 @@ async def _assign_entity_category(
         return {"error": f"Assign entity category failed: {exc}"}
 
 
-async def _increment_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    'Increment a counter helper.'
-    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'increment', 'Increment counter failed: ', 'increment')
-
-
-async def _decrement_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    'Decrement a counter helper.'
-    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'decrement', 'Decrement counter failed: ', 'decrement')
-
-
-async def _reset_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    'Reset a counter helper to its initial value.'
-    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'reset', 'Reset counter failed: ', 'reset')
-
-
 async def _start_timer(
     hass: HomeAssistant, entity_id: str, duration: str | None = None,
 ) -> dict[str, Any]:
@@ -6144,20 +6019,6 @@ async def _get_statistics_metadata(
         return {"ok": True, "count": len(items), "statistics": items}
     except Exception as exc:  # noqa: BLE001
         return {"ok": True, "note": f"Statistics metadata unavailable ({exc})", "statistics": []}
-
-
-async def _clear_statistics(
-    hass: HomeAssistant, statistic_ids: list[str],
-) -> dict[str, Any]:
-    """Clear long-term statistics for given statistic IDs."""
-    try:
-        from homeassistant.components.recorder.statistics import (
-            async_clear_statistics,
-        )
-        await async_clear_statistics(hass, statistic_ids)
-        return {"ok": True, "cleared": statistic_ids}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Clear statistics failed: {exc}"}
 
 
 async def _send_remote_command(

@@ -588,35 +588,24 @@ async def main():
     check(tr.get("resolved_key") == "automation.cfg_xyz" and tr.get("count") == 1,
           "get_automation_trace resolves via state id (no doubled prefix)", tr)
 
-    # 47) Systemic guard against capability-reducing duplicate definitions.
-    #     '为学日益' accumulation left several `async def _x` defined twice; the
-    #     LATER def shadows the earlier one module-wide. When the later def has
-    #     FEWER params than the dispatch passes, the call crashes (live-practice
-    #     defects: _get_statistics ImportError-masked arg mismatch; _purge_recorder
-    #     TypeError on apply_filter). Invariant: for every duplicated name the
-    #     surviving (last) definition's params must be a superset-or-equal of the
-    #     earlier one's — a shadow may extend capability, never reduce it.
+    # 47) Systemic guard: ZERO duplicate `async def` definitions. '为学日益'
+    #     accumulation left ~11 helpers defined twice; the LATER def silently
+    #     shadows the earlier one module-wide. Every crash this session came from
+    #     such a shadow — _get_statistics (arg-mismatch behind a stale eager
+    #     import), _purge_recorder (arity TypeError), _clear_statistics (renamed
+    #     `async_clear_statistics` import). A param-superset check only catches
+    #     the arity subclass; the broken-import shadows are same-arity. The clean
+    #     invariant that forecloses the whole class is: one name, one definition
+    #     (损之又损 — keep the correct one, delete the dead/broken twin).
     import re as _re
     _src = open(toolsmod.__file__, encoding="utf-8").read()
-    _defs: dict[str, list[int]] = {}
+    _defs: dict[str, int] = {}
     for _m in _re.finditer(r"^async def (_\w+)\(", _src, _re.M):
-        _defs.setdefault(_m.group(1), []).append(_m.start())
-    _bad = []
-    for _name, _starts in _defs.items():
-        if len(_starts) < 2:
-            continue
-        _paramsets = []
-        for _s in _starts:
-            _sig = _src[_s:_src.find("-> dict", _s)]
-            _paramsets.append({
-                _pp.split(":")[0].split("=")[0].strip()
-                for _pp in _sig[_sig.find("(") + 1:].split(",")
-                if _pp.strip() and _pp.split(":")[0].strip() != "hass"
-            })
-        if not (_paramsets[0] <= _paramsets[-1]):
-            _bad.append((_name, _paramsets))
-    check(not _bad,
-          "no duplicate definition reduces capability (shadow-crash guard)", _bad)
+        _defs[_m.group(1)] = _defs.get(_m.group(1), 0) + 1
+    _dups = sorted(n for n, c in _defs.items() if c > 1)
+    check(not _dups,
+          "no duplicate async def definitions (shadow-crash class foreclosed)",
+          _dups)
 
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
