@@ -4960,14 +4960,15 @@ async def _test_condition(
     hass: HomeAssistant, condition: dict[str, Any],
 ) -> dict[str, Any]:
     """Test if an automation condition evaluates to true or false."""
+    # Delegate to the proven evaluator (一名一义): it runs the config through
+    # cv.CONDITION_SCHEMA first so template strings become Template objects and
+    # awaits coroutine checkers/results. Calling async_from_config on a raw dict
+    # left templates as plain str → '.async_render_to_info' crash.
     try:
-        from homeassistant.helpers.condition import async_from_config
-
-        test = await async_from_config(hass, condition)
-        result = test(hass)
-        return {"ok": True, "result": result, "condition": condition}
+        res = await _evaluate_condition(hass, condition)
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Condition test failed: {exc}"}
+    return {"ok": True, "result": res["result"], "condition": condition}
 
 
 # ---------------------------------------------------------------------------
