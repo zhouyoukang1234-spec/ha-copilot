@@ -433,6 +433,53 @@ async def main():
     finally:
         _ih.async_get = saved_get
 
+    # 37) trigger_automation guards a missing entity (live-practice: HA's
+    #     automation.trigger silently no-ops on a missing target -> false ok).
+    FH.services.calls.clear()
+    miss = await dispatch(hass, store, "trigger_automation",
+                          {"entity_id": "automation.nope"})
+    hass.states._s["automation.demo"] = FS("automation.demo", "on",
+                                            {"friendly_name": "Demo"})
+    hit = await dispatch(hass, store, "trigger_automation",
+                         {"entity_id": "automation.demo"})
+    check("error" in miss and hit.get("ok")
+          and ("automation", "trigger") in {(d, s) for d, s, _ in FH.services.calls},
+          "trigger_automation errors on missing entity, fires on real one", (miss, hit))
+
+    # 38/39) create_scene normalises scalar states (int/float->str, bool->on/off)
+    #        so one non-string value can't invalidate scenes.yaml; delete_scene
+    #        accepts the 'scene.<id>' entity_id form (live-practice refinements).
+    import yaml as _yaml
+    os.makedirs("/tmp/ha", exist_ok=True)
+    scenes_path = "/tmp/ha/scenes.yaml"
+    with open(scenes_path, "w") as _fp:
+        _fp.write("[]\n")
+
+    class _FakeReg:
+        @staticmethod
+        def async_get(eid): return None
+        @staticmethod
+        def async_remove(eid): pass
+
+    saved_er2 = toolsmod.er
+    toolsmod.er = type("M", (), {"async_get": staticmethod(lambda h: _FakeReg)})
+    try:
+        cr = await dispatch(hass, store, "create_scene",
+                            {"name": "dao_test_scene",
+                             "entities": {"input_number.t": 21, "switch.x": True}})
+        ents = (_yaml.safe_load(open(scenes_path)) or [{}])[0].get("entities", {})
+        check(cr.get("ok") and ents.get("input_number.t") == "21"
+              and ents.get("switch.x") == "on",
+              "create_scene normalises scalar states to scene-valid strings", (cr, ents))
+
+        dl = await dispatch(hass, store, "delete_scene",
+                            {"entity_id": "scene.dao_test_scene"})
+        remaining = _yaml.safe_load(open(scenes_path)) or []
+        check(dl.get("ok") and dl.get("removed") == 1 and remaining == [],
+              "delete_scene accepts 'scene.<id>' entity_id form", (dl, remaining))
+    finally:
+        toolsmod.er = saved_er2
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 

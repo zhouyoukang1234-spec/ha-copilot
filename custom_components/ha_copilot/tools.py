@@ -461,6 +461,19 @@ async def _create_scene(hass: HomeAssistant, name: str, entities: dict) -> dict[
     """Append a scene to scenes.yaml and reload."""
     path = _safe_path(hass, "scenes.yaml")
 
+    # HA's scene schema requires each entity's state to be a string (or a dict
+    # of state+attributes). An agent naturally passes numbers/booleans, and a
+    # single bad value invalidates the whole scenes.yaml — normalise scalars so
+    # one forgiving call can't poison every scene.
+    def _norm(v: Any) -> Any:
+        if isinstance(v, bool):
+            return "on" if v else "off"
+        if isinstance(v, (int, float)):
+            return str(v)
+        return v
+
+    entities = {k: _norm(v) for k, v in (entities or {}).items()}
+
     def _append() -> tuple[int, str]:
         existing: list = []
         if os.path.isfile(path):
@@ -919,8 +932,11 @@ async def _update_script(hass: HomeAssistant, identifier: str, new_alias: str) -
 
 
 async def _delete_scene(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
-    """Remove scene(s) from scenes.yaml by id or name, then reload."""
+    """Remove scene(s) from scenes.yaml by id, name, or 'scene.<id>' entity_id, then reload."""
     path = _safe_path(hass, "scenes.yaml")
+    # Accept the 'scene.<id>' entity_id form too (what list/query hand back),
+    # consistent with _delete_script — match on either the bare id or the slug.
+    key = identifier.split(".", 1)[1] if identifier.startswith("scene.") else identifier
 
     def _remove() -> tuple[int, int, set[str], set[str]]:
         if not os.path.isfile(path):
@@ -932,7 +948,8 @@ async def _delete_scene(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
         before = len(existing)
         gone = [
             s for s in existing
-            if (str(s.get("id")) == str(identifier) or s.get("name") == identifier)
+            if str(s.get("id")) in (str(identifier), str(key))
+            or s.get("name") in (identifier, key)
         ]
         kept = [s for s in existing if s not in gone]
         if len(kept) != before:
@@ -4437,6 +4454,10 @@ async def _trigger_automation(
     hass: HomeAssistant, entity_id: str, skip_condition: bool = False,
 ) -> dict[str, Any]:
     """Manually trigger an automation."""
+    # HA's automation.trigger silently no-ops on a missing entity (only logs a
+    # warning), so verify existence first rather than report a false success.
+    if hass.states.get(entity_id) is None:
+        return {"error": f"Automation '{entity_id}' not found"}
     try:
         await hass.services.async_call(
             "automation", "trigger",
