@@ -3246,6 +3246,25 @@ def _resolve_refs(value: Any, context: dict[str, Any]) -> Any:
     return value
 
 
+async def _exec_one(
+    hass: HomeAssistant,
+    store: dict,
+    sub: Any,
+    sub_args: dict[str, Any],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve ``${...}`` in ``sub_args`` against ``context`` and dispatch ``sub``."""
+    if sub == "run_tools":
+        return {"error": "run_tools cannot be nested"}
+    if not sub or not isinstance(sub, str):
+        return {"error": "missing 'tool' name"}
+    try:
+        resolved = _resolve_refs(sub_args, context)
+    except Exception as exc:  # noqa: BLE001 - surface bad references
+        return {"error": f"reference resolution failed: {exc}"}
+    return await dispatch(hass, store, sub, resolved)
+
+
 async def _run_tools(
     hass: HomeAssistant, store: dict, args: dict[str, Any]
 ) -> dict[str, Any]:
@@ -3267,6 +3286,12 @@ async def _run_tools(
     A whole-string ``${...}`` keeps the referenced object's type (lists/dicts);
     inline ``${...}`` inside text is stringified. Unresolvable references fail
     that single step with a clear error rather than crashing the batch.
+
+    A step may carry ``foreach`` — a list (or a ``${...}`` reference to one).
+    The step's ``tool`` then runs once per element with ``${item}`` (and
+    ``${index}``) bound to that element, fanning a single plan step out over a
+    discovered collection (e.g. act on every entity a prior step listed). The
+    step result is ``{"foreach": true, "count", "errors", "results": [...]}``.
     """
     calls = args.get("calls") or args.get("tools") or args.get("steps")
     if not isinstance(calls, list):
@@ -3286,17 +3311,34 @@ async def _run_tools(
             sub_args = call.get("args")
             if not isinstance(sub_args, dict):
                 sub_args = {}
-            if sub == "run_tools":
-                res = {"error": "run_tools cannot be nested"}
-            elif not sub or not isinstance(sub, str):
-                res = {"error": "missing 'tool' name"}
-            else:
+            if "foreach" in call:
+                spec = call.get("foreach")
                 try:
-                    sub_args = _resolve_refs(sub_args, context)
+                    items = _resolve_refs(spec, context) if isinstance(spec, str) else spec
                 except Exception as exc:  # noqa: BLE001 - surface bad references
-                    res = {"error": f"reference resolution failed: {exc}"}
+                    res = {"error": f"foreach resolution failed: {exc}"}
                 else:
-                    res = await dispatch(hass, store, sub, sub_args)
+                    if not isinstance(items, (list, tuple)):
+                        res = {"error": "'foreach' must be a list or a ${...} reference to one"}
+                    else:
+                        item_results: list[dict[str, Any]] = []
+                        item_errors = 0
+                        for j, item in enumerate(items):
+                            item_ctx = dict(context)
+                            item_ctx["item"] = item
+                            item_ctx["index"] = j
+                            r = await _exec_one(hass, store, sub, sub_args, item_ctx)
+                            if isinstance(r, dict) and "error" in r:
+                                item_errors += 1
+                            item_results.append({"index": j, "item": item, "result": r})
+                        res = {
+                            "foreach": True,
+                            "count": len(item_results),
+                            "errors": item_errors,
+                            "results": item_results,
+                        }
+            else:
+                res = await _exec_one(hass, store, sub, sub_args, context)
         is_err = isinstance(res, dict) and "error" in res
         if is_err:
             errors += 1
@@ -43934,7 +43976,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "run_tools",
-            "description": "Run several tools in one call, in order, to batch a plan (e.g. read a state, act, then read back) without a round-trip per step. 'calls' is a list of {tool, args, save_as?}. Steps compose: any arg value may reference an earlier result with ${...} — ${steps[0].entities[0].entity_id} (Nth result), ${last.state} (previous result), or ${vars.NAME} (a result a prior step bound via save_as). A whole-string ${...} keeps the referenced type; inline ${...} is stringified. Returns each result in order with an error count. Set stop_on_error=true to halt at the first failure. Cannot be nested.",
+            "description": "Run several tools in one call, in order, to batch a plan (e.g. read a state, act, then read back) without a round-trip per step. 'calls' is a list of {tool, args, save_as?, foreach?}. Steps compose: any arg value may reference an earlier result with ${...} — ${steps[0].entities[0].entity_id} (Nth result), ${last.state} (previous result), or ${vars.NAME} (a result a prior step bound via save_as). A whole-string ${...} keeps the referenced type; inline ${...} is stringified. A step with 'foreach' (a list or ${...} reference to one) runs its tool once per element with ${item} and ${index} bound — fanning one step out over a discovered collection. Returns each result in order with an error count. Set stop_on_error=true to halt at the first failure. Cannot be nested.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -43947,6 +43989,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                                 "tool": {"type": "string", "description": "Tool name, e.g. 'call_service'."},
                                 "args": {"type": "object", "description": "Arguments for that tool. Values may contain ${...} references to earlier results."},
                                 "save_as": {"type": "string", "description": "Bind this step's result to a name, referenceable later as ${vars.NAME}."},
+                                "foreach": {"description": "A list (or ${...} reference to one) to map this step's tool over; each element is bound as ${item} (and its position as ${index})."},
                             },
                             "required": ["tool"],
                         },

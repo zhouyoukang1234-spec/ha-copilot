@@ -234,6 +234,19 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
 
 整串 `${...}` 保留被引用对象的原类型（列表/字典）；文本内联 `${...}` 转为字符串。引用失败只让该步优雅报错、不拖垮整批（除非 `stop_on_error`）。
 
+某一步还可带 `foreach`（一个列表，或指向列表的 `${...}` 引用）：该步的 `tool` 会**对每个元素各执行一次**，元素以 `${item}`、其序号以 `${index}` 注入——把"先发现集合、再逐个操作"收敛成单步扇出（如对上一步列出的每个实体执行操作）。每个元素的错误相互隔离，步骤结果为 `{"foreach": true, "count", "errors", "results": [...]}`。
+
+```bash
+# 列出所有灯 → 单步 foreach 逐个关灯（引用 ${item.entity_id}）
+curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"tool":"run_tools","args":{"calls":[
+        {"tool":"list_states","args":{"domain":"light"},"save_as":"L"},
+        {"tool":"call_service","foreach":"${vars.L.entities}",
+          "args":{"domain":"light","service":"turn_off","data":{"entity_id":"${item.entity_id}"}}}
+      ]}}' \
+  http://<HA>/api/ha_copilot/run_tool
+```
+
 ```bash
 # 读客厅灯状态 → 引用其 entity_id 开灯 → 回读状态，一次请求内完成
 curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
