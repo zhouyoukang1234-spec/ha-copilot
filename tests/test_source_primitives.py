@@ -588,7 +588,22 @@ async def main():
     check(tr.get("resolved_key") == "automation.cfg_xyz" and tr.get("count") == 1,
           "get_automation_trace resolves via state id (no doubled prefix)", tr)
 
-    # 47) Systemic guard: ZERO duplicate `async def` definitions. '为学日益'
+    # 47) Honesty pass: entity-targeting collapsed wrappers (counter/timer/todo/
+    #     lock/cover/... — 99+ tools sharing _dao_collapsed2_* cores) must not
+    #     falsely report ok on a nonexistent entity. The targeted service exists,
+    #     so HA silently no-ops with no exception (same false-success class as
+    #     manage_timer). The shared guard _dao_missing_entity errors instead.
+    miss = await dispatch(hass, store, "increment_counter",
+                          {"entity_id": "counter.ghost_dao"})
+    check("error" in miss and "not found" in miss["error"],
+          "increment_counter errors on missing entity (no false success)", miss)
+    hass.states._s["counter.dao_real"] = FS("counter.dao_real", "3", {})
+    okc = await dispatch(hass, store, "increment_counter",
+                         {"entity_id": "counter.dao_real"})
+    check(okc.get("ok") and okc.get("action") == "incremented",
+          "increment_counter succeeds on an existing counter", okc)
+
+    # 48) Systemic guard: ZERO duplicate `async def` definitions. '为学日益'
     #     accumulation left ~11 helpers defined twice; the LATER def silently
     #     shadows the earlier one module-wide. Every crash this session came from
     #     such a shadow — _get_statistics (arg-mismatch behind a stale eager

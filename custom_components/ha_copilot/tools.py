@@ -15866,8 +15866,21 @@ async def _dao_collapsed_71(hass, __slot0__):
 
 # === 為道日損 round2 · collapsed multi-arg duplicate-wrapper helpers (generated; each subsumes a class differing only in constants) ===
 
+def _dao_missing_entity(hass, entity_id):
+    """Honesty guard for entity-targeting wrappers. The targeted service exists,
+    so HA raises no exception on an unknown entity_id — it silently no-ops, which
+    these wrappers would otherwise report as success (same false-success class as
+    manage_timer / trigger_automation). Return an error dict when the entity has
+    no state so the result stays honest; else None."""
+    if isinstance(entity_id, str) and hass.states.get(entity_id) is None:
+        return {'error': f"entity '{entity_id}' not found"}
+    return None
+
+
 async def _dao_collapsed2_0(hass, entity_id, preset_mode, __slot0__, __slot1__):
     """Derived primitive: shared body of 4 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, 'set_preset_mode', {'entity_id': entity_id, 'preset_mode': preset_mode}, blocking=True)
     except Exception as exc:
@@ -15877,6 +15890,8 @@ async def _dao_collapsed2_0(hass, entity_id, preset_mode, __slot0__, __slot1__):
 
 async def _dao_collapsed2_1(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__):
     """Derived primitive: shared body of 99 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id}, blocking=True)
     except Exception as exc:
@@ -15886,6 +15901,8 @@ async def _dao_collapsed2_1(hass, entity_id, __slot0__, __slot1__, __slot2__, __
 
 async def _dao_collapsed2_2(hass, entity_id, code, __slot0__, __slot1__, __slot2__, __slot3__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         svc_data: dict[str, Any] = {'entity_id': entity_id}
         if code:
@@ -15898,6 +15915,8 @@ async def _dao_collapsed2_2(hass, entity_id, code, __slot0__, __slot1__, __slot2
 
 async def _dao_collapsed2_3(hass, entity_id, temperature, __slot0__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call('water_heater', 'set_temperature', {'entity_id': entity_id, 'temperature': temperature}, blocking=True)
     except Exception as exc:
@@ -15907,6 +15926,8 @@ async def _dao_collapsed2_3(hass, entity_id, temperature, __slot0__):
 
 async def _dao_collapsed2_4(hass, entity_id, mode, __slot0__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call('humidifier', 'set_mode', {'entity_id': entity_id, 'mode': mode}, blocking=True)
     except Exception as exc:
@@ -15916,6 +15937,8 @@ async def _dao_collapsed2_4(hass, entity_id, mode, __slot0__):
 
 async def _dao_collapsed2_5(hass, entity_id, value, __slot0__, __slot1__, __slot2__):
     """Derived primitive: shared body of 7 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'value': value}, blocking=True)
     except Exception as exc:
@@ -15925,6 +15948,8 @@ async def _dao_collapsed2_5(hass, entity_id, value, __slot0__, __slot1__, __slot
 
 async def _dao_collapsed2_6(hass, entity_id, option, __slot0__, __slot1__):
     """Derived primitive: shared body of 5 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, 'select_option', {'entity_id': entity_id, 'option': option}, blocking=True)
     except Exception as exc:
@@ -15934,6 +15959,8 @@ async def _dao_collapsed2_6(hass, entity_id, option, __slot0__, __slot1__):
 
 async def _dao_collapsed2_7(hass, entity_id, item, due_date, description, __slot0__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     data: dict[str, Any] = {'entity_id': entity_id, 'item': item}
     if due_date:
         data['due_date'] = due_date
@@ -15948,6 +15975,8 @@ async def _dao_collapsed2_7(hass, entity_id, item, due_date, description, __slot
 
 async def _dao_collapsed2_8(hass, entity_id, date, __slot0__, __slot1__, __slot2__):
     """Derived primitive: shared body of 3 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'date': date}, blocking=True)
     except Exception as exc:
@@ -15957,6 +15986,8 @@ async def _dao_collapsed2_8(hass, entity_id, date, __slot0__, __slot1__, __slot2
 
 async def _dao_collapsed2_9(hass, entity_id, time, __slot0__, __slot1__, __slot2__):
     """Derived primitive: shared body of 3 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'time': time}, blocking=True)
     except Exception as exc:
@@ -15966,6 +15997,8 @@ async def _dao_collapsed2_9(hass, entity_id, time, __slot0__, __slot1__, __slot2
 
 async def _dao_collapsed2_10(hass, entity_id, value, __slot0__, __slot1__, __slot2__, __slot3__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'value': float(value)}, blocking=True)
     except Exception as exc:
@@ -15984,6 +16017,8 @@ async def _dao_collapsed2_11(hass, notification_id, __slot0__):
 
 async def _dao_collapsed2_12(hass, entity_id, variables, __slot0__, __slot1__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     data: dict[str, Any] = {'entity_id': entity_id}
     if variables:
         data['variables'] = variables
@@ -15996,6 +16031,8 @@ async def _dao_collapsed2_12(hass, entity_id, variables, __slot0__, __slot1__):
 
 async def _dao_collapsed2_13(hass, entity_id, value, __slot0__, __slot1__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, 'set_value', {'entity_id': entity_id, 'value': float(value)}, blocking=True)
     except Exception as exc:
@@ -16005,6 +16042,8 @@ async def _dao_collapsed2_13(hass, entity_id, value, __slot0__, __slot1__):
 
 async def _dao_collapsed2_14(hass, entity_id, position, __slot0__, __slot1__, __slot2__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'position': position}, blocking=True)
     except Exception as exc:
@@ -16014,6 +16053,8 @@ async def _dao_collapsed2_14(hass, entity_id, position, __slot0__, __slot1__, __
 
 async def _dao_collapsed2_15(hass, entity_id, datetime_val, __slot0__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call('datetime', 'set_value', {'entity_id': entity_id, 'datetime': datetime_val}, blocking=True)
     except Exception as exc:
@@ -16023,6 +16064,8 @@ async def _dao_collapsed2_15(hass, entity_id, datetime_val, __slot0__):
 
 async def _dao_collapsed2_16(hass, entity_id, humidity, __slot0__, __slot1__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, 'set_humidity', {'entity_id': entity_id, 'humidity': humidity}, blocking=True)
     except Exception as exc:
@@ -16032,6 +16075,8 @@ async def _dao_collapsed2_16(hass, entity_id, humidity, __slot0__, __slot1__):
 
 async def _dao_collapsed2_17(hass, entity_id, code, __slot0__, __slot1__, __slot2__, __slot3__):
     """Derived primitive: shared body of 12 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     data: dict[str, Any] = {'entity_id': entity_id}
     if code:
         data['code'] = code
@@ -16044,6 +16089,8 @@ async def _dao_collapsed2_17(hass, entity_id, code, __slot0__, __slot1__, __slot
 
 async def _dao_collapsed2_18(hass, entity_id, cycle, __slot0__, __slot1__, __slot2__, __slot3__):
     """Derived primitive: shared body of 4 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'cycle': cycle}, blocking=True)
     except Exception as exc:
@@ -16080,6 +16127,8 @@ async def _dao_collapsed2_20(hass, slug, __slot0__, __slot1__, __slot2__):
 
 async def _dao_collapsed2_21(hass, entity_id, seek_position):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call('media_player', 'media_seek', {'entity_id': entity_id, 'seek_position': seek_position}, blocking=True)
     except Exception as exc:
@@ -16120,6 +16169,8 @@ async def _dao_collapsed2_24(hass, slug, __slot0__, __slot1__, __slot2__):
 
 async def _dao_collapsed2_25(hass, entity_id, percentage_step, __slot0__, __slot1__, __slot2__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     data: dict[str, Any] = {'entity_id': entity_id}
     if percentage_step is not None:
         data['percentage_step'] = percentage_step
@@ -16178,6 +16229,8 @@ async def _dao_collapsed2_29(hass, entity_values, __slot0__):
 
 async def _dao_collapsed2_30(hass, entity_id, __slot0__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     state = hass.states.get(entity_id)
     if state is None:
         return {'error': f"{__slot0__}{entity_id}' not found"}
@@ -16187,6 +16240,8 @@ async def _dao_collapsed2_30(hass, entity_id, __slot0__):
 
 async def _dao_collapsed2_31(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__):
     """Derived primitive: shared body of 4 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     state = hass.states.get(entity_id)
     if state is None:
         return {'error': f"{__slot0__}{entity_id}' not found"}
@@ -16196,6 +16251,8 @@ async def _dao_collapsed2_31(hass, entity_id, __slot0__, __slot1__, __slot2__, _
 
 async def _dao_collapsed2_32(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__):
     """Derived primitive: shared body of 5 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     state = hass.states.get(entity_id)
     if state is None:
         return {'error': f"{__slot0__}{entity_id}' not found"}
@@ -16222,6 +16279,8 @@ async def _dao_collapsed2_33(hass, area_id, __slot0__):
 
 async def _dao_collapsed2_34(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__, __slot10__, __slot11__, __slot12__, __slot13__, __slot14__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     state = hass.states.get(entity_id)
     if state is None:
         return {'error': f"{__slot0__}{entity_id}' not found"}
@@ -16231,6 +16290,8 @@ async def _dao_collapsed2_34(hass, entity_id, __slot0__, __slot1__, __slot2__, _
 
 async def _dao_collapsed2_35(hass, entity_id, __slot0__, __slot1__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     state = hass.states.get(entity_id)
     if state is None:
         return {'error': f"{__slot0__}{entity_id}' not found"}
@@ -16239,6 +16300,8 @@ async def _dao_collapsed2_35(hass, entity_id, __slot0__, __slot1__):
 
 async def _dao_collapsed2_36(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     state = hass.states.get(entity_id)
     if state is None:
         return {'error': f"{__slot0__}{entity_id}' not found"}
@@ -16248,6 +16311,8 @@ async def _dao_collapsed2_36(hass, entity_id, __slot0__, __slot1__, __slot2__, _
 
 async def _dao_collapsed2_37(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     state = hass.states.get(entity_id)
     if state is None:
         return {'error': f"Weather '{entity_id}' not found"}
@@ -16258,6 +16323,8 @@ async def _dao_collapsed2_37(hass, entity_id, __slot0__, __slot1__, __slot2__, _
 
 async def _dao_collapsed2_38(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
     """Derived primitive: shared body of 4 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     try:
         await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id})
         return {'ok': True, 'entity_id': entity_id, __slot2__: __slot3__}
@@ -16267,6 +16334,8 @@ async def _dao_collapsed2_38(hass, entity_id, __slot0__, __slot1__, __slot2__, _
 
 async def _dao_collapsed2_39(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__, __slot10__, __slot11__, __slot12__):
     """Derived primitive: shared body of 2 collapsed wrappers."""
+    if (_miss := _dao_missing_entity(hass, entity_id)) is not None:
+        return _miss
     state = hass.states.get(entity_id)
     if state is None:
         return {'error': f"{__slot0__}{entity_id}' not found"}
