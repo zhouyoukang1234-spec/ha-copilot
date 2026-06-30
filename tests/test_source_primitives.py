@@ -492,6 +492,13 @@ async def main():
           and a.get("ok") and a["count"] == 1,
           "entity_id narrows query/aggregate to exactly that entity", (q, a))
 
+    # 41) describe_entity resolves through the shared selection core: a bare
+    #     domain (no entity_id/name) narrows to that domain rather than falling
+    #     through to the first entity of everything (live-practice defect).
+    r = await dispatch(hass, store, "describe_entity", {"domain": "switch"})
+    check(r.get("ok") and r["domain"] == "switch",
+          "describe_entity honors domain when no entity_id/name given", r)
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 

@@ -15228,22 +15228,31 @@ async def _describe_entity(
     hass: HomeAssistant,
     entity_id: Any = None,
     name_contains: Any = None,
+    domain: Any = None,
+    device_class: Any = None,
 ) -> dict[str, Any]:
     """Universal deep observation of one entity — the 觀 at full depth.
 
     Where query_entities surveys breadth (many entities, shallow), this dives
     into one: live state + every attribute, plus its entity-registry entry,
     owning device, area, and the sibling entities on the same device. Resolve by
-    exact ``entity_id`` or, failing that, by ``name_contains`` (first match via
-    the shared selection core). Read-only. One术 subsumes the many bespoke
-    ``*_detail`` / ``*_info`` inspectors.
+    exact ``entity_id`` or, failing that, through the shared selection core
+    (``name_contains`` / ``domain`` / ``device_class``, first match). Read-only.
+    One术 subsumes the many bespoke ``*_detail`` / ``*_info`` inspectors.
     """
     eid = entity_id if isinstance(entity_id, str) and entity_id else None
     st = hass.states.get(eid) if eid else None
     if st is None:
-        matched = _select_entities(hass, name_contains=(name_contains or entity_id))
+        # Resolve via the same selection core as the other primitives so that a
+        # caller-supplied domain/device_class narrows the match rather than
+        # being silently ignored (which let any filter fall through to "first
+        # entity of everything").
+        matched = _select_entities(
+            hass, name_contains=(name_contains or entity_id),
+            domain=domain, device_class=device_class,
+        )
         if not matched:
-            return {"error": f"no entity matched '{entity_id or name_contains}'"}
+            return {"error": f"no entity matched '{entity_id or name_contains or domain}'"}
         st = matched[0]
         eid = st.entity_id
 
@@ -16599,6 +16608,8 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                     or args.get("name")
                     or args.get("keywords")
                 ),
+                domain=args.get("domain"),
+                device_class=args.get("device_class"),
             )
         if name == "control_entities":
             if not store.get(CONF_ALLOW_WRITE, True) and not args.get("dry_run"):
