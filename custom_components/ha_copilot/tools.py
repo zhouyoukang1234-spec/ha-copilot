@@ -11,6 +11,7 @@ import asyncio
 import functools
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -3182,6 +3183,69 @@ async def _manage_hacs(
     return {"error": f"unknown action '{action}' — use list/install/download/remove"}
 
 
+_REF_WHOLE = re.compile(r"^\$\{([^}]+)\}$")
+_REF_INLINE = re.compile(r"\$\{([^}]+)\}")
+_REF_TOKEN = re.compile(
+    r"""[A-Za-z_][A-Za-z0-9_]*       # leading / dotted identifier
+        |\[\s*"([^"]*)"\s*\]          # ["key"]
+        |\[\s*'([^']*)'\s*\]          # ['key']
+        |\[\s*(-?\d+)\s*\]            # [0] / [-1]
+        |\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*\]  # [key]
+        |\.([A-Za-z_][A-Za-z0-9_]*)   # .key
+    """,
+    re.VERBOSE,
+)
+
+
+def _ref_tokens(expr: str) -> list[str]:
+    """Tokenize a reference path like ``steps[0].entities[2].entity_id``."""
+    toks: list[str] = []
+    for m in _REF_TOKEN.finditer(expr.strip()):
+        groups = [g for g in m.groups() if g is not None]
+        toks.append(groups[0] if groups else m.group(0).lstrip("."))
+    return toks
+
+
+def _resolve_one(context: dict[str, Any], expr: str) -> Any:
+    """Navigate ``context`` along a dotted/indexed reference path."""
+    cur: Any = context
+    for tok in _ref_tokens(expr):
+        if isinstance(cur, (list, tuple)):
+            cur = cur[int(tok)]
+        elif isinstance(cur, dict):
+            if tok in cur:
+                cur = cur[tok]
+            elif tok.lstrip("-").isdigit() and int(tok) in cur:
+                cur = cur[int(tok)]
+            else:
+                raise KeyError(tok)
+        else:
+            raise KeyError(tok)
+    return cur
+
+
+def _resolve_refs(value: Any, context: dict[str, Any]) -> Any:
+    """Recursively resolve ``${...}`` references in a value against ``context``.
+
+    A whole-string ``${expr}`` is replaced by the referenced object (type
+    preserved); inline ``${expr}`` inside a larger string is stringified.
+    """
+    if isinstance(value, str):
+        whole = _REF_WHOLE.match(value.strip())
+        if whole:
+            return _resolve_one(context, whole.group(1))
+        if "${" in value:
+            return _REF_INLINE.sub(
+                lambda m: str(_resolve_one(context, m.group(1))), value
+            )
+        return value
+    if isinstance(value, list):
+        return [_resolve_refs(v, context) for v in value]
+    if isinstance(value, dict):
+        return {k: _resolve_refs(v, context) for k, v in value.items()}
+    return value
+
+
 async def _run_tools(
     hass: HomeAssistant, store: dict, args: dict[str, Any]
 ) -> dict[str, Any]:
@@ -3192,19 +3256,33 @@ async def _run_tools(
     ``{"tool": <name>, "args": {...}}``; results are returned in order. With
     ``stop_on_error`` the batch halts at the first failing call. ``run_tools``
     cannot be nested (guarded) so a batch can never recurse into itself.
+
+    Steps compose via ``${...}`` references so a later step can consume an
+    earlier result without a round-trip — the heart of tool composition:
+
+    * ``${steps[0].entities[0].entity_id}`` — value from the Nth result.
+    * ``${last.state}`` — value from the immediately preceding result.
+    * ``${vars.lamp}`` — value a prior step bound via its ``save_as`` field.
+
+    A whole-string ``${...}`` keeps the referenced object's type (lists/dicts);
+    inline ``${...}`` inside text is stringified. Unresolvable references fail
+    that single step with a clear error rather than crashing the batch.
     """
     calls = args.get("calls") or args.get("tools") or args.get("steps")
     if not isinstance(calls, list):
         return {"error": "'calls' must be a list of {tool, args} objects"}
     stop_on_error = bool(args.get("stop_on_error", False))
     results: list[dict[str, Any]] = []
+    context: dict[str, Any] = {"steps": [], "vars": {}, "last": None}
     errors = 0
     for i, call in enumerate(calls):
+        save_as = None
         if not isinstance(call, dict):
             res: dict[str, Any] = {"error": "each call must be an object {tool, args}"}
             sub = None
         else:
             sub = call.get("tool")
+            save_as = call.get("save_as")
             sub_args = call.get("args")
             if not isinstance(sub_args, dict):
                 sub_args = {}
@@ -3213,11 +3291,20 @@ async def _run_tools(
             elif not sub or not isinstance(sub, str):
                 res = {"error": "missing 'tool' name"}
             else:
-                res = await dispatch(hass, store, sub, sub_args)
+                try:
+                    sub_args = _resolve_refs(sub_args, context)
+                except Exception as exc:  # noqa: BLE001 - surface bad references
+                    res = {"error": f"reference resolution failed: {exc}"}
+                else:
+                    res = await dispatch(hass, store, sub, sub_args)
         is_err = isinstance(res, dict) and "error" in res
         if is_err:
             errors += 1
         results.append({"index": i, "tool": sub, "result": res})
+        context["steps"].append(res)
+        context["last"] = res
+        if save_as and isinstance(save_as, str):
+            context["vars"][save_as] = res
         if is_err and stop_on_error:
             break
     return {
@@ -43847,7 +43934,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "run_tools",
-            "description": "Run several tools in one call, in order, to batch a plan (e.g. read a state, act, then read back) without a round-trip per step. 'calls' is a list of {tool, args}. Returns each result in order with an error count. Set stop_on_error=true to halt at the first failure. Cannot be nested.",
+            "description": "Run several tools in one call, in order, to batch a plan (e.g. read a state, act, then read back) without a round-trip per step. 'calls' is a list of {tool, args, save_as?}. Steps compose: any arg value may reference an earlier result with ${...} — ${steps[0].entities[0].entity_id} (Nth result), ${last.state} (previous result), or ${vars.NAME} (a result a prior step bound via save_as). A whole-string ${...} keeps the referenced type; inline ${...} is stringified. Returns each result in order with an error count. Set stop_on_error=true to halt at the first failure. Cannot be nested.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -43858,7 +43945,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "type": "object",
                             "properties": {
                                 "tool": {"type": "string", "description": "Tool name, e.g. 'call_service'."},
-                                "args": {"type": "object", "description": "Arguments for that tool."},
+                                "args": {"type": "object", "description": "Arguments for that tool. Values may contain ${...} references to earlier results."},
+                                "save_as": {"type": "string", "description": "Bind this step's result to a name, referenceable later as ${vars.NAME}."},
                             },
                             "required": ["tool"],
                         },
