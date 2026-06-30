@@ -2585,6 +2585,15 @@ async def _get_conversation_agents(hass: HomeAssistant) -> dict[str, Any]:
     }
 
 
+def _ha_version_str() -> str:
+    """Return the running HA version.
+
+    hass.config.version was removed; the version lives in homeassistant.const.
+    """
+    from homeassistant.const import __version__
+    return __version__
+
+
 async def _purge_recorder(hass: HomeAssistant, keep_days: int = 10,
                           repack: bool = False, apply_filter: bool = False) -> dict[str, Any]:
     """Trigger a recorder purge (recorder.purge service): drop history/state
@@ -11885,11 +11894,13 @@ async def _device_automation_list_triggers(
     """List device automation triggers."""
     try:
         from homeassistant.components.device_automation import (
+            DeviceAutomationType,
             async_get_device_automations,
         )
-        triggers = await async_get_device_automations(
-            hass, "trigger", [device_id],
+        result = await async_get_device_automations(
+            hass, DeviceAutomationType.TRIGGER, [device_id],
         )
+        triggers = [dict(t) for t in (result.get(device_id, []) if result else [])]
         return {"ok": True, "device_id": device_id, "triggers": triggers}
     except ImportError:
         return {"error": "device_automation not available"}
@@ -11903,11 +11914,13 @@ async def _device_automation_list_conditions(
     """List device automation conditions."""
     try:
         from homeassistant.components.device_automation import (
+            DeviceAutomationType,
             async_get_device_automations,
         )
-        conditions = await async_get_device_automations(
-            hass, "condition", [device_id],
+        result = await async_get_device_automations(
+            hass, DeviceAutomationType.CONDITION, [device_id],
         )
+        conditions = [dict(c) for c in (result.get(device_id, []) if result else [])]
         return {"ok": True, "device_id": device_id, "conditions": conditions}
     except ImportError:
         return {"error": "device_automation not available"}
@@ -11921,11 +11934,13 @@ async def _device_automation_list_actions(
     """List device automation actions."""
     try:
         from homeassistant.components.device_automation import (
+            DeviceAutomationType,
             async_get_device_automations,
         )
-        actions = await async_get_device_automations(
-            hass, "action", [device_id],
+        result = await async_get_device_automations(
+            hass, DeviceAutomationType.ACTION, [device_id],
         )
+        actions = [dict(a) for a in (result.get(device_id, []) if result else [])]
         return {"ok": True, "device_id": device_id, "actions": actions}
     except ImportError:
         return {"error": "device_automation not available"}
@@ -13781,7 +13796,7 @@ async def _get_os_info(hass: HomeAssistant) -> dict[str, Any]:
     import platform
 
     info: dict[str, Any] = {
-        "ha_version": hass.config.version if hasattr(hass.config, "version") else "unknown",
+        "ha_version": _ha_version_str(),
         "python_version": platform.python_version(),
         "os": platform.system(),
         "os_release": platform.release(),
@@ -26050,7 +26065,7 @@ async def _system_ha_version(hass: HomeAssistant) -> dict[str, Any]:
     """Get Home Assistant version info."""
     return {
         "ok": True,
-        "version": hass.config.version,
+        "version": _ha_version_str(),
         "config_dir": hass.config.config_dir,
         "legacy_templates": getattr(hass.config, "legacy_templates", False),
     }
@@ -28733,7 +28748,7 @@ async def _system_config_summary(hass: HomeAssistant) -> dict[str, Any]:
         domains.add(s.entity_id.split(".")[0])
     return {
         "ok": True,
-        "version": config.version,
+        "version": _ha_version_str(),
         "config_dir": config.config_dir,
         "total_entities": len(all_entities),
         "total_domains": len(domains),
@@ -28954,7 +28969,7 @@ async def _api_status(hass: HomeAssistant) -> dict[str, Any]:
     entries = hass.config_entries.async_entries()
     return {
         "ok": True,
-        "version": config.version,
+        "version": _ha_version_str(),
         "config_dir": config.config_dir,
         "total_entities": len(all_entities),
         "integrations_loaded": len(entries),
@@ -29795,7 +29810,7 @@ async def _config_get_core_state(hass: HomeAssistant) -> dict[str, Any]:
     config = hass.config
     return {
         "ok": True,
-        "version": config.version,
+        "version": _ha_version_str(),
         "config_dir": config.config_dir,
         "latitude": getattr(config, "latitude", None),
         "longitude": getattr(config, "longitude", None),
@@ -34111,7 +34126,7 @@ async def _system_uptime_report(hass: HomeAssistant) -> dict[str, Any]:
                 "friendly_name": s.attributes.get("friendly_name"),
             })
     return {"ok": True, "count": len(uptime_sensors), "sensors": uptime_sensors,
-            "ha_version": hass.config.version}
+            "ha_version": _ha_version_str()}
 
 
 async def _system_load_average(hass: HomeAssistant) -> dict[str, Any]:
@@ -39632,7 +39647,7 @@ async def _ha_log_error_count(hass: HomeAssistant) -> dict[str, Any]:
 
 async def _ha_startup_time_check(hass: HomeAssistant) -> dict[str, Any]:
     """Check HA startup time."""
-    return {"ok": True, "version": hass.config.version,
+    return {"ok": True, "version": _ha_version_str(),
             "config_dir": hass.config.config_dir}
 
 
@@ -39717,7 +39732,7 @@ async def _ha_core_analytics(hass: HomeAssistant) -> dict[str, Any]:
         domains[dom] = domains.get(dom, 0) + 1
     top = sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10]
     return {"ok": True, "total_entities": total_entities,
-            "domain_count": len(domains), "version": hass.config.version,
+            "domain_count": len(domains), "version": _ha_version_str(),
             "top_domains": [{"domain": d, "count": c} for d, c in top]}
 
 
