@@ -4140,37 +4140,41 @@ async def _manage_tag(
     name: str | None = None,
 ) -> dict[str, Any]:
     """Manage NFC/RFID tags: list, create, remove."""
-    from homeassistant.helpers import tag as tag_helper
+    # Tags live in a TagStorageCollection at hass.data[TAG_DATA]; the old
+    # homeassistant.helpers.tag module was removed (ImportError on import).
+    from homeassistant.components.tag import TAG_DATA
+    coll = hass.data.get(TAG_DATA)
 
     if action == "list":
-        try:
-            tags = tag_helper.async_get_tags(hass) if hasattr(tag_helper, "async_get_tags") else {}
-        except Exception:  # noqa: BLE001
-            tags = hass.data.get("tag", {})
-        if not tags:
+        if coll is None:
             return {"ok": True, "count": 0, "tags": [],
                     "hint": "No tags registered. Scan a tag with your phone to register it."}
-        tag_list = []
-        if isinstance(tags, dict):
-            for tid, info in tags.items():
-                tag_list.append({
-                    "tag_id": tid,
-                    "name": info.get("name", "") if isinstance(info, dict) else str(info),
-                })
+        items = coll.async_items()
+        tag_list = [
+            {"tag_id": it.get("id", ""), "name": it.get("name", "")}
+            for it in items
+        ]
         return {"ok": True, "count": len(tag_list), "tags": tag_list}
 
     if action == "create":
+        if coll is None:
+            return {"error": "tag component not loaded"}
+        payload: dict[str, Any] = {"name": name or "New Tag"}
+        if tag_id:
+            payload["id"] = tag_id
         try:
-            result = await tag_helper.async_create_tag(hass, name or "New Tag", tag_id)
+            created = await coll.async_create_item(payload)
         except Exception as exc:  # noqa: BLE001
             return {"error": f"Create tag failed: {exc}"}
-        return {"ok": True, "tag_id": result if isinstance(result, str) else str(result)}
+        return {"ok": True, "tag_id": created.get("id") if isinstance(created, dict) else str(created)}
 
     if action == "remove":
         if not tag_id:
             return {"error": "tag_id required for 'remove'"}
+        if coll is None:
+            return {"error": "tag component not loaded"}
         try:
-            await tag_helper.async_remove_tag(hass, tag_id)
+            await coll.async_delete_item(tag_id)
         except Exception as exc:  # noqa: BLE001
             return {"error": f"Remove tag failed: {exc}"}
         return {"ok": True, "removed": tag_id}
@@ -5230,9 +5234,9 @@ async def _list_calendar_events(
 ) -> dict[str, Any]:
     """List upcoming events from a calendar entity."""
     try:
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         s = start or now.isoformat()
-        e = end or (now + datetime.timedelta(days=7)).isoformat()
+        e = end or (now + timedelta(days=7)).isoformat()
         result = await hass.services.async_call(
             "calendar", "get_events",
             {"entity_id": entity_id, "start_date_time": s, "end_date_time": e},
@@ -5971,8 +5975,8 @@ async def _list_tts_engines(hass: HomeAssistant) -> dict[str, Any]:
 async def _list_conversation_agents(hass: HomeAssistant) -> dict[str, Any]:
     """List all registered conversation agents."""
     try:
-        from homeassistant.components.conversation import async_get_agent_info
-        info = async_get_agent_info(hass)
+        from homeassistant.components.conversation import get_agent_manager
+        info = get_agent_manager(hass).async_get_agent_info()
         items = [{"id": a.id, "name": a.name} for a in info] if info else []
         return {"ok": True, "count": len(items), "agents": items}
     except Exception as exc:  # noqa: BLE001
@@ -6419,12 +6423,14 @@ async def _list_device_actions(
     """List available automation actions for a device."""
     try:
         from homeassistant.components.device_automation import (
+            DeviceAutomationType,
             async_get_device_automations,
         )
-        actions = await async_get_device_automations(
-            hass, "action", device_id,
+        result = await async_get_device_automations(
+            hass, DeviceAutomationType.ACTION, [device_id],
         )
-        items = [dict(a) for a in (actions or [])[:30]]
+        actions = result.get(device_id, []) if result else []
+        items = [dict(a) for a in actions[:30]]
         return {"ok": True, "device_id": device_id, "count": len(items), "actions": items}
     except Exception as exc:  # noqa: BLE001
         return {"ok": True, "device_id": device_id,
@@ -7545,7 +7551,7 @@ async def _energy_get_preferences(hass: HomeAssistant) -> dict[str, Any]:
     try:
         from homeassistant.components.energy import async_get_manager
         manager = await async_get_manager(hass)
-        prefs = manager.data
+        prefs = manager.data or {}
         return {"ok": True, "preferences": {
             "energy_sources": len(prefs.get("energy_sources", [])),
             "device_consumption": len(prefs.get("device_consumption", [])),
@@ -8678,8 +8684,8 @@ async def _energy_get_prefs(hass: HomeAssistant) -> dict[str, Any]:
 async def _conversation_agent_list(hass: HomeAssistant) -> dict[str, Any]:
     """List conversation agents."""
     try:
-        from homeassistant.components.conversation import async_get_agent_info
-        agents = async_get_agent_info(hass)
+        from homeassistant.components.conversation import get_agent_manager
+        agents = get_agent_manager(hass).async_get_agent_info()
         result = [
             {"id": a.id, "name": a.name}
             for a in agents
@@ -10363,12 +10369,19 @@ async def _energy_solar_forecast(hass: HomeAssistant) -> dict[str, Any]:
     try:
         from homeassistant.components.energy import async_get_manager
         manager = await async_get_manager(hass)
-        forecasts = await manager.async_get_solar_forecast()
-        if forecasts is None:
-            return {"ok": True, "forecasts": {}}
-        return {"ok": True, "forecasts": {
-            k: list(v.items())[:20] for k, v in forecasts.items()
-        }}
+        prefs = manager.data or {}
+        # No EnergyManager.async_get_solar_forecast in this HA version; the live
+        # forecast is served per solar source's configured forecast provider.
+        # Report the configured solar sources honestly rather than crash.
+        solar = [
+            s for s in prefs.get("energy_sources", [])
+            if isinstance(s, dict) and s.get("type") == "solar"
+        ]
+        return {"ok": True, "solar_source_count": len(solar),
+                "forecast_providers": [
+                    s.get("config_entry_solar_forecast") for s in solar
+                    if s.get("config_entry_solar_forecast")
+                ]}
     except ImportError:
         return {"error": "energy component not available"}
     except Exception as exc:  # noqa: BLE001
@@ -11365,10 +11378,19 @@ async def _blueprint_list(
 ) -> dict[str, Any]:
     """List blueprints for a domain."""
     try:
-        from homeassistant.components.blueprint.models import DomainBlueprints
-        bps = DomainBlueprints(hass, domain, None, None)
-        blueprints = await bps.async_get_blueprints()
-        return {"ok": True, "domain": domain, "count": len(blueprints)}
+        # Constructing DomainBlueprints directly needs framework callbacks; the
+        # deterministic, side-effect-free truth is the blueprints/<domain>/ dir.
+        import os
+        base = hass.config.path("blueprints", domain)
+        found: list[str] = []
+        if os.path.isdir(base):
+            for root, _dirs, files in os.walk(base):
+                for f in files:
+                    if f.endswith((".yaml", ".yml")):
+                        rel = os.path.relpath(os.path.join(root, f), base)
+                        found.append(rel)
+        return {"ok": True, "domain": domain, "count": len(found),
+                "blueprints": sorted(found)[:100]}
     except ImportError:
         return {"error": "blueprint component not available"}
     except Exception as exc:  # noqa: BLE001
@@ -11791,8 +11813,8 @@ async def _automation_enable(
 async def _conversation_list_agents(hass: HomeAssistant) -> dict[str, Any]:
     """List available conversation agents."""
     try:
-        from homeassistant.components.conversation import async_get_agent_info
-        agents = async_get_agent_info(hass)
+        from homeassistant.components.conversation import get_agent_manager
+        agents = get_agent_manager(hass).async_get_agent_info()
         result = [{"id": a.id, "name": a.name} for a in agents] if agents else []
         return {"ok": True, "agents": result}
     except ImportError:
@@ -12419,7 +12441,7 @@ async def _category_create(
     try:
         from homeassistant.helpers.category_registry import async_get
         registry = async_get(hass)
-        entry = registry.async_create(scope, name)
+        entry = registry.async_create(name=name, scope=scope, icon=icon)
         return {"ok": True, "category_id": entry.category_id, "name": entry.name}
     except ImportError:
         return {"error": "category_registry not available"}
@@ -12434,7 +12456,7 @@ async def _category_delete(
     try:
         from homeassistant.helpers.category_registry import async_get
         registry = async_get(hass)
-        registry.async_delete(scope, category_id)
+        registry.async_delete(scope=scope, category_id=category_id)
         return {"ok": True, "category_id": category_id, "action": "deleted"}
     except ImportError:
         return {"error": "category_registry not available"}
@@ -12451,7 +12473,7 @@ async def _category_list(
         registry = async_get(hass)
         cats = [
             {"id": c.category_id, "name": c.name}
-            for c in registry.async_list_categories(scope)
+            for c in registry.async_list_categories(scope=scope)
         ]
         return {"ok": True, "categories": cats}
     except ImportError:
@@ -12689,10 +12711,11 @@ async def _device_action_execute(
         data["entity_id"] = entity_id
     try:
         from homeassistant.components.device_automation import (
+            DeviceAutomationType,
             async_get_device_automation_platform,
         )
         platform = await async_get_device_automation_platform(
-            hass, domain, "action",
+            hass, domain, DeviceAutomationType.ACTION,
         )
         await platform.async_call_action_from_config(hass, data, {}, None)
     except ImportError:
@@ -12877,26 +12900,23 @@ async def _logbook_get_entries(
     hass: HomeAssistant, entity_id: str | None = None,
     start_time: str | None = None, end_time: str | None = None,
 ) -> dict[str, Any]:
-    """Get logbook entries via the REST API path."""
-    import aiohttp
-    url = "http://localhost:8123/api/logbook"
-    params: dict[str, str] = {}
-    if entity_id:
-        params["entity"] = entity_id
+    """Get logbook entries (in-process; no HTTP self-call).
+
+    The old implementation looped back through http://localhost:8123/api/logbook
+    via aiohttp, which both needs DNS/auth and is wasteful for in-process data.
+    Delegate to the in-process _get_logbook (shared logbook truth); derive an
+    hours window from start_time when provided.
+    """
+    hours = 24
     if start_time:
-        url = f"http://localhost:8123/api/logbook/{start_time}"
-    if end_time:
-        params["end_time"] = end_time
-    try:
-        async with aiohttp.ClientSession() as session, session.get(
-            url, params=params, timeout=aiohttp.ClientTimeout(total=10),
-        ) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                return {"ok": True, "entries": data[:50]}
-            return {"error": f"Logbook HTTP {resp.status}"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Logbook get entries failed: {exc}"}
+        try:
+            st = dt_util.parse_datetime(start_time)
+            if st is not None:
+                now = datetime.now(st.tzinfo or timezone.utc)
+                hours = max(1, int((now - st).total_seconds() // 3600) + 1)
+        except Exception:  # noqa: BLE001
+            hours = 24
+    return await _get_logbook(hass, entity_id=entity_id, hours=hours)
 
 
 # ---------------------------------------------------------------------------
