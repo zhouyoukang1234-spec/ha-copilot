@@ -16452,7 +16452,7 @@ def _tool_tokens(text: str) -> list[str]:
     return [t for t in re.split(r"[^a-z0-9]+", (text or "").lower()) if t]
 
 
-async def _query_entities(
+def _select_entities(
     hass: HomeAssistant,
     domain: Any = None,
     name_contains: Any = None,
@@ -16460,16 +16460,16 @@ async def _query_entities(
     state: Any = None,
     attributes: Any = None,
     match: str = "any",
-    limit: Any = 200,
-) -> dict[str, Any]:
-    """Universal entity query — the one primitive that derives the many.
+) -> list:
+    """Shared selection core — return the state objects matching the criteria.
 
     ``name_contains`` matches a substring against ``entity_id`` OR friendly
     name; ``device_class`` matches the entity's device_class. These two compose
     via ``match`` ("any" = OR, "all" = AND). ``state`` and ``attributes`` are
     always applied as additional AND filters (``attributes`` value ``None``
-    means "key present"). With no filters at all (optionally just ``domain``)
-    it returns every entity in scope.
+    means "key present"). With no filters (optionally just ``domain``) it
+    returns every entity in scope. Both query_entities (觀/陰) and
+    control_entities (動/陽) draw from this one source.
     """
     domains = _as_str_list(domain)
     names = [n.lower() for n in _as_str_list(name_contains)]
@@ -16485,7 +16485,7 @@ async def _query_entities(
     else:
         pool = hass.states.async_all()
 
-    results = []
+    matched = []
     for s in pool:
         friendly = s.attributes.get("friendly_name") or ""
         haystack = f"{s.entity_id} {friendly}".lower()
@@ -16515,21 +16515,124 @@ async def _query_entities(
                     break
             if not attr_ok:
                 continue
-        results.append({
+        matched.append(s)
+
+    matched.sort(key=lambda s: s.entity_id)
+    return matched
+
+
+async def _query_entities(
+    hass: HomeAssistant,
+    domain: Any = None,
+    name_contains: Any = None,
+    device_class: Any = None,
+    state: Any = None,
+    attributes: Any = None,
+    match: str = "any",
+    limit: Any = 200,
+) -> dict[str, Any]:
+    """Universal entity query — the one primitive that derives the many.
+
+    See :func:`_select_entities` for the filter semantics; this wraps it into a
+    serialisable result (entity_id / state / friendly_name / device_class /
+    unit) capped by ``limit``.
+    """
+    matched = _select_entities(
+        hass, domain=domain, name_contains=name_contains, device_class=device_class,
+        state=state, attributes=attributes, match=match,
+    )
+    results = [
+        {
             "entity_id": s.entity_id,
             "state": s.state,
             "friendly_name": s.attributes.get("friendly_name"),
             "device_class": s.attributes.get("device_class"),
             "unit": s.attributes.get("unit_of_measurement"),
-        })
-
-    results.sort(key=lambda r: r["entity_id"])
+        }
+        for s in matched
+    ]
     try:
         lim = int(limit)
     except (TypeError, ValueError):
         lim = 200
     lim = max(1, min(lim, 2000))
     return {"ok": True, "count": len(results), "entities": results[:lim]}
+
+
+async def _control_entities(
+    hass: HomeAssistant,
+    service: str,
+    domain: Any = None,
+    name_contains: Any = None,
+    device_class: Any = None,
+    state: Any = None,
+    attributes: Any = None,
+    match: str = "any",
+    data: Any = None,
+    dry_run: bool = False,
+    limit: Any = 500,
+) -> dict[str, Any]:
+    """Universal action — select by criteria, then act. The 陽 to query's 陰.
+
+    ``service`` may be bare (e.g. ``turn_off``, applied per matched entity's own
+    domain) or qualified (e.g. ``light.turn_on``, applied to all matches).
+    ``dry_run`` previews the targets without acting. Reuses the same selection
+    core as ``query_entities`` so "find then act" is one breath.
+    """
+    svc = str(service or "")
+    if not svc:
+        return {"error": "missing required argument: service"}
+
+    matched = _select_entities(
+        hass, domain=domain, name_contains=name_contains, device_class=device_class,
+        state=state, attributes=attributes, match=match,
+    )
+    try:
+        lim = int(limit)
+    except (TypeError, ValueError):
+        lim = 500
+    lim = max(1, min(lim, 2000))
+    matched = matched[:lim]
+    ids = [s.entity_id for s in matched]
+    targets = [
+        {"entity_id": s.entity_id, "state": s.state,
+         "friendly_name": s.attributes.get("friendly_name")}
+        for s in matched
+    ]
+
+    if dry_run:
+        return {"ok": True, "dry_run": True, "service": svc, "count": len(ids), "targets": targets}
+    if not ids:
+        return {"ok": True, "count": 0, "results": [], "note": "no entities matched"}
+
+    extra = data if isinstance(data, dict) else {}
+    # Group the entities by the service to call (qualified -> single group;
+    # bare -> grouped by each entity's own domain).
+    groups: dict[tuple[str, str], list[str]] = {}
+    if "." in svc:
+        sdom, sname = svc.split(".", 1)
+        groups[(sdom, sname)] = ids
+    else:
+        for eid in ids:
+            groups.setdefault((eid.split(".", 1)[0], svc), []).append(eid)
+
+    results = []
+    for (sdom, sname), gids in sorted(groups.items()):
+        if not hass.services.has_service(sdom, sname):
+            results.append({"service": f"{sdom}.{sname}", "entity_ids": gids,
+                            "error": "service does not exist"})
+            continue
+        try:
+            await hass.services.async_call(
+                sdom, sname, {**extra, "entity_id": gids}, blocking=True,
+            )
+            results.append({"service": f"{sdom}.{sname}", "entity_ids": gids, "ok": True})
+        except Exception as err:  # noqa: BLE001 - surface per-group failure to the agent
+            results.append({"service": f"{sdom}.{sname}", "entity_ids": gids,
+                            "error": f"{type(err).__name__}: {err}"})
+
+    errors = sum(1 for r in results if "error" in r)
+    return {"ok": errors == 0, "count": len(ids), "errors": errors, "results": results}
 
 
 async def _search_tools(hass: HomeAssistant, query: str, limit: Any = 20) -> dict[str, Any]:
@@ -16631,6 +16734,26 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _describe_tool(hass, args.get("name") or args.get("tool") or "")
         if name == "tool_catalog":
             return await _tool_catalog(hass, args.get("prefix"))
+        if name == "control_entities":
+            if not store.get(CONF_ALLOW_WRITE, True) and not args.get("dry_run"):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _control_entities(
+                hass,
+                service=args.get("service") or args.get("action") or "",
+                domain=args.get("domain"),
+                name_contains=(
+                    args.get("name_contains")
+                    or args.get("name")
+                    or args.get("keywords")
+                ),
+                device_class=args.get("device_class"),
+                state=args.get("state"),
+                attributes=args.get("attributes"),
+                match=args.get("match", "any"),
+                data=args.get("data"),
+                dry_run=bool(args.get("dry_run", False)),
+                limit=args.get("limit", 500),
+            )
         if name == "assist":
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -44330,6 +44453,53 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     },
                     "limit": {"type": "integer", "description": "Max entities to return (default 200)."},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "control_entities",
+            "description": (
+                "Universal action — select entities by criteria (same filters as "
+                "query_entities) then call a service on them, in one breath. "
+                "'service' may be bare (e.g. 'turn_off', applied per matched "
+                "entity's own domain) or qualified (e.g. 'light.turn_on'). Set "
+                "'dry_run' true to preview targets without acting. Subsumes many "
+                "fixed bulk-control tools (turn off all lights, set all covers, "
+                "etc.). Respects allow_write (dry_run is always permitted)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service": {"type": "string", "description": "Bare ('turn_off') or qualified ('light.turn_on') service to call."},
+                    "domain": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Domain(s) to scope to. Omit to scan all.",
+                    },
+                    "name_contains": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Substring(s) matched against entity_id or friendly name.",
+                    },
+                    "device_class": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "device_class value(s) to match.",
+                    },
+                    "state": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Only act on entities currently in this state, e.g. 'on'.",
+                    },
+                    "attributes": {"type": "object", "description": "Attribute filters {key: value}; null means 'key present'."},
+                    "match": {"type": "string", "enum": ["any", "all"], "description": "Compose name_contains/device_class with OR (any) or AND (all). Default any."},
+                    "data": {"type": "object", "description": "Extra service data, e.g. {\"brightness_pct\": 40}."},
+                    "dry_run": {"type": "boolean", "description": "Preview matched targets without calling the service."},
+                    "limit": {"type": "integer", "description": "Max entities to act on (default 500)."},
+                },
+                "required": ["service"],
             },
         },
     },
