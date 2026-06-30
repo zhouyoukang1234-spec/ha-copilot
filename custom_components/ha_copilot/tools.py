@@ -30020,22 +30020,65 @@ async def _device_registry_list_all(hass: HomeAssistant) -> dict[str, Any]:
     return {"ok": True, "count": len(results), "devices": results[:200]}
 
 
+def _as_block_list(value: Any) -> list:
+    """Normalise a trigger/condition/action block to a list.
+
+    HA accepts each as either a single mapping or a list of mappings; this
+    collapses both (and ``None``) to a list so callers can count/iterate
+    uniformly.
+    """
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
 async def _automation_describe(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Describe an automation with trigger/condition/action summary."""
+    """Describe an automation with trigger/condition/action summary.
+
+    The trigger/condition/action blocks are not exposed as state attributes by
+    HA, so they are read from the stored config (``automations.yaml``) — the
+    same source the sibling ``automation_check_conditions`` uses — matched by
+    id or alias. Each block may be a single mapping or a list; both are handled.
+    """
     state = hass.states.get(entity_id)
     if state is None:
         return {"error": f"Automation '{entity_id}' not found"}
     attrs = dict(state.attributes)
-    triggers = attrs.get("trigger", [])
-    conditions = attrs.get("condition", [])
-    actions = attrs.get("action", [])
-    trigger_summary = []
-    if isinstance(triggers, list):
-        for tr in triggers:
-            if isinstance(tr, dict):
-                trigger_summary.append(tr.get("platform", tr.get("trigger", "unknown")))
+
+    triggers: list = []
+    conditions: list = []
+    actions: list = []
+    try:
+        path = os.path.join(hass.config.config_dir, "automations.yaml")
+
+        def _read():
+            with open(path, encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+        raw = await hass.async_add_executor_job(_read)
+        auto_id = entity_id.replace("automation.", "")
+        for item in raw if isinstance(raw, list) else []:
+            if isinstance(item, dict) and (
+                item.get("id") == auto_id
+                or attrs.get("id") == item.get("id")
+                or item.get("alias", "").lower().replace(" ", "_") == auto_id
+            ):
+                triggers = _as_block_list(item.get("triggers") or item.get("trigger"))
+                conditions = _as_block_list(
+                    item.get("conditions") or item.get("condition")
+                )
+                actions = _as_block_list(item.get("actions") or item.get("action"))
+                break
+    except Exception:  # noqa: BLE001 - config read is best-effort enrichment
+        pass
+
+    trigger_summary = [
+        tr.get("platform") or tr.get("trigger") or "unknown"
+        for tr in triggers
+        if isinstance(tr, dict)
+    ]
     return {
         "ok": True,
         "entity_id": entity_id,
@@ -30043,10 +30086,10 @@ async def _automation_describe(
         "state": state.state,
         "mode": attrs.get("mode"),
         "last_triggered": str(attrs.get("last_triggered", "")),
-        "trigger_count": len(triggers) if isinstance(triggers, list) else 0,
+        "trigger_count": len(triggers),
         "trigger_types": trigger_summary,
-        "condition_count": len(conditions) if isinstance(conditions, list) else 0,
-        "action_count": len(actions) if isinstance(actions, list) else 0,
+        "condition_count": len(conditions),
+        "action_count": len(actions),
     }
 
 

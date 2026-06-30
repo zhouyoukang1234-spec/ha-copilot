@@ -499,6 +499,37 @@ async def main():
     check(r.get("ok") and r["domain"] == "switch",
           "describe_entity honors domain when no entity_id/name given", r)
 
+    # 42) automation_describe reads triggers from the stored config, not from
+    #     state attributes (HA never exposes trigger/condition/action as attrs),
+    #     and normalises a single-mapping trigger block to a list (live-practice
+    #     defect: every automation reported trigger_count 0 / trigger_types []).
+    os.makedirs("/tmp/ha", exist_ok=True)
+    with open("/tmp/ha/automations.yaml", "w", encoding="utf-8") as fh_:
+        fh_.write(
+            "- id: dao_t1\n"
+            "  alias: Dao T1\n"
+            "  trigger:\n"
+            "    platform: state\n"
+            "    entity_id: input_boolean.fan_switch\n"
+            "    to: 'on'\n"
+            "  condition:\n"
+            "  - condition: state\n"
+            "    entity_id: input_boolean.living_room_lamp\n"
+            "    state: 'on'\n"
+            "  action:\n"
+            "  - service: switch.turn_on\n"
+            "    target:\n"
+            "      entity_id: switch.ac\n"
+        )
+    hass.states._s["automation.dao_t1"] = FS(
+        "automation.dao_t1", "on", {"friendly_name": "Dao T1", "id": "dao_t1"})
+    ad = await dispatch(hass, store, "automation_describe",
+                        {"entity_id": "automation.dao_t1"})
+    check(ad.get("ok") and ad["trigger_count"] == 1
+          and ad["trigger_types"] == ["state"]
+          and ad["condition_count"] == 1 and ad["action_count"] == 1,
+          "automation_describe reads single-mapping trigger from config", ad)
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 
