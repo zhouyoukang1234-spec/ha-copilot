@@ -12181,9 +12181,13 @@ async def _webhook_trigger(
 ) -> dict[str, Any]:
     """Trigger a webhook."""
     import aiohttp
+    from homeassistant.helpers.aiohttp_client import async_get_clientsession
     url = f"http://localhost:8123/api/webhook/{webhook_id}"
     try:
-        async with aiohttp.ClientSession() as session, session.post(
+        # Reuse HA's shared, properly-configured aiohttp session rather than a
+        # raw ClientSession (correct resolver, connection reuse, clean teardown).
+        session = async_get_clientsession(hass)
+        async with session.post(
             url, json=data or {}, timeout=aiohttp.ClientTimeout(total=10),
         ) as resp:
             body = await resp.text()
