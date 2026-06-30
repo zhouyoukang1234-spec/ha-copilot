@@ -530,6 +530,17 @@ async def main():
           and ad["condition_count"] == 1 and ad["action_count"] == 1,
           "automation_describe reads single-mapping trigger from config", ad)
 
+    # 43) get_statistics must honour its declared statistic_ids contract. A
+    #     duplicate _get_statistics definition (entity_id-based) silently
+    #     shadowed the intended one, so the dispatched call bound the wrong
+    #     positional args and crashed (live-practice defect). Guard against the
+    #     duplicate-shadowing class by introspecting the resolved function.
+    import inspect
+    params = list(inspect.signature(toolsmod._get_statistics).parameters)
+    check(params[:2] == ["hass", "statistic_ids"],
+          "get_statistics resolves to the statistic_ids contract (no dup shadow)",
+          params)
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 

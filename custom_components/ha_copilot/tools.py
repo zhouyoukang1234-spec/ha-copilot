@@ -3468,55 +3468,6 @@ async def _assist(
 # ---------------------------------------------------------------------------
 
 
-async def _get_statistics(
-    hass: HomeAssistant,
-    entity_id: str,
-    period: str = "hour",
-    hours: int = 24,
-) -> dict[str, Any]:
-    """Get long-term statistics for an entity (mean/min/max/sum/change).
-
-    Period: '5minute', 'hour', 'day', 'week', 'month'. Goes back ``hours``
-    hours. Works with recorder-tracked entities (energy, temperature, etc.).
-    """
-    from homeassistant.components.recorder.statistics import (
-        async_get_last_statistics,
-        statistics_during_period,
-    )
-
-    start = datetime.now(timezone.utc) - timedelta(hours=hours)
-    try:
-        stats = await hass.async_add_executor_job(
-            lambda: statistics_during_period(
-                hass, start, None, {entity_id}, period, None, {"mean", "min", "max", "sum", "change"},
-            )
-        )
-    except Exception as exc:  # noqa: BLE001
-        try:
-            last = await hass.async_add_executor_job(
-                lambda: async_get_last_statistics(hass, 1, entity_id, True, {"mean", "min", "max", "sum"})
-            )
-            if last and entity_id in last:
-                return {"ok": True, "entity_id": entity_id, "last": last[entity_id]}
-        except Exception:  # noqa: BLE001
-            pass
-        return {"error": f"Statistics not available for {entity_id}: {exc}"}
-
-    if entity_id not in stats or not stats[entity_id]:
-        return {"ok": True, "entity_id": entity_id, "period": period,
-                "data": [], "hint": "No statistics found. Entity may not be tracked by recorder."}
-
-    rows = stats[entity_id]
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "period": period,
-        "hours": hours,
-        "count": len(rows),
-        "data": rows[:100],
-    }
-
-
 async def _get_logbook(
     hass: HomeAssistant,
     entity_id: str | None = None,
