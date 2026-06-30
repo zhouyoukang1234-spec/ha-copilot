@@ -556,6 +556,36 @@ async def main():
     check(okr.get("ok") and okr.get("action") == "start",
           "manage_timer starts an existing timer", okr)
 
+    # 46) Systemic guard against capability-reducing duplicate definitions.
+    #     '为学日益' accumulation left several `async def _x` defined twice; the
+    #     LATER def shadows the earlier one module-wide. When the later def has
+    #     FEWER params than the dispatch passes, the call crashes (live-practice
+    #     defects: _get_statistics ImportError-masked arg mismatch; _purge_recorder
+    #     TypeError on apply_filter). Invariant: for every duplicated name the
+    #     surviving (last) definition's params must be a superset-or-equal of the
+    #     earlier one's — a shadow may extend capability, never reduce it.
+    import re as _re
+    _src = open(toolsmod.__file__, encoding="utf-8").read()
+    _defs: dict[str, list[int]] = {}
+    for _m in _re.finditer(r"^async def (_\w+)\(", _src, _re.M):
+        _defs.setdefault(_m.group(1), []).append(_m.start())
+    _bad = []
+    for _name, _starts in _defs.items():
+        if len(_starts) < 2:
+            continue
+        _paramsets = []
+        for _s in _starts:
+            _sig = _src[_s:_src.find("-> dict", _s)]
+            _paramsets.append({
+                _pp.split(":")[0].split("=")[0].strip()
+                for _pp in _sig[_sig.find("(") + 1:].split(",")
+                if _pp.strip() and _pp.split(":")[0].strip() != "hass"
+            })
+        if not (_paramsets[0] <= _paramsets[-1]):
+            _bad.append((_name, _paramsets))
+    check(not _bad,
+          "no duplicate definition reduces capability (shadow-crash guard)", _bad)
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 

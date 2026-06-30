@@ -4343,25 +4343,6 @@ async def _get_camera_snapshot(
     }
 
 
-async def _purge_recorder(
-    hass: HomeAssistant,
-    keep_days: int = 10,
-    repack: bool = False,
-) -> dict[str, Any]:
-    """Purge old recorder data to free database space."""
-    try:
-        await hass.services.async_call(
-            "recorder", "purge", {
-                "keep_days": keep_days,
-                "repack": repack,
-            }, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Purge failed: {exc}"}
-    return {"ok": True, "keep_days": keep_days, "repack": repack,
-            "hint": "Purge started. Large databases may take several minutes."}
-
-
 async def _manage_schedule(
     hass: HomeAssistant,
     action: str,
