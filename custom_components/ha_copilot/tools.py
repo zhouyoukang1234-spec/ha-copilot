@@ -2070,6 +2070,15 @@ async def _get_automation_trace(hass: HomeAssistant, identifier: str) -> dict[st
         ent = ereg.async_get(identifier)
         if ent and ent.unique_id:
             item_id = ent.unique_id
+        else:
+            # No registry unique_id (common for YAML automations): the trace
+            # store is keyed by the config `id`, exposed as the state attribute
+            # `id`. Fall back to it, else to the bare object_id — never keep the
+            # full entity_id, which would double the prefix into a key that can
+            # never match (automation.automation.<x>).
+            st = hass.states.get(identifier)
+            item_id = (st.attributes.get("id") if st else None) \
+                or identifier[len("automation."):]
     key = f"automation.{item_id}"
     traces = store.get(key)
     if not traces:

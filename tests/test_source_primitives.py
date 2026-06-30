@@ -556,7 +556,39 @@ async def main():
     check(okr.get("ok") and okr.get("action") == "start",
           "manage_timer starts an existing timer", okr)
 
-    # 46) Systemic guard against capability-reducing duplicate definitions.
+    # 46) get_automation_trace must resolve the trace-store key correctly when
+    #     the entity has no registry unique_id (common for YAML automations):
+    #     fall back to the state `id` attribute (the config id the store is keyed
+    #     by), never keep the full entity_id — that doubled the prefix into
+    #     automation.automation.<x>, a key that can never match (live defect).
+    from homeassistant.components.trace import DATA_TRACE
+
+    class _Trace:
+        @staticmethod
+        def as_short_dict(): return {"last_step": "action/0", "state": "stopped"}
+
+    class _NoUidEntry:
+        unique_id = None
+
+    class _NoUidReg:
+        @staticmethod
+        def async_get(eid): return _NoUidEntry
+
+    hass.states._s["automation.yaml_auto"] = FS(
+        "automation.yaml_auto", "on", {"friendly_name": "Yaml Auto", "id": "cfg_xyz"})
+    hass.data[DATA_TRACE] = {"automation.cfg_xyz": {"r1": _Trace()}}
+    saved_er2 = toolsmod.er
+    toolsmod.er = _RegMod(_NoUidReg)
+    try:
+        tr = await dispatch(hass, store, "get_automation_trace",
+                            {"identifier": "automation.yaml_auto"})
+    finally:
+        toolsmod.er = saved_er2
+        hass.data.pop(DATA_TRACE, None)
+    check(tr.get("resolved_key") == "automation.cfg_xyz" and tr.get("count") == 1,
+          "get_automation_trace resolves via state id (no doubled prefix)", tr)
+
+    # 47) Systemic guard against capability-reducing duplicate definitions.
     #     '为学日益' accumulation left several `async def _x` defined twice; the
     #     LATER def shadows the earlier one module-wide. When the later def has
     #     FEWER params than the dispatch passes, the call crashes (live-practice
