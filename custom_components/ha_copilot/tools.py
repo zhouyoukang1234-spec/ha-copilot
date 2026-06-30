@@ -20,6 +20,7 @@ import yaml
 from homeassistant.components.recorder import get_instance as _recorder_get_instance
 from homeassistant.components.recorder import history as _recorder_history
 from homeassistant.components.recorder import statistics as _recorder_statistics
+from homeassistant.const import __version__ as HA_VERSION
 from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers import (
     area_registry as ar,
@@ -1384,21 +1385,6 @@ async def _fire_event(hass: HomeAssistant, event_type: str,
     return {"ok": True, "event_type": event_type, "event_data": event_data or {}}
 
 
-async def _list_persons(hass: HomeAssistant) -> dict[str, Any]:
-    """List person entities and their tracked state/location."""
-    items = []
-    for s in hass.states.async_all("person"):
-        items.append({
-            "entity_id": s.entity_id,
-            "name": s.attributes.get("friendly_name"),
-            "state": s.state,
-            "user_id": s.attributes.get("user_id"),
-            "gps": [s.attributes.get("latitude"), s.attributes.get("longitude")]
-            if s.attributes.get("latitude") is not None else None,
-        })
-    return {"count": len(items), "persons": items}
-
-
 async def _get_logbook(hass: HomeAssistant, hours: int = 24,
                        entity_id: str | None = None) -> dict[str, Any]:
     """Humanised event timeline (logbook) over the recent window.
@@ -1644,20 +1630,6 @@ async def _list_todo_items(hass: HomeAssistant,
     return {"entity_id": entity_id, "count": len(items), "items": items}
 
 
-async def _add_todo_item(hass: HomeAssistant, entity_id: str | None,
-                         item: str) -> dict[str, Any]:
-    """Add an item to a todo list (defaults to the first todo entity)."""
-    if not entity_id:
-        todos = hass.states.async_entity_ids("todo")
-        if not todos:
-            return {"error": "no todo entities found"}
-        entity_id = sorted(todos)[0]
-    await hass.services.async_call(
-        "todo", "add_item", {"item": item}, target={"entity_id": entity_id},
-        blocking=True)
-    return {"ok": True, "entity_id": entity_id, "item": item}
-
-
 async def _wait_for_event(hass: HomeAssistant, event_type: str,
                           timeout: float = 10.0,
                           entity_id: str | None = None) -> dict[str, Any]:
@@ -1736,43 +1708,6 @@ async def _delete_tag(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
             break
     await coll.async_delete_item(tag_id)
     return {"ok": True, "deleted": tag_id}
-
-
-async def _get_system_health(hass: HomeAssistant) -> dict[str, Any]:
-    """Aggregate the system_health info of all integrations that report it."""
-    # HA 2025.x removed system_health.get_info(); aggregate the registrations
-    # stored at hass.data["system_health"] via get_integration_info() instead.
-    from homeassistant.components.system_health import (
-        DOMAIN as SH_DOMAIN,
-        get_integration_info,
-    )
-
-    def _safe(v: Any) -> Any:
-        if isinstance(v, (str, int, float, bool)) or v is None:
-            return v
-        if isinstance(v, dict):
-            return {k: _safe(x) for k, x in v.items()}
-        if isinstance(v, (list, tuple)):
-            return [_safe(x) for x in v]
-        return str(v)
-
-    registrations = hass.data.get(SH_DOMAIN) or {}
-    health: dict[str, Any] = {}
-    for domain, registration in registrations.items():
-        result = await get_integration_info(hass, registration)
-        raw = result.get("info") or {}
-        resolved: dict[str, Any] = {}
-        for key, value in raw.items():
-            # Some integrations report awaitable values (e.g. reachability
-            # probes); resolve them to concrete values for a one-shot report.
-            if asyncio.iscoroutine(value) or isinstance(value, asyncio.Task):
-                try:
-                    value = await value
-                except Exception as exc:  # noqa: BLE001
-                    value = f"error: {exc}"
-            resolved[key] = _safe(value)
-        health[domain] = resolved
-    return {"count": len(health), "health": health}
 
 
 async def _get_blueprint(hass: HomeAssistant, path: str,
@@ -2016,24 +1951,6 @@ async def _evaluate_condition(hass: HomeAssistant, condition: Any,
     if asyncio.iscoroutine(res):
         res = await res
     return {"result": bool(res), "raw": res}
-
-
-async def _list_zones(hass: HomeAssistant) -> dict[str, Any]:
-    """List zones with geo (lat/long/radius) and the persons currently inside."""
-    items = []
-    for s in sorted(hass.states.async_all("zone"), key=lambda s: s.entity_id):
-        a = s.attributes
-        items.append({
-            "entity_id": s.entity_id,
-            "name": a.get("friendly_name"),
-            "latitude": a.get("latitude"),
-            "longitude": a.get("longitude"),
-            "radius": a.get("radius"),
-            "passive": a.get("passive"),
-            "person_count": int(s.state) if s.state.isdigit() else None,
-            "persons": list(a.get("persons", [])),
-        })
-    return {"count": len(items), "zones": items}
 
 
 async def _get_automation_trace(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
@@ -2330,17 +2247,6 @@ async def _get_scene_config(hass: HomeAssistant, identifier: str) -> dict[str, A
             return {"found": True, "config": item,
                     "entity_count": len(item.get("entities") or {})}
     return {"found": False, "error": f"scene '{identifier}' not found in scenes.yaml"}
-
-
-async def _clear_statistics(hass: HomeAssistant, statistic_ids: list[str]) -> dict[str, Any]:
-    """Delete all long-term statistics for the given statistic_ids (recorder
-    write). The cleanup counterpart to import_statistics — removes the series
-    from history/energy entirely."""
-    if not statistic_ids:
-        return {"error": "statistic_ids is required"}
-    _recorder_get_instance(hass).async_clear_statistics(list(statistic_ids))
-    return {"ok": True, "cleared": statistic_ids,
-            "note": "deletion is queued on the recorder thread"}
 
 
 async def _get_device_automations(hass: HomeAssistant, device_id: str,
@@ -2665,22 +2571,6 @@ async def _get_conversation_agents(hass: HomeAssistant) -> dict[str, Any]:
         "default_agent_id": "conversation.home_assistant",
         "agents": agents,
     }
-
-
-async def _purge_recorder(hass: HomeAssistant, keep_days: int = 10,
-                          repack: bool = False, apply_filter: bool = False) -> dict[str, Any]:
-    """Trigger a recorder purge (recorder.purge service): drop history/state
-    rows older than keep_days; optionally repack the DB to reclaim disk and
-    apply the include/exclude recorder filter. The recorder housekeeping op."""
-    if not hass.services.has_service("recorder", "purge"):
-        return {"error": "recorder.purge service unavailable (recorder not loaded)"}
-    await hass.services.async_call(
-        "recorder", "purge",
-        {"keep_days": keep_days, "repack": repack, "apply_filter": apply_filter},
-        blocking=True)
-    return {"ok": True, "keep_days": keep_days, "repack": repack,
-            "apply_filter": apply_filter,
-            "note": "purge is queued on the recorder thread"}
 
 
 async def _converse(hass: HomeAssistant, text: str, conversation_id: str | None = None,
@@ -3449,109 +3339,6 @@ async def _assist(
 # ---------------------------------------------------------------------------
 
 
-async def _get_statistics(
-    hass: HomeAssistant,
-    entity_id: str,
-    period: str = "hour",
-    hours: int = 24,
-) -> dict[str, Any]:
-    """Get long-term statistics for an entity (mean/min/max/sum/change).
-
-    Period: '5minute', 'hour', 'day', 'week', 'month'. Goes back ``hours``
-    hours. Works with recorder-tracked entities (energy, temperature, etc.).
-    """
-    from homeassistant.components.recorder.statistics import (
-        async_get_last_statistics,
-        statistics_during_period,
-    )
-
-    start = datetime.now(timezone.utc) - timedelta(hours=hours)
-    try:
-        stats = await hass.async_add_executor_job(
-            lambda: statistics_during_period(
-                hass, start, None, {entity_id}, period, None, {"mean", "min", "max", "sum", "change"},
-            )
-        )
-    except Exception as exc:  # noqa: BLE001
-        try:
-            last = await hass.async_add_executor_job(
-                lambda: async_get_last_statistics(hass, 1, entity_id, True, {"mean", "min", "max", "sum"})
-            )
-            if last and entity_id in last:
-                return {"ok": True, "entity_id": entity_id, "last": last[entity_id]}
-        except Exception:  # noqa: BLE001
-            pass
-        return {"error": f"Statistics not available for {entity_id}: {exc}"}
-
-    if entity_id not in stats or not stats[entity_id]:
-        return {"ok": True, "entity_id": entity_id, "period": period,
-                "data": [], "hint": "No statistics found. Entity may not be tracked by recorder."}
-
-    rows = stats[entity_id]
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "period": period,
-        "hours": hours,
-        "count": len(rows),
-        "data": rows[:100],
-    }
-
-
-async def _get_logbook(
-    hass: HomeAssistant,
-    entity_id: str | None = None,
-    hours: int = 24,
-) -> dict[str, Any]:
-    """Get logbook entries — human-readable event log (not raw log file).
-
-    Returns state changes, automation triggers, service calls, etc. in
-    chronological order. Filter by entity_id or get everything.
-    """
-    from homeassistant.components.logbook import async_log_entries
-
-    start = datetime.now(timezone.utc) - timedelta(hours=hours)
-    end = datetime.now(timezone.utc)
-
-    try:
-        entries = await async_log_entries(hass, start, end, entity_id, None, None, None)
-    except Exception as exc:  # noqa: BLE001
-        entries_list: list[dict[str, Any]] = []
-        for state in hass.states.async_all():
-            if entity_id and state.entity_id != entity_id:
-                continue
-            entries_list.append({
-                "entity_id": state.entity_id,
-                "state": state.state,
-                "when": state.last_changed.isoformat() if state.last_changed else None,
-                "domain": state.entity_id.split(".")[0],
-            })
-        if entries_list:
-            entries_list.sort(key=lambda x: x.get("when") or "", reverse=True)
-            return {"ok": True, "count": len(entries_list), "entries": entries_list[:50],
-                    "note": f"Logbook API unavailable ({exc}), showing state changes"}
-        return {"error": f"Logbook unavailable: {exc}"}
-
-    rows = []
-    for entry in (entries or []):
-        row = {}
-        if hasattr(entry, "as_dict"):
-            row = entry.as_dict()
-        elif isinstance(entry, dict):
-            row = entry
-        else:
-            row = {"entry": str(entry)}
-        rows.append(row)
-
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "hours": hours,
-        "count": len(rows),
-        "entries": rows[:100],
-    }
-
-
 async def _list_zones(hass: HomeAssistant) -> dict[str, Any]:
     """List all zones (geofencing areas used for presence detection)."""
     zones = []
@@ -4085,7 +3872,7 @@ async def _check_updates(hass: HomeAssistant) -> dict[str, Any]:
 async def _get_system_health(hass: HomeAssistant) -> dict[str, Any]:
     """Get system health information (HA version, OS, arch, DB size, etc.)."""
     info: dict[str, Any] = {
-        "version": hass.config.version if hasattr(hass.config, "version") else "unknown",
+        "version": HA_VERSION,
         "location_name": getattr(hass.config, "location_name", ""),
         "time_zone": str(getattr(hass.config, "time_zone", "")),
         "elevation": getattr(hass.config, "elevation", None),
@@ -4257,38 +4044,45 @@ async def _manage_tag(
     hass: HomeAssistant, action: str, tag_id: str | None = None,
     name: str | None = None,
 ) -> dict[str, Any]:
-    """Manage NFC/RFID tags: list, create, remove."""
-    from homeassistant.helpers import tag as tag_helper
+    """Manage NFC/RFID tags: list, create, remove.
+
+    Backed by the core ``tag`` component's storage collection
+    (``hass.data[TAG_DATA]``); the old ``homeassistant.helpers.tag`` module
+    never existed in modern HA.
+    """
+    try:
+        from homeassistant.components.tag import TAG_DATA, TAG_ID
+    except ImportError as exc:  # pragma: no cover - tag is a core component
+        return {"error": f"tag component unavailable: {exc}"}
+
+    collection = hass.data.get(TAG_DATA)
+    if collection is None:
+        return {"ok": True, "count": 0, "tags": [],
+                "hint": "Tag component not loaded. Add 'tag:' to configuration.yaml "
+                        "or scan a tag to register it."}
 
     if action == "list":
-        try:
-            tags = tag_helper.async_get_tags(hass) if hasattr(tag_helper, "async_get_tags") else {}
-        except Exception:  # noqa: BLE001
-            tags = hass.data.get("tag", {})
-        if not tags:
-            return {"ok": True, "count": 0, "tags": [],
-                    "hint": "No tags registered. Scan a tag with your phone to register it."}
-        tag_list = []
-        if isinstance(tags, dict):
-            for tid, info in tags.items():
-                tag_list.append({
-                    "tag_id": tid,
-                    "name": info.get("name", "") if isinstance(info, dict) else str(info),
-                })
+        tag_list = [
+            {"tag_id": item.get(TAG_ID) or item.get("id"), "name": item.get("name", "")}
+            for item in collection.async_items()
+        ]
         return {"ok": True, "count": len(tag_list), "tags": tag_list}
 
     if action == "create":
+        data: dict[str, Any] = {"name": name or "New Tag"}
+        if tag_id:
+            data[TAG_ID] = tag_id
         try:
-            result = await tag_helper.async_create_tag(hass, name or "New Tag", tag_id)
+            item = await collection.async_create_item(data)
         except Exception as exc:  # noqa: BLE001
             return {"error": f"Create tag failed: {exc}"}
-        return {"ok": True, "tag_id": result if isinstance(result, str) else str(result)}
+        return {"ok": True, "tag_id": item.get(TAG_ID) or item.get("id"), "name": item.get("name")}
 
     if action == "remove":
         if not tag_id:
             return {"error": "tag_id required for 'remove'"}
         try:
-            await tag_helper.async_remove_tag(hass, tag_id)
+            await collection.async_delete_item(tag_id)
         except Exception as exc:  # noqa: BLE001
             return {"error": f"Remove tag failed: {exc}"}
         return {"ok": True, "removed": tag_id}
@@ -6034,39 +5828,6 @@ async def _assign_entity_category(
         return {"error": f"Assign entity category failed: {exc}"}
 
 
-async def _increment_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Increment a counter helper."""
-    try:
-        await hass.services.async_call(
-            "counter", "increment", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Increment counter failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "increment"}
-
-
-async def _decrement_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Decrement a counter helper."""
-    try:
-        await hass.services.async_call(
-            "counter", "decrement", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Decrement counter failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "decrement"}
-
-
-async def _reset_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Reset a counter helper to its initial value."""
-    try:
-        await hass.services.async_call(
-            "counter", "reset", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reset counter failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "reset"}
-
-
 async def _start_timer(
     hass: HomeAssistant, entity_id: str, duration: str | None = None,
 ) -> dict[str, Any]:
@@ -7225,8 +6986,11 @@ async def _list_intent_handlers(hass: HomeAssistant) -> dict[str, Any]:
     """List registered conversation intent handlers."""
     try:
         from homeassistant.helpers import intent as intent_helper
-        intents = list(intent_helper.async_get(hass) or {})
-        return {"ok": True, "count": len(intents), "intents": intents[:50]}
+        handlers = list(intent_helper.async_get(hass) or [])
+        intents = sorted(
+            getattr(h, "intent_type", None) or str(h) for h in handlers
+        )
+        return {"ok": True, "count": len(intents), "intents": intents[:200]}
     except Exception as exc:  # noqa: BLE001
         return {"ok": True, "note": f"Intent handlers unavailable ({exc})", "intents": []}
 
@@ -9045,7 +8809,7 @@ async def _core_info(hass: HomeAssistant) -> dict[str, Any]:
     try:
         return {
             "ok": True,
-            "version": hass.config.version,
+            "version": HA_VERSION,
             "config_dir": hass.config.config_dir,
             "time_zone": str(hass.config.time_zone)
             if hasattr(hass.config, "time_zone") else "unknown",
@@ -11960,7 +11724,7 @@ async def _core_state_info(hass: HomeAssistant) -> dict[str, Any]:
     try:
         return {
             "ok": True,
-            "version": hass.config.version,
+            "version": HA_VERSION,
             "config_dir": hass.config.config_dir,
             "time_zone": str(hass.config.time_zone)
             if hasattr(hass.config, "time_zone") else "unknown",
@@ -13598,7 +13362,7 @@ async def _system_health_info(hass: HomeAssistant) -> dict[str, Any]:
     """Get system health information."""
     try:
         info: dict[str, Any] = {
-            "version": hass.config.version,
+            "version": HA_VERSION,
             "config_dir": hass.config.config_dir,
         }
         return {"ok": True, "health": info}
@@ -15586,7 +15350,7 @@ async def _get_os_info(hass: HomeAssistant) -> dict[str, Any]:
     import platform
 
     info: dict[str, Any] = {
-        "ha_version": hass.config.version if hasattr(hass.config, "version") else "unknown",
+        "ha_version": HA_VERSION,
         "python_version": platform.python_version(),
         "os": platform.system(),
         "os_release": platform.release(),
@@ -25997,7 +25761,7 @@ async def _system_ha_version(hass: HomeAssistant) -> dict[str, Any]:
     """Get Home Assistant version info."""
     return {
         "ok": True,
-        "version": hass.config.version,
+        "version": HA_VERSION,
         "config_dir": hass.config.config_dir,
         "legacy_templates": getattr(hass.config, "legacy_templates", False),
     }
@@ -28873,7 +28637,7 @@ async def _system_config_summary(hass: HomeAssistant) -> dict[str, Any]:
         domains.add(s.entity_id.split(".")[0])
     return {
         "ok": True,
-        "version": config.version,
+        "version": HA_VERSION,
         "config_dir": config.config_dir,
         "total_entities": len(all_entities),
         "total_domains": len(domains),
@@ -29127,7 +28891,7 @@ async def _api_status(hass: HomeAssistant) -> dict[str, Any]:
     entries = hass.config_entries.async_entries()
     return {
         "ok": True,
-        "version": config.version,
+        "version": HA_VERSION,
         "config_dir": config.config_dir,
         "total_entities": len(all_entities),
         "integrations_loaded": len(entries),
@@ -30023,7 +29787,7 @@ async def _config_get_core_state(hass: HomeAssistant) -> dict[str, Any]:
     config = hass.config
     return {
         "ok": True,
-        "version": config.version,
+        "version": HA_VERSION,
         "config_dir": config.config_dir,
         "latitude": getattr(config, "latitude", None),
         "longitude": getattr(config, "longitude", None),
@@ -32012,6 +31776,13 @@ async def _schedule_create_weekly(
     time_from: str, time_to: str,
 ) -> dict[str, Any]:
     """Create a weekly schedule helper."""
+    if isinstance(days, str):
+        days = [d.strip() for d in days.split(",") if d.strip()]
+    if not isinstance(days, (list, tuple)) or not days:
+        return {"error": "days must be a non-empty list of weekday names "
+                         "(e.g. ['monday','tuesday'])"}
+    if not name:
+        return {"error": "name is required"}
     try:
         await hass.services.async_call("schedule", "reload", {})
     except Exception:  # noqa: BLE001
@@ -34485,7 +34256,7 @@ async def _system_uptime_report(hass: HomeAssistant) -> dict[str, Any]:
                 "friendly_name": s.attributes.get("friendly_name"),
             })
     return {"ok": True, "count": len(uptime_sensors), "sensors": uptime_sensors,
-            "ha_version": hass.config.version}
+            "ha_version": HA_VERSION}
 
 
 async def _system_load_average(hass: HomeAssistant) -> dict[str, Any]:
@@ -40927,7 +40698,7 @@ async def _ha_log_error_count(hass: HomeAssistant) -> dict[str, Any]:
 
 async def _ha_startup_time_check(hass: HomeAssistant) -> dict[str, Any]:
     """Check HA startup time."""
-    return {"ok": True, "version": hass.config.version,
+    return {"ok": True, "version": HA_VERSION,
             "config_dir": hass.config.config_dir}
 
 
@@ -41020,7 +40791,7 @@ async def _ha_core_analytics(hass: HomeAssistant) -> dict[str, Any]:
         domains[dom] = domains.get(dom, 0) + 1
     top = sorted(domains.items(), key=lambda x: x[1], reverse=True)[:10]
     return {"ok": True, "total_entities": total_entities,
-            "domain_count": len(domains), "version": hass.config.version,
+            "domain_count": len(domains), "version": HA_VERSION,
             "top_domains": [{"domain": d, "count": c} for d, c in top]}
 
 
