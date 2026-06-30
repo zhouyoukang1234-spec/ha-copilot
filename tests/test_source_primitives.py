@@ -401,6 +401,38 @@ async def main():
           and ("light", "turn_off") in called and ("switch", "turn_off") in called,
           "apply_actions honors nested select{} selection", (r, FH.services.calls))
 
+    # 35) get_logbook: dispatch must pass entity_id/hours by the right name
+    #     (live-practice: they were swapped positionally -> wrong filter + crash).
+    #     With no logbook API, it falls back to state changes; filter must hold.
+    r = await dispatch(hass, store, "get_logbook",
+                       {"entity_id": "light.kitchen", "hours": 6})
+    only = {e.get("entity_id") for e in r.get("entries", [])}
+    check(r.get("ok") and only == {"light.kitchen"},
+          "get_logbook honors entity_id filter (param order fixed)", r)
+    # and a None hours must not crash (hardened to default)
+    r2 = await dispatch(hass, store, "get_logbook", {"hours": None})
+    check(r2.get("ok"), "get_logbook tolerates hours=None", r2)
+
+    # 36) list_intent_handlers reduces handler objects to JSON-serialisable names
+    #     (live-practice: returning handler objects 500'd at serialization).
+    import json as _json
+
+    import homeassistant.helpers.intent as _ih
+    saved_get = _ih.async_get
+    _ih.async_get = lambda h: [type("H", (), {"intent_type": "HassFoo"})(),
+                               type("H", (), {"intent_type": "HassBar"})()]
+    try:
+        r = await dispatch(hass, store, "list_intent_handlers", {})
+        serialisable = True
+        try:
+            _json.dumps(r)
+        except TypeError:
+            serialisable = False
+        check(r.get("ok") and serialisable and r["intents"] == ["HassBar", "HassFoo"],
+              "list_intent_handlers returns serialisable intent names", r)
+    finally:
+        _ih.async_get = saved_get
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 

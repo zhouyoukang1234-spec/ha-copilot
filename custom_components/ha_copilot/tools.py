@@ -3510,12 +3510,17 @@ async def _get_logbook(
     Returns state changes, automation triggers, service calls, etc. in
     chronological order. Filter by entity_id or get everything.
     """
-    from homeassistant.components.logbook import async_log_entries
-
+    try:
+        hours = int(hours)
+    except (TypeError, ValueError):
+        hours = 24
     start = datetime.now(timezone.utc) - timedelta(hours=hours)
     end = datetime.now(timezone.utc)
 
     try:
+        # Imported inside the try so cores without this symbol fall through to
+        # the state-change fallback below rather than raising out of the tool.
+        from homeassistant.components.logbook import async_log_entries
         entries = await async_log_entries(hass, start, end, entity_id, None, None, None)
     except Exception as exc:  # noqa: BLE001
         entries_list: list[dict[str, Any]] = []
@@ -6969,8 +6974,15 @@ async def _list_intent_handlers(hass: HomeAssistant) -> dict[str, Any]:
     """List registered conversation intent handlers."""
     try:
         from homeassistant.helpers import intent as intent_helper
-        intents = list(intent_helper.async_get(hass) or {})
-        return {"ok": True, "count": len(intents), "intents": intents[:50]}
+        registry = intent_helper.async_get(hass) or []
+        # The registry yields handler objects (or, on older cores, a dict keyed
+        # by intent type); reduce to plain, JSON-serialisable intent-type names.
+        if isinstance(registry, dict):
+            names = list(registry)
+        else:
+            names = [getattr(h, "intent_type", None) or str(h) for h in registry]
+        names = sorted(n for n in names if n)
+        return {"ok": True, "count": len(names), "intents": names[:200]}
     except Exception as exc:  # noqa: BLE001
         return {"ok": True, "note": f"Intent handlers unavailable ({exc})", "intents": []}
 
@@ -19901,7 +19913,9 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _list_persons(hass)
         # ---- deep-fusion round 2 ----
         if name == "get_logbook":
-            return await _get_logbook(hass, args.get("hours", 24), args.get("entity_id"))
+            return await _get_logbook(
+                hass, entity_id=args.get("entity_id"), hours=args.get("hours") or 24
+            )
         if name == "list_users":
             return await _list_users(hass)
         if name == "list_categories":
