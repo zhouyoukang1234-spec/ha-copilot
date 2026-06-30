@@ -224,6 +224,28 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
   http://<HA>/api/ha_copilot/run_tool
 ```
 
+### 工具组合 · `run_tools` 步骤间数据流
+
+操作的本源是**搭配**而非堆叠：读取 → 取值 → 执行 → 回读，应在一次请求内闭合，无需每步一轮推理。`run_tools` 顺序执行一批 `{tool, args}`，并让**后一步直接引用前一步的结果**——这是工具组合的核心原语：
+
+- `${steps[i].path}`：第 `i` 步结果中的值（如 `${steps[0].entities[0].entity_id}`）。
+- `${last.path}`：上一步结果中的值。
+- `${vars.NAME.path}`：某步通过 `save_as` 绑定的结果中的值。
+
+整串 `${...}` 保留被引用对象的原类型（列表/字典）；文本内联 `${...}` 转为字符串。引用失败只让该步优雅报错、不拖垮整批（除非 `stop_on_error`）。
+
+```bash
+# 读客厅灯状态 → 引用其 entity_id 开灯 → 回读状态，一次请求内完成
+curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"tool":"run_tools","args":{"calls":[
+        {"tool":"get_state","args":{"entity_id":"light.ke_ting_deng"},"save_as":"L"},
+        {"tool":"call_service","args":{"domain":"light","service":"turn_on",
+          "data":{"entity_id":"${vars.L.entity_id}"}}},
+        {"tool":"get_state","args":{"entity_id":"${steps[0].entity_id}"}}
+      ]}}' \
+  http://<HA>/api/ha_copilot/run_tool
+```
+
 - MCP（需 HA 长效令牌），两种传输，同一工具层：
   - **HTTP（JSON-RPC）**：把 `/api/ha_copilot/mcp` 作为端点直接 POST。
 
