@@ -13616,12 +13616,29 @@ async def _area_create(
     hass: HomeAssistant, name: str,
     icon: str | None = None, floor_id: str | None = None,
 ) -> dict[str, Any]:
-    """Create an area in the area registry."""
+    """Create an area in the area registry.
+
+    Honors the optional ``icon`` and ``floor_id`` so callers can place the
+    area on a floor at creation time. ``async_create`` only accepts the name
+    positionally; the rest are keyword-only and vary by HA version, so we
+    pass them defensively and fall back to a follow-up update.
+    """
     try:
         from homeassistant.helpers.area_registry import async_get
         registry = async_get(hass)
-        entry = registry.async_create(name)
-        return {"ok": True, "area_id": entry.id, "name": entry.name}
+        kwargs: dict[str, Any] = {}
+        if icon:
+            kwargs["icon"] = icon
+        if floor_id:
+            kwargs["floor_id"] = floor_id
+        try:
+            entry = registry.async_create(name, **kwargs)
+        except TypeError:
+            entry = registry.async_create(name)
+            if kwargs:
+                entry = registry.async_update(entry.id, **kwargs)
+        return {"ok": True, "area_id": entry.id, "name": entry.name,
+                "floor_id": entry.floor_id, "icon": entry.icon}
     except ImportError:
         return {"error": "area_registry not available"}
     except Exception as exc:  # noqa: BLE001
@@ -40258,23 +40275,49 @@ async def _group_size_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _label_summary(hass: HomeAssistant) -> dict[str, Any]:
-    """Summarize entity labels."""
+    """Summarize entity labels.
+
+    Labels live in the entity registry, not in state attributes. Count from
+    the registry and resolve label_id -> human name via the label registry.
+    """
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers import label_registry as lr
+
+    ereg = er.async_get(hass)
+    lreg = lr.async_get(hass)
+    names = {lab.label_id: lab.name for lab in lreg.async_list_labels()}
     labels: dict[str, int] = {}
-    for s in hass.states.async_all():
-        for label in (s.attributes.get("labels") or []):
+    for e in ereg.entities.values():
+        for label in (e.labels or ()):
             labels[label] = labels.get(label, 0) + 1
     ranking = sorted(labels.items(), key=lambda x: x[1], reverse=True)
     return {"ok": True, "label_count": len(ranking),
-            "labels": [{"label": lb, "count": c} for lb, c in ranking]}
+            "labels": [{"label": names.get(lb, lb), "label_id": lb, "count": c}
+                       for lb, c in ranking]}
 
 
 async def _floor_plan_entity_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check floor plan entity status."""
+    """Check status of entities that resolve to a floor via their area.
+
+    Floor membership is derived through the registry chain entity -> area ->
+    floor (or entity -> device -> area -> floor), never from state attributes.
+    """
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    ereg = er.async_get(hass)
+    dreg = dr.async_get(hass)
+    areg = ar.async_get(hass)
+    dev_area = {d.id: d.area_id for d in dreg.devices.values()}
+    area_floor = {a.id: a.floor_id for a in areg.async_list_areas()}
     total = unavail = 0
-    for s in hass.states.async_all():
-        if s.attributes.get("floor_id"):
+    for e in ereg.entities.values():
+        area = e.area_id or dev_area.get(e.device_id or "")
+        if area and area_floor.get(area):
             total += 1
-            if s.state == "unavailable":
+            st = hass.states.get(e.entity_id)
+            if st is not None and st.state == "unavailable":
                 unavail += 1
     return {"ok": True, "floor_entities": total, "unavailable": unavail}
 
@@ -43660,32 +43703,33 @@ async def _device_registry_deep(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _area_registry_deep(hass: HomeAssistant) -> dict[str, Any]:
-    """Check area registry deep."""
-    areas = set()
-    for s in hass.states.async_all():
-        area = s.attributes.get("area_id")
-        if area:
-            areas.add(area)
-    return {"ok": True, "area_count": len(areas), "areas": list(areas)}
+    """Check area registry deep (source of truth: the area registry)."""
+    from homeassistant.helpers import area_registry as ar
+
+    areg = ar.async_get(hass)
+    areas = [{"area_id": a.id, "name": a.name, "floor_id": a.floor_id}
+             for a in areg.async_list_areas()]
+    return {"ok": True, "area_count": len(areas), "areas": areas}
 
 
 async def _label_registry_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check label registry."""
-    labels = set()
-    for s in hass.states.async_all():
-        for lbl in s.attributes.get("labels", []):
-            labels.add(lbl)
-    return {"ok": True, "label_count": len(labels), "labels": list(labels)}
+    """Check label registry (source of truth: the label registry)."""
+    from homeassistant.helpers import label_registry as lr
+
+    lreg = lr.async_get(hass)
+    labels = [{"label_id": lab.label_id, "name": lab.name}
+              for lab in lreg.async_list_labels()]
+    return {"ok": True, "label_count": len(labels), "labels": labels}
 
 
 async def _floor_registry_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check floor registry."""
-    floors = set()
-    for s in hass.states.async_all():
-        floor = s.attributes.get("floor_id")
-        if floor:
-            floors.add(floor)
-    return {"ok": True, "floor_count": len(floors), "floors": list(floors)}
+    """Check floor registry (source of truth: the floor registry)."""
+    from homeassistant.helpers import floor_registry as fr
+
+    freg = fr.async_get(hass)
+    floors = [{"floor_id": f.floor_id, "name": f.name, "level": f.level}
+              for f in freg.async_list_floors()]
+    return {"ok": True, "floor_count": len(floors), "floors": floors}
 
 
 # ---------------------------------------------------------------------------
