@@ -130,7 +130,7 @@ async def main():
     # 8) search_tools finds the energy tools by intent
     r = await dispatch(hass, store, "search_tools", {"query": "energy usage", "limit": 10})
     names = [t["name"] for t in r["tools"]]
-    check(r["ok"] and r["total_catalog"] == 2119 and any("energy" in n for n in names),
+    check(r["ok"] and r["total_catalog"] == 2120 and any("energy" in n for n in names),
           "search_tools 'energy usage' returns energy tools", names[:5])
 
     # 9) search_tools finds query_entities itself
@@ -149,7 +149,7 @@ async def main():
 
     # 12) tool_catalog overview
     r = await dispatch(hass, store, "tool_catalog", {})
-    check(r["ok"] and r["total"] == 2119 and r["read_only"] + r["write"] == 2119 and isinstance(r["groups"], dict),
+    check(r["ok"] and r["total"] == 2120 and r["read_only"] + r["write"] == 2120 and isinstance(r["groups"], dict),
           "tool_catalog overview totals consistent", r)
 
     # 13) tool_catalog prefix listing
@@ -268,6 +268,40 @@ async def main():
         toolsmod._recorder_history = saved_hist
         toolsmod._recorder_get_instance = saved_inst
         FH.config.components = set()
+
+    # 27) apply_actions dry_run previews every step without acting
+    FH.services.calls.clear()
+    r = await dispatch(hass, store, "apply_actions", {
+        "dry_run": True,
+        "steps": [
+            {"domain": "light", "state": "on", "service": "turn_off"},
+            {"name_contains": "fan", "service": "switch.turn_off"},
+        ],
+    })
+    check(r.get("dry_run") and r["steps_total"] == 2 and r["steps_run"] == 2
+          and all(s.get("dry_run") for s in r["results"]) and len(FH.services.calls) == 0,
+          "apply_actions dry_run previews all steps without acting", r)
+
+    # 28) apply_actions runs an ordered batch (same core as control_entities)
+    FH.services.calls.clear()
+    r = await dispatch(hass, store, "apply_actions", {
+        "steps": [
+            {"domain": "light", "state": "on", "service": "turn_off"},
+            {"name_contains": "fan", "domain": "switch", "service": "turn_off"},
+        ],
+    })
+    called = set((d, s) for d, s, _ in FH.services.calls)
+    check(r["ok"] and r["failed"] == 0 and ("light", "turn_off") in called
+          and ("switch", "turn_off") in called,
+          "apply_actions executes ordered batch via shared core", (r, FH.services.calls))
+
+    # 29) apply_actions is write-gated; empty steps -> error
+    FH.services.calls.clear()
+    blocked = await dispatch(hass, {"allow_write": False}, "apply_actions",
+                             {"steps": [{"domain": "light", "service": "turn_off"}]})
+    empty = await dispatch(hass, store, "apply_actions", {"steps": []})
+    check("error" in blocked and len(FH.services.calls) == 0 and "error" in empty,
+          "apply_actions write-gated + empty-steps error", (blocked, empty))
 
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0

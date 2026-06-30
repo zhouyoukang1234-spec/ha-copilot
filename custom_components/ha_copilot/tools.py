@@ -16219,6 +16219,72 @@ async def _control_entities(
     return {"ok": errors == 0, "count": len(ids), "errors": errors, "results": results}
 
 
+async def _apply_actions(
+    hass: HomeAssistant,
+    steps: Any,
+    dry_run: bool = False,
+    stop_on_error: bool = False,
+) -> dict[str, Any]:
+    """Universal batch action — run an ordered list of select-then-act steps.
+
+    A declarative scene/routine expressed as ``steps``: a list where each item
+    is ``{service, domain?, name_contains?, device_class?, state?, attributes?,
+    match?, data?, limit?}``. Each step selects via the same core and acts via
+    ``control_entities`` (動/陽). One template subsumes bespoke multi-step
+    scene-apply / routine tools — know the few, derive the many.
+
+    ``dry_run`` previews every step's targets without acting. ``stop_on_error``
+    halts the sequence on the first failing step. Respects allow_write (the
+    gate is enforced in dispatch; dry_run is always permitted).
+    """
+    if not isinstance(steps, list) or not steps:
+        return {"error": "missing required argument: steps (a non-empty list)"}
+
+    results = []
+    failed = 0
+    for i, step in enumerate(steps):
+        if not isinstance(step, dict):
+            results.append({"step": i, "error": "step must be an object"})
+            failed += 1
+            if stop_on_error:
+                break
+            continue
+        svc = step.get("service") or step.get("action") or ""
+        res = await _control_entities(
+            hass,
+            service=svc,
+            domain=step.get("domain"),
+            name_contains=(
+                step.get("name_contains") or step.get("name") or step.get("keywords")
+            ),
+            device_class=step.get("device_class"),
+            state=step.get("state"),
+            attributes=step.get("attributes"),
+            match=step.get("match", "any"),
+            data=step.get("data"),
+            dry_run=dry_run,
+            limit=step.get("limit", 500),
+        )
+        results.append({"step": i, **res})
+        if not res.get("ok") and "error" in res:
+            failed += 1
+            if stop_on_error:
+                break
+        elif not dry_run and res.get("errors"):
+            failed += 1
+            if stop_on_error:
+                break
+
+    return {
+        "ok": failed == 0,
+        "dry_run": dry_run,
+        "steps_run": len(results),
+        "steps_total": len(steps),
+        "failed": failed,
+        "results": results,
+    }
+
+
 async def _aggregate_entities(
     hass: HomeAssistant,
     domain: Any = None,
@@ -17254,6 +17320,15 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 data=args.get("data"),
                 dry_run=bool(args.get("dry_run", False)),
                 limit=args.get("limit", 500),
+            )
+        if name == "apply_actions":
+            if not store.get(CONF_ALLOW_WRITE, True) and not args.get("dry_run"):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _apply_actions(
+                hass,
+                steps=args.get("steps") or args.get("actions"),
+                dry_run=bool(args.get("dry_run", False)),
+                stop_on_error=bool(args.get("stop_on_error", False)),
             )
         if name == "assist":
             if not store.get(CONF_ALLOW_WRITE, True):
@@ -43042,6 +43117,50 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "limit": {"type": "integer", "description": "Max entities to act on (default 500)."},
                 },
                 "required": ["service"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "apply_actions",
+            "description": (
+                "Universal batch action — run an ordered list of select-then-act "
+                "steps as one declarative routine/scene. Each step is "
+                "{service, domain?, name_contains?, device_class?, state?, "
+                "attributes?, match?, data?, limit?} and selects+acts via the "
+                "same core as control_entities. Subsumes bespoke multi-step "
+                "scene-apply / 'good night' style routines — e.g. [turn off all "
+                "lights, lock all doors, set thermostat to 18]. Set 'dry_run' to "
+                "preview every step's targets; 'stop_on_error' to halt on first "
+                "failure. Respects allow_write (dry_run always permitted)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "steps": {
+                        "type": "array",
+                        "description": "Ordered list of select-then-act steps; each like a control_entities call.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service": {"type": "string", "description": "Bare or qualified service to call for this step."},
+                                "domain": {"type": ["string", "array"], "items": {"type": "string"}},
+                                "name_contains": {"type": ["string", "array"], "items": {"type": "string"}},
+                                "device_class": {"type": ["string", "array"], "items": {"type": "string"}},
+                                "state": {"type": ["string", "array"], "items": {"type": "string"}},
+                                "attributes": {"type": "object"},
+                                "match": {"type": "string", "enum": ["any", "all"]},
+                                "data": {"type": "object"},
+                                "limit": {"type": "integer"},
+                            },
+                            "required": ["service"],
+                        },
+                    },
+                    "dry_run": {"type": "boolean", "description": "Preview every step's targets without acting."},
+                    "stop_on_error": {"type": "boolean", "description": "Halt the sequence on the first failing step."},
+                },
+                "required": ["steps"],
             },
         },
     },
