@@ -5103,16 +5103,8 @@ async def _list_cameras(hass: HomeAssistant) -> dict[str, Any]:
 async def _set_climate_preset(
     hass: HomeAssistant, entity_id: str, preset_mode: str,
 ) -> dict[str, Any]:
-    """Set a climate entity's preset mode (e.g. 'away', 'eco', 'boost')."""
-    try:
-        await hass.services.async_call(
-            "climate", "set_preset_mode",
-            {"entity_id": entity_id, "preset_mode": preset_mode},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set climate preset failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "preset_mode": preset_mode}
+    "Set a climate entity's preset mode (e.g. 'away', 'eco', 'boost')."
+    return await _dao_collapsed2_0(hass, entity_id, preset_mode, 'climate', 'Set climate preset failed: ')
 
 
 async def _get_climate_schedule(
@@ -5233,30 +5225,15 @@ async def _install_update(
 
 
 async def _lock_door(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Lock a smart lock."""
-    try:
-        await hass.services.async_call(
-            "lock", "lock", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Lock failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "locked"}
+    'Lock a smart lock.'
+    return await _dao_collapsed2_1(hass, entity_id, 'lock', 'lock', 'Lock failed: ', 'locked')
 
 
 async def _unlock_door(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Unlock a smart lock (optional PIN code)."""
-    try:
-        svc_data: dict[str, Any] = {"entity_id": entity_id}
-        if code:
-            svc_data["code"] = code
-        await hass.services.async_call(
-            "lock", "unlock", svc_data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Unlock failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "unlocked"}
+    'Unlock a smart lock (optional PIN code).'
+    return await _dao_collapsed2_2(hass, entity_id, code, 'lock', 'unlock', 'Unlock failed: ', 'unlocked')
 
 
 async def _arm_alarm(
@@ -5282,17 +5259,8 @@ async def _arm_alarm(
 async def _disarm_alarm(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Disarm an alarm control panel."""
-    try:
-        svc_data: dict[str, Any] = {"entity_id": entity_id}
-        if code:
-            svc_data["code"] = code
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_disarm", svc_data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Disarm alarm failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "disarmed"}
+    'Disarm an alarm control panel.'
+    return await _dao_collapsed2_2(hass, entity_id, code, 'alarm_control_panel', 'alarm_disarm', 'Disarm alarm failed: ', 'disarmed')
 
 
 async def _get_alarm_state(
@@ -5348,31 +5316,15 @@ async def _set_fan_direction(
 async def _set_water_heater_temperature(
     hass: HomeAssistant, entity_id: str, temperature: float,
 ) -> dict[str, Any]:
-    """Set water heater target temperature."""
-    try:
-        await hass.services.async_call(
-            "water_heater", "set_temperature",
-            {"entity_id": entity_id, "temperature": temperature},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set water heater temp failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "temperature": temperature}
+    'Set water heater target temperature.'
+    return await _dao_collapsed2_3(hass, entity_id, temperature, 'Set water heater temp failed: ')
 
 
 async def _set_humidifier_mode(
     hass: HomeAssistant, entity_id: str, mode: str,
 ) -> dict[str, Any]:
-    """Set humidifier/dehumidifier mode."""
-    try:
-        await hass.services.async_call(
-            "humidifier", "set_mode",
-            {"entity_id": entity_id, "mode": mode},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set humidifier mode failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "mode": mode}
+    'Set humidifier/dehumidifier mode.'
+    return await _dao_collapsed2_4(hass, entity_id, mode, 'Set humidifier mode failed: ')
 
 
 async def _activate_siren(
@@ -5398,14 +5350,8 @@ async def _activate_siren(
 
 
 async def _press_button(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Press a button entity."""
-    try:
-        await hass.services.async_call(
-            "button", "press", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Press button failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "pressed"}
+    'Press a button entity.'
+    return await _dao_collapsed2_1(hass, entity_id, 'button', 'press', 'Press button failed: ', 'pressed')
 
 
 # ---------------------------------------------------------------------------
@@ -5494,31 +5440,15 @@ async def _get_weather_forecast(
 async def _set_number_value(
     hass: HomeAssistant, entity_id: str, value: float,
 ) -> dict[str, Any]:
-    """Set a number entity value."""
-    try:
-        await hass.services.async_call(
-            "number", "set_value",
-            {"entity_id": entity_id, "value": value},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set number value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Set a number entity value.'
+    return await _dao_collapsed2_5(hass, entity_id, value, 'number', 'set_value', 'Set number value failed: ')
 
 
 async def _set_select_option(
     hass: HomeAssistant, entity_id: str, option: str,
 ) -> dict[str, Any]:
-    """Set a select entity option."""
-    try:
-        await hass.services.async_call(
-            "select", "select_option",
-            {"entity_id": entity_id, "option": option},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set select option failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "option": option}
+    'Set a select entity option.'
+    return await _dao_collapsed2_6(hass, entity_id, option, 'select', 'Set select option failed: ')
 
 
 async def _conversation_query(
@@ -5559,16 +5489,8 @@ async def _complete_todo_item(
 async def _reset_utility_meter(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Reset a utility meter sensor."""
-    try:
-        await hass.services.async_call(
-            "utility_meter", "reset",
-            {"entity_id": entity_id},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reset utility meter failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+    'Reset a utility meter sensor.'
+    return await _dao_collapsed2_1(hass, entity_id, 'utility_meter', 'reset', 'Reset utility meter failed: ', 'reset')
 
 
 # ---------------------------------------------------------------------------
@@ -5905,17 +5827,8 @@ async def _add_todo_item(
     hass: HomeAssistant, entity_id: str, item: str,
     due_date: str | None = None, description: str | None = None,
 ) -> dict[str, Any]:
-    """Add an item to a todo list entity."""
-    data: dict[str, Any] = {"entity_id": entity_id, "item": item}
-    if due_date:
-        data["due_date"] = due_date
-    if description:
-        data["description"] = description
-    try:
-        await hass.services.async_call("todo", "add_item", data, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Add todo item failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "item": item}
+    'Add an item to a todo list entity.'
+    return await _dao_collapsed2_7(hass, entity_id, item, due_date, description, 'Add todo item failed: ')
 
 
 async def _remove_todo_item(
@@ -6037,36 +5950,18 @@ async def _assign_entity_category(
 
 
 async def _increment_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Increment a counter helper."""
-    try:
-        await hass.services.async_call(
-            "counter", "increment", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Increment counter failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "increment"}
+    'Increment a counter helper.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'increment', 'Increment counter failed: ', 'increment')
 
 
 async def _decrement_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Decrement a counter helper."""
-    try:
-        await hass.services.async_call(
-            "counter", "decrement", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Decrement counter failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "decrement"}
+    'Decrement a counter helper.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'decrement', 'Decrement counter failed: ', 'decrement')
 
 
 async def _reset_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Reset a counter helper to its initial value."""
-    try:
-        await hass.services.async_call(
-            "counter", "reset", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reset counter failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+    'Reset a counter helper to its initial value.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'reset', 'Reset counter failed: ', 'reset')
 
 
 async def _start_timer(
@@ -6084,36 +5979,18 @@ async def _start_timer(
 
 
 async def _cancel_timer(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Cancel a running timer."""
-    try:
-        await hass.services.async_call(
-            "timer", "cancel", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cancel timer failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "cancel"}
+    'Cancel a running timer.'
+    return await _dao_collapsed2_1(hass, entity_id, 'timer', 'cancel', 'Cancel timer failed: ', 'cancel')
 
 
 async def _pause_timer(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Pause a running timer."""
-    try:
-        await hass.services.async_call(
-            "timer", "pause", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Pause timer failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "pause"}
+    'Pause a running timer.'
+    return await _dao_collapsed2_1(hass, entity_id, 'timer', 'pause', 'Pause timer failed: ', 'pause')
 
 
 async def _finish_timer(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Finish (complete) a timer early."""
-    try:
-        await hass.services.async_call(
-            "timer", "finish", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Finish timer failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "finish"}
+    'Finish (complete) a timer early.'
+    return await _dao_collapsed2_1(hass, entity_id, 'timer', 'finish', 'Finish timer failed: ', 'finish')
 
 
 async def _mower_command(
@@ -6171,29 +6048,15 @@ async def _list_event_entities(hass: HomeAssistant) -> dict[str, Any]:
 async def _set_date_value(
     hass: HomeAssistant, entity_id: str, date: str,
 ) -> dict[str, Any]:
-    """Set an input_datetime entity to a date value."""
-    try:
-        await hass.services.async_call(
-            "input_datetime", "set_datetime",
-            {"entity_id": entity_id, "date": date}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set date failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "date": date}
+    'Set an input_datetime entity to a date value.'
+    return await _dao_collapsed2_8(hass, entity_id, date, 'input_datetime', 'set_datetime', 'Set date failed: ')
 
 
 async def _set_time_value(
     hass: HomeAssistant, entity_id: str, time: str,
 ) -> dict[str, Any]:
-    """Set an input_datetime entity to a time value."""
-    try:
-        await hass.services.async_call(
-            "input_datetime", "set_datetime",
-            {"entity_id": entity_id, "time": time}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set time failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "time": time}
+    'Set an input_datetime entity to a time value.'
+    return await _dao_collapsed2_9(hass, entity_id, time, 'input_datetime', 'set_datetime', 'Set time failed: ')
 
 
 async def _set_text_value(
@@ -6368,14 +6231,8 @@ async def _get_energy_preferences(hass: HomeAssistant) -> dict[str, Any]:
 async def _skip_update(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Skip an available update."""
-    try:
-        await hass.services.async_call(
-            "update", "skip", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Skip update failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "skipped"}
+    'Skip an available update.'
+    return await _dao_collapsed2_1(hass, entity_id, 'update', 'skip', 'Skip update failed: ', 'skipped')
 
 
 async def _siren_control(
@@ -6597,14 +6454,8 @@ async def _process_conversation(
 async def _toggle_input_boolean(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Toggle an input_boolean helper."""
-    try:
-        await hass.services.async_call(
-            "input_boolean", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Toggle input_boolean failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle an input_boolean helper.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_boolean', 'toggle', 'Toggle input_boolean failed: ', 'toggled')
 
 
 # ---------------------------------------------------------------------------
@@ -6614,39 +6465,20 @@ async def _toggle_input_boolean(
 
 
 async def _camera_turn_on(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn on a camera."""
-    try:
-        await hass.services.async_call(
-            "camera", "turn_on", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Camera turn_on failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+    'Turn on a camera.'
+    return await _dao_collapsed2_1(hass, entity_id, 'camera', 'turn_on', 'Camera turn_on failed: ', 'turn_on')
 
 
 async def _camera_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn off a camera."""
-    try:
-        await hass.services.async_call(
-            "camera", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Camera turn_off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off a camera.'
+    return await _dao_collapsed2_1(hass, entity_id, 'camera', 'turn_off', 'Camera turn_off failed: ', 'turn_off')
 
 
 async def _climate_set_preset(
     hass: HomeAssistant, entity_id: str, preset_mode: str,
 ) -> dict[str, Any]:
-    """Set climate preset mode (home/away/eco/sleep/boost/comfort/etc.)."""
-    try:
-        await hass.services.async_call(
-            "climate", "set_preset_mode",
-            {"entity_id": entity_id, "preset_mode": preset_mode}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Climate set preset failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "preset_mode": preset_mode}
+    'Set climate preset mode (home/away/eco/sleep/boost/comfort/etc.).'
+    return await _dao_collapsed2_0(hass, entity_id, preset_mode, 'climate', 'Climate set preset failed: ')
 
 
 async def _climate_set_aux_heat(
@@ -6699,15 +6531,8 @@ async def _batch_reload_integrations(
 async def _set_input_select_option(
     hass: HomeAssistant, entity_id: str, option: str,
 ) -> dict[str, Any]:
-    """Set an input_select entity to a specific option."""
-    try:
-        await hass.services.async_call(
-            "input_select", "select_option",
-            {"entity_id": entity_id, "option": option}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set input_select failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "option": option}
+    'Set an input_select entity to a specific option.'
+    return await _dao_collapsed2_6(hass, entity_id, option, 'input_select', 'Set input_select failed: ')
 
 
 async def _list_input_select_options(
@@ -6727,29 +6552,15 @@ async def _list_input_select_options(
 async def _set_input_number_value(
     hass: HomeAssistant, entity_id: str, value: float,
 ) -> dict[str, Any]:
-    """Set an input_number entity value."""
-    try:
-        await hass.services.async_call(
-            "input_number", "set_value",
-            {"entity_id": entity_id, "value": float(value)}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set input_number failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": float(value)}
+    'Set an input_number entity value.'
+    return await _dao_collapsed2_10(hass, entity_id, value, 'input_number', 'set_value', 'Set input_number failed: ', 'value')
 
 
 async def _calibrate_utility_meter(
     hass: HomeAssistant, entity_id: str, value: float,
 ) -> dict[str, Any]:
-    """Calibrate a utility meter to a specific value."""
-    try:
-        await hass.services.async_call(
-            "utility_meter", "calibrate",
-            {"entity_id": entity_id, "value": float(value)}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Calibrate utility meter failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "calibrated_to": float(value)}
+    'Calibrate a utility meter to a specific value.'
+    return await _dao_collapsed2_10(hass, entity_id, value, 'utility_meter', 'calibrate', 'Calibrate utility meter failed: ', 'calibrated_to')
 
 
 async def _log_custom_event(
@@ -6824,15 +6635,8 @@ async def _set_group_members(
 async def _dismiss_persistent_notification(
     hass: HomeAssistant, notification_id: str,
 ) -> dict[str, Any]:
-    """Dismiss a persistent notification by ID."""
-    try:
-        await hass.services.async_call(
-            "persistent_notification", "dismiss",
-            {"notification_id": notification_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Dismiss persistent notification failed: {exc}"}
-    return {"ok": True, "notification_id": notification_id, "action": "dismissed"}
+    'Dismiss a persistent notification by ID.'
+    return await _dao_collapsed2_11(hass, notification_id, 'Dismiss persistent notification failed: ')
 
 
 async def _get_timer_remaining(
@@ -6987,42 +6791,23 @@ async def _device_tracker_see(
 async def _enable_automation(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Enable an automation."""
-    try:
-        await hass.services.async_call(
-            "automation", "turn_on", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Enable automation failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "enabled"}
+    'Enable an automation.'
+    return await _dao_collapsed2_1(hass, entity_id, 'automation', 'turn_on', 'Enable automation failed: ', 'enabled')
 
 
 async def _disable_automation(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Disable an automation."""
-    try:
-        await hass.services.async_call(
-            "automation", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Disable automation failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "disabled"}
+    'Disable an automation.'
+    return await _dao_collapsed2_1(hass, entity_id, 'automation', 'turn_off', 'Disable automation failed: ', 'disabled')
 
 
 async def _trigger_script(
     hass: HomeAssistant, entity_id: str,
     variables: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Trigger a script with optional variables."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if variables:
-        data["variables"] = variables
-    try:
-        await hass.services.async_call("script", "turn_on", data, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Trigger script failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "triggered"}
+    'Trigger a script with optional variables.'
+    return await _dao_collapsed2_12(hass, entity_id, variables, 'Trigger script failed: ', 'triggered')
 
 
 async def _get_entity_attributes(
@@ -7065,15 +6850,8 @@ async def _get_integration_info(
 async def _set_input_text(
     hass: HomeAssistant, entity_id: str, value: str,
 ) -> dict[str, Any]:
-    """Set an input_text entity value."""
-    try:
-        await hass.services.async_call(
-            "input_text", "set_value",
-            {"entity_id": entity_id, "value": value}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Set input_text failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Set an input_text entity value.'
+    return await _dao_collapsed2_5(hass, entity_id, value, 'input_text', 'set_value', 'Set input_text failed: ')
 
 
 async def _light_turn_on(
@@ -7117,25 +6895,13 @@ async def _light_turn_off(
 
 
 async def _switch_turn_on(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn on a switch."""
-    try:
-        await hass.services.async_call(
-            "switch", "turn_on", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Switch turn_on failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+    'Turn on a switch.'
+    return await _dao_collapsed2_1(hass, entity_id, 'switch', 'turn_on', 'Switch turn_on failed: ', 'turn_on')
 
 
 async def _switch_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn off a switch."""
-    try:
-        await hass.services.async_call(
-            "switch", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Switch turn_off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off a switch.'
+    return await _dao_collapsed2_1(hass, entity_id, 'switch', 'turn_off', 'Switch turn_off failed: ', 'turn_off')
 
 
 async def _climate_set_temperature(
@@ -7181,40 +6947,22 @@ async def _climate_set_hvac_mode(
 async def _homeassistant_turn_on(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Turn on any entity via homeassistant.turn_on (universal)."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "turn_on", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"HA turn_on failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+    'Turn on any entity via homeassistant.turn_on (universal).'
+    return await _dao_collapsed2_1(hass, entity_id, 'homeassistant', 'turn_on', 'HA turn_on failed: ', 'turn_on')
 
 
 async def _homeassistant_turn_off(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Turn off any entity via homeassistant.turn_off (universal)."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"HA turn_off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off any entity via homeassistant.turn_off (universal).'
+    return await _dao_collapsed2_1(hass, entity_id, 'homeassistant', 'turn_off', 'HA turn_off failed: ', 'turn_off')
 
 
 async def _homeassistant_toggle(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Toggle any entity via homeassistant.toggle (universal)."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"HA toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle any entity via homeassistant.toggle (universal).'
+    return await _dao_collapsed2_1(hass, entity_id, 'homeassistant', 'toggle', 'HA toggle failed: ', 'toggled')
 
 
 async def _list_intent_handlers(hass: HomeAssistant) -> dict[str, Any]:
@@ -7234,47 +6982,23 @@ async def _list_intent_handlers(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _vacuum_start(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Start a vacuum."""
-    try:
-        await hass.services.async_call(
-            "vacuum", "start", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Vacuum start failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "start"}
+    'Start a vacuum.'
+    return await _dao_collapsed2_1(hass, entity_id, 'vacuum', 'start', 'Vacuum start failed: ', 'start')
 
 
 async def _vacuum_stop(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Stop a vacuum."""
-    try:
-        await hass.services.async_call(
-            "vacuum", "stop", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Vacuum stop failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "stop"}
+    'Stop a vacuum.'
+    return await _dao_collapsed2_1(hass, entity_id, 'vacuum', 'stop', 'Vacuum stop failed: ', 'stop')
 
 
 async def _vacuum_return_home(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Send a vacuum back to its dock."""
-    try:
-        await hass.services.async_call(
-            "vacuum", "return_to_base", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Vacuum return_home failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "return_to_base"}
+    'Send a vacuum back to its dock.'
+    return await _dao_collapsed2_1(hass, entity_id, 'vacuum', 'return_to_base', 'Vacuum return_home failed: ', 'return_to_base')
 
 
 async def _vacuum_locate(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Locate a vacuum (play sound)."""
-    try:
-        await hass.services.async_call(
-            "vacuum", "locate", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Vacuum locate failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "locate"}
+    'Locate a vacuum (play sound).'
+    return await _dao_collapsed2_1(hass, entity_id, 'vacuum', 'locate', 'Vacuum locate failed: ', 'locate')
 
 
 async def _vacuum_set_fan_speed(
@@ -7309,112 +7033,54 @@ async def _vacuum_send_command(
 async def _number_set_value(
     hass: HomeAssistant, entity_id: str, value: float,
 ) -> dict[str, Any]:
-    """Set a number entity value."""
-    try:
-        await hass.services.async_call(
-            "number", "set_value",
-            {"entity_id": entity_id, "value": float(value)}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Number set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Set a number entity value.'
+    return await _dao_collapsed2_13(hass, entity_id, value, 'number', 'Number set value failed: ')
 
 
 async def _button_press(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Press a button entity."""
-    try:
-        await hass.services.async_call(
-            "button", "press", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Button press failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "pressed"}
+    'Press a button entity.'
+    return await _dao_collapsed2_1(hass, entity_id, 'button', 'press', 'Button press failed: ', 'pressed')
 
 
 async def _select_set_option(
     hass: HomeAssistant, entity_id: str, option: str,
 ) -> dict[str, Any]:
-    """Set a select entity option."""
-    try:
-        await hass.services.async_call(
-            "select", "select_option",
-            {"entity_id": entity_id, "option": option}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Select set option failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "option": option}
+    'Set a select entity option.'
+    return await _dao_collapsed2_6(hass, entity_id, option, 'select', 'Select set option failed: ')
 
 
 async def _text_set_value(
     hass: HomeAssistant, entity_id: str, value: str,
 ) -> dict[str, Any]:
-    """Set a text entity value."""
-    try:
-        await hass.services.async_call(
-            "text", "set_value",
-            {"entity_id": entity_id, "value": value}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Text set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Set a text entity value.'
+    return await _dao_collapsed2_5(hass, entity_id, value, 'text', 'set_value', 'Text set value failed: ')
 
 
 async def _valve_open(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Open a valve."""
-    try:
-        await hass.services.async_call(
-            "valve", "open_valve", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Valve open failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "open"}
+    'Open a valve.'
+    return await _dao_collapsed2_1(hass, entity_id, 'valve', 'open_valve', 'Valve open failed: ', 'open')
 
 
 async def _valve_close(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Close a valve."""
-    try:
-        await hass.services.async_call(
-            "valve", "close_valve", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Valve close failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "close"}
+    'Close a valve.'
+    return await _dao_collapsed2_1(hass, entity_id, 'valve', 'close_valve', 'Valve close failed: ', 'close')
 
 
 async def _valve_set_position(
     hass: HomeAssistant, entity_id: str, position: int,
 ) -> dict[str, Any]:
-    """Set valve position (0=closed, 100=open)."""
-    try:
-        await hass.services.async_call(
-            "valve", "set_valve_position",
-            {"entity_id": entity_id, "position": position}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Valve set position failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "position": position}
+    'Set valve position (0=closed, 100=open).'
+    return await _dao_collapsed2_14(hass, entity_id, position, 'valve', 'set_valve_position', 'Valve set position failed: ')
 
 
 async def _lawn_mower_start(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Start mowing."""
-    try:
-        await hass.services.async_call(
-            "lawn_mower", "start_mowing", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Lawn mower start failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "start_mowing"}
+    'Start mowing.'
+    return await _dao_collapsed2_1(hass, entity_id, 'lawn_mower', 'start_mowing', 'Lawn mower start failed: ', 'start_mowing')
 
 
 async def _lawn_mower_dock(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Send lawn mower back to dock."""
-    try:
-        await hass.services.async_call(
-            "lawn_mower", "dock", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Lawn mower dock failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "dock"}
+    'Send lawn mower back to dock.'
+    return await _dao_collapsed2_1(hass, entity_id, 'lawn_mower', 'dock', 'Lawn mower dock failed: ', 'dock')
 
 
 async def _remote_send_command(
@@ -7460,14 +7126,8 @@ async def _remote_learn_command(
 async def _press_input_button(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Press an input_button entity."""
-    try:
-        await hass.services.async_call(
-            "input_button", "press", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Press input_button failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "pressed"}
+    'Press an input_button entity.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_button', 'press', 'Press input_button failed: ', 'pressed')
 
 
 # ---------------------------------------------------------------------------
@@ -7513,95 +7173,50 @@ async def _media_player_set_volume(
 async def _media_player_media_pause(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Pause media playback."""
-    try:
-        await hass.services.async_call(
-            "media_player", "media_pause", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media pause failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "paused"}
+    'Pause media playback.'
+    return await _dao_collapsed2_1(hass, entity_id, 'media_player', 'media_pause', 'Media pause failed: ', 'paused')
 
 
 async def _media_player_media_play(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Resume media playback."""
-    try:
-        await hass.services.async_call(
-            "media_player", "media_play", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media play failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "playing"}
+    'Resume media playback.'
+    return await _dao_collapsed2_1(hass, entity_id, 'media_player', 'media_play', 'Media play failed: ', 'playing')
 
 
 async def _media_player_media_next(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Skip to next media track."""
-    try:
-        await hass.services.async_call(
-            "media_player", "media_next_track", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media next track failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "next_track"}
+    'Skip to next media track.'
+    return await _dao_collapsed2_1(hass, entity_id, 'media_player', 'media_next_track', 'Media next track failed: ', 'next_track')
 
 
 async def _media_player_media_previous(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Skip to previous media track."""
-    try:
-        await hass.services.async_call(
-            "media_player", "media_previous_track", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media previous track failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "previous_track"}
+    'Skip to previous media track.'
+    return await _dao_collapsed2_1(hass, entity_id, 'media_player', 'media_previous_track', 'Media previous track failed: ', 'previous_track')
 
 
 async def _date_set_value(
     hass: HomeAssistant, entity_id: str, date: str,
 ) -> dict[str, Any]:
-    """Set a date entity value (YYYY-MM-DD)."""
-    try:
-        await hass.services.async_call(
-            "date", "set_value",
-            {"entity_id": entity_id, "date": date}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Date set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "date": date}
+    'Set a date entity value (YYYY-MM-DD).'
+    return await _dao_collapsed2_8(hass, entity_id, date, 'date', 'set_value', 'Date set value failed: ')
 
 
 async def _time_set_value(
     hass: HomeAssistant, entity_id: str, time: str,
 ) -> dict[str, Any]:
-    """Set a time entity value (HH:MM:SS)."""
-    try:
-        await hass.services.async_call(
-            "time", "set_value",
-            {"entity_id": entity_id, "time": time}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Time set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "time": time}
+    'Set a time entity value (HH:MM:SS).'
+    return await _dao_collapsed2_9(hass, entity_id, time, 'time', 'set_value', 'Time set value failed: ')
 
 
 async def _datetime_set_value(
     hass: HomeAssistant, entity_id: str, datetime_val: str,
 ) -> dict[str, Any]:
-    """Set a datetime entity value (YYYY-MM-DD HH:MM:SS)."""
-    try:
-        await hass.services.async_call(
-            "datetime", "set_value",
-            {"entity_id": entity_id, "datetime": datetime_val}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Datetime set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "datetime": datetime_val}
+    'Set a datetime entity value (YYYY-MM-DD HH:MM:SS).'
+    return await _dao_collapsed2_15(hass, entity_id, datetime_val, 'Datetime set value failed: ')
 
 
 # ---------------------------------------------------------------------------
@@ -7631,78 +7246,39 @@ async def _siren_turn_on(
 
 
 async def _siren_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn off a siren."""
-    try:
-        await hass.services.async_call(
-            "siren", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Siren turn_off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off a siren.'
+    return await _dao_collapsed2_1(hass, entity_id, 'siren', 'turn_off', 'Siren turn_off failed: ', 'turn_off')
 
 
 async def _humidifier_turn_on(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn on a humidifier."""
-    try:
-        await hass.services.async_call(
-            "humidifier", "turn_on", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Humidifier turn_on failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+    'Turn on a humidifier.'
+    return await _dao_collapsed2_1(hass, entity_id, 'humidifier', 'turn_on', 'Humidifier turn_on failed: ', 'turn_on')
 
 
 async def _humidifier_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn off a humidifier."""
-    try:
-        await hass.services.async_call(
-            "humidifier", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Humidifier turn_off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off a humidifier.'
+    return await _dao_collapsed2_1(hass, entity_id, 'humidifier', 'turn_off', 'Humidifier turn_off failed: ', 'turn_off')
 
 
 async def _humidifier_set_humidity(
     hass: HomeAssistant, entity_id: str, humidity: int,
 ) -> dict[str, Any]:
-    """Set target humidity."""
-    try:
-        await hass.services.async_call(
-            "humidifier", "set_humidity",
-            {"entity_id": entity_id, "humidity": humidity}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Humidifier set humidity failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "humidity": humidity}
+    'Set target humidity.'
+    return await _dao_collapsed2_16(hass, entity_id, humidity, 'humidifier', 'Humidifier set humidity failed: ')
 
 
 async def _humidifier_set_mode(
     hass: HomeAssistant, entity_id: str, mode: str,
 ) -> dict[str, Any]:
-    """Set humidifier mode."""
-    try:
-        await hass.services.async_call(
-            "humidifier", "set_mode",
-            {"entity_id": entity_id, "mode": mode}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Humidifier set mode failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "mode": mode}
+    'Set humidifier mode.'
+    return await _dao_collapsed2_4(hass, entity_id, mode, 'Humidifier set mode failed: ')
 
 
 async def _water_heater_set_temperature(
     hass: HomeAssistant, entity_id: str, temperature: float,
 ) -> dict[str, Any]:
-    """Set water heater target temperature."""
-    try:
-        await hass.services.async_call(
-            "water_heater", "set_temperature",
-            {"entity_id": entity_id, "temperature": temperature}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Water heater set temp failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "temperature": temperature}
+    'Set water heater target temperature.'
+    return await _dao_collapsed2_3(hass, entity_id, temperature, 'Water heater set temp failed: ')
 
 
 async def _water_heater_set_operation_mode(
@@ -7737,14 +7313,8 @@ async def _fan_turn_on(
 
 
 async def _fan_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn off a fan."""
-    try:
-        await hass.services.async_call(
-            "fan", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Fan turn_off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off a fan.'
+    return await _dao_collapsed2_1(hass, entity_id, 'fan', 'turn_off', 'Fan turn_off failed: ', 'turn_off')
 
 
 async def _fan_set_percentage(
@@ -7792,206 +7362,96 @@ async def _fan_oscillate(
 async def _fan_set_preset_mode(
     hass: HomeAssistant, entity_id: str, preset_mode: str,
 ) -> dict[str, Any]:
-    """Set fan preset mode (eco/sleep/auto/etc)."""
-    try:
-        await hass.services.async_call(
-            "fan", "set_preset_mode",
-            {"entity_id": entity_id, "preset_mode": preset_mode}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Fan set preset mode failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "preset_mode": preset_mode}
+    'Set fan preset mode (eco/sleep/auto/etc).'
+    return await _dao_collapsed2_0(hass, entity_id, preset_mode, 'fan', 'Fan set preset mode failed: ')
 
 
 async def _alarm_arm_away(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Arm alarm in away mode."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_arm_away", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm arm away failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "armed_away"}
+    'Arm alarm in away mode.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_arm_away', 'Alarm arm away failed: ', 'armed_away')
 
 
 async def _alarm_arm_home(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Arm alarm in home mode."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_arm_home", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm arm home failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "armed_home"}
+    'Arm alarm in home mode.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_arm_home', 'Alarm arm home failed: ', 'armed_home')
 
 
 async def _alarm_arm_night(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Arm alarm in night mode."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_arm_night", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm arm night failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "armed_night"}
+    'Arm alarm in night mode.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_arm_night', 'Alarm arm night failed: ', 'armed_night')
 
 
 async def _alarm_disarm(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Disarm alarm."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_disarm", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm disarm failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "disarmed"}
+    'Disarm alarm.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_disarm', 'Alarm disarm failed: ', 'disarmed')
 
 
 async def _alarm_trigger(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Trigger alarm."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_trigger", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm trigger failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "triggered"}
+    'Trigger alarm.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_trigger', 'Alarm trigger failed: ', 'triggered')
 
 
 async def _lock_lock(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Lock a lock."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call("lock", "lock", data, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Lock failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "locked"}
+    'Lock a lock.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'lock', 'lock', 'Lock failed: ', 'locked')
 
 
 async def _lock_unlock(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Unlock a lock."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call("lock", "unlock", data, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Unlock failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "unlocked"}
+    'Unlock a lock.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'lock', 'unlock', 'Unlock failed: ', 'unlocked')
 
 
 async def _lock_open(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Open a lock (unlatch)."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call("lock", "open", data, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Lock open failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "opened"}
+    'Open a lock (unlatch).'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'lock', 'open', 'Lock open failed: ', 'opened')
 
 
 async def _cover_open(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Open a cover."""
-    try:
-        await hass.services.async_call(
-            "cover", "open_cover", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover open failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "open"}
+    'Open a cover.'
+    return await _dao_collapsed2_1(hass, entity_id, 'cover', 'open_cover', 'Cover open failed: ', 'open')
 
 
 async def _cover_close(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Close a cover."""
-    try:
-        await hass.services.async_call(
-            "cover", "close_cover", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover close failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "close"}
+    'Close a cover.'
+    return await _dao_collapsed2_1(hass, entity_id, 'cover', 'close_cover', 'Cover close failed: ', 'close')
 
 
 async def _cover_stop(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Stop a cover."""
-    try:
-        await hass.services.async_call(
-            "cover", "stop_cover", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover stop failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "stop"}
+    'Stop a cover.'
+    return await _dao_collapsed2_1(hass, entity_id, 'cover', 'stop_cover', 'Cover stop failed: ', 'stop')
 
 
 async def _cover_set_position(
     hass: HomeAssistant, entity_id: str, position: int,
 ) -> dict[str, Any]:
-    """Set cover position (0=closed, 100=open)."""
-    try:
-        await hass.services.async_call(
-            "cover", "set_cover_position",
-            {"entity_id": entity_id, "position": position}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover set position failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "position": position}
+    'Set cover position (0=closed, 100=open).'
+    return await _dao_collapsed2_14(hass, entity_id, position, 'cover', 'set_cover_position', 'Cover set position failed: ')
 
 
 async def _cover_open_tilt(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Open cover tilt."""
-    try:
-        await hass.services.async_call(
-            "cover", "open_cover_tilt", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover open tilt failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "open_tilt"}
+    'Open cover tilt.'
+    return await _dao_collapsed2_1(hass, entity_id, 'cover', 'open_cover_tilt', 'Cover open tilt failed: ', 'open_tilt')
 
 
 async def _cover_close_tilt(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Close cover tilt."""
-    try:
-        await hass.services.async_call(
-            "cover", "close_cover_tilt", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover close tilt failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "close_tilt"}
+    'Close cover tilt.'
+    return await _dao_collapsed2_1(hass, entity_id, 'cover', 'close_cover_tilt', 'Cover close tilt failed: ', 'close_tilt')
 
 
 async def _cover_set_tilt_position(
@@ -8023,69 +7483,33 @@ async def _timer_start(
 
 
 async def _timer_cancel(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Cancel a timer."""
-    try:
-        await hass.services.async_call(
-            "timer", "cancel", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Timer cancel failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "cancelled"}
+    'Cancel a timer.'
+    return await _dao_collapsed2_1(hass, entity_id, 'timer', 'cancel', 'Timer cancel failed: ', 'cancelled')
 
 
 async def _timer_pause(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Pause a timer."""
-    try:
-        await hass.services.async_call(
-            "timer", "pause", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Timer pause failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "paused"}
+    'Pause a timer.'
+    return await _dao_collapsed2_1(hass, entity_id, 'timer', 'pause', 'Timer pause failed: ', 'paused')
 
 
 async def _timer_finish(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Finish (force-complete) a timer."""
-    try:
-        await hass.services.async_call(
-            "timer", "finish", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Timer finish failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "finished"}
+    'Finish (force-complete) a timer.'
+    return await _dao_collapsed2_1(hass, entity_id, 'timer', 'finish', 'Timer finish failed: ', 'finished')
 
 
 async def _increment_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Increment a counter entity."""
-    try:
-        await hass.services.async_call(
-            "counter", "increment", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Counter increment failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "incremented"}
+    'Increment a counter entity.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'increment', 'Counter increment failed: ', 'incremented')
 
 
 async def _decrement_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Decrement a counter entity."""
-    try:
-        await hass.services.async_call(
-            "counter", "decrement", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Counter decrement failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "decremented"}
+    'Decrement a counter entity.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'decrement', 'Counter decrement failed: ', 'decremented')
 
 
 async def _reset_counter(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Reset a counter entity."""
-    try:
-        await hass.services.async_call(
-            "counter", "reset", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Counter reset failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+    'Reset a counter entity.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'reset', 'Counter reset failed: ', 'reset')
 
 
 # ---------------------------------------------------------------------------
@@ -8099,17 +7523,8 @@ async def _todo_add_item(
     hass: HomeAssistant, entity_id: str, item: str,
     due_date: str | None = None, description: str | None = None,
 ) -> dict[str, Any]:
-    """Add an item to a todo list entity."""
-    data: dict[str, Any] = {"entity_id": entity_id, "item": item}
-    if due_date:
-        data["due_date"] = due_date
-    if description:
-        data["description"] = description
-    try:
-        await hass.services.async_call("todo", "add_item", data, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Todo add item failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "item": item}
+    'Add an item to a todo list entity.'
+    return await _dao_collapsed2_7(hass, entity_id, item, due_date, description, 'Todo add item failed: ')
 
 
 async def _todo_update_item(
@@ -8174,94 +7589,50 @@ async def _todo_get_items(
 async def _input_boolean_turn_on(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Turn on an input_boolean."""
-    try:
-        await hass.services.async_call(
-            "input_boolean", "turn_on", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input boolean turn_on failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+    'Turn on an input_boolean.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_boolean', 'turn_on', 'Input boolean turn_on failed: ', 'turn_on')
 
 
 async def _input_boolean_turn_off(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Turn off an input_boolean."""
-    try:
-        await hass.services.async_call(
-            "input_boolean", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input boolean turn_off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off an input_boolean.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_boolean', 'turn_off', 'Input boolean turn_off failed: ', 'turn_off')
 
 
 async def _input_boolean_toggle(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Toggle an input_boolean."""
-    try:
-        await hass.services.async_call(
-            "input_boolean", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input boolean toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle an input_boolean.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_boolean', 'toggle', 'Input boolean toggle failed: ', 'toggled')
 
 
 async def _input_number_set_value(
     hass: HomeAssistant, entity_id: str, value: float,
 ) -> dict[str, Any]:
-    """Set an input_number value."""
-    try:
-        await hass.services.async_call(
-            "input_number", "set_value",
-            {"entity_id": entity_id, "value": float(value)}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input number set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Set an input_number value.'
+    return await _dao_collapsed2_13(hass, entity_id, value, 'input_number', 'Input number set value failed: ')
 
 
 async def _input_number_increment(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Increment an input_number by its step."""
-    try:
-        await hass.services.async_call(
-            "input_number", "increment", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input number increment failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "incremented"}
+    'Increment an input_number by its step.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_number', 'increment', 'Input number increment failed: ', 'incremented')
 
 
 async def _input_number_decrement(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Decrement an input_number by its step."""
-    try:
-        await hass.services.async_call(
-            "input_number", "decrement", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input number decrement failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "decremented"}
+    'Decrement an input_number by its step.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_number', 'decrement', 'Input number decrement failed: ', 'decremented')
 
 
 async def _input_select_set_option(
     hass: HomeAssistant, entity_id: str, option: str,
 ) -> dict[str, Any]:
-    """Select an option on an input_select."""
-    try:
-        await hass.services.async_call(
-            "input_select", "select_option",
-            {"entity_id": entity_id, "option": option}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input select set option failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "option": option}
+    'Select an option on an input_select.'
+    return await _dao_collapsed2_6(hass, entity_id, option, 'input_select', 'Input select set option failed: ')
 
 
 async def _input_select_set_options(
@@ -8281,29 +7652,15 @@ async def _input_select_set_options(
 async def _input_select_next(
     hass: HomeAssistant, entity_id: str, cycle: bool = True,
 ) -> dict[str, Any]:
-    """Select next option on an input_select."""
-    try:
-        await hass.services.async_call(
-            "input_select", "select_next",
-            {"entity_id": entity_id, "cycle": cycle}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input select next failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "next"}
+    'Select next option on an input_select.'
+    return await _dao_collapsed2_18(hass, entity_id, cycle, 'input_select', 'select_next', 'Input select next failed: ', 'next')
 
 
 async def _input_select_previous(
     hass: HomeAssistant, entity_id: str, cycle: bool = True,
 ) -> dict[str, Any]:
-    """Select previous option on an input_select."""
-    try:
-        await hass.services.async_call(
-            "input_select", "select_previous",
-            {"entity_id": entity_id, "cycle": cycle}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input select previous failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "previous"}
+    'Select previous option on an input_select.'
+    return await _dao_collapsed2_18(hass, entity_id, cycle, 'input_select', 'select_previous', 'Input select previous failed: ', 'previous')
 
 
 async def _media_player_shuffle_set(
@@ -9089,16 +8446,8 @@ async def _supervisor_stats(hass: HomeAssistant) -> dict[str, Any]:
 async def _vacuum_clean_spot(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Command vacuum to clean spot."""
-    try:
-        await hass.services.async_call(
-            "vacuum", "clean_spot",
-            {"entity_id": entity_id},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Vacuum clean spot failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "clean_spot"}
+    'Command vacuum to clean spot.'
+    return await _dao_collapsed2_1(hass, entity_id, 'vacuum', 'clean_spot', 'Vacuum clean spot failed: ', 'clean_spot')
 
 
 async def _event_entity_get_last(
@@ -9144,31 +8493,15 @@ async def _date_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _time_entity_set_value(
     hass: HomeAssistant, entity_id: str, time: str,
 ) -> dict[str, Any]:
-    """Set value for a time entity."""
-    try:
-        await hass.services.async_call(
-            "time", "set_value",
-            {"entity_id": entity_id, "time": time},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Time entity set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "time": time}
+    'Set value for a time entity.'
+    return await _dao_collapsed2_9(hass, entity_id, time, 'time', 'set_value', 'Time entity set value failed: ')
 
 
 async def _datetime_entity_set_value(
     hass: HomeAssistant, entity_id: str, datetime_val: str,
 ) -> dict[str, Any]:
-    """Set value for a datetime entity."""
-    try:
-        await hass.services.async_call(
-            "datetime", "set_value",
-            {"entity_id": entity_id, "datetime": datetime_val},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Datetime entity set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "datetime": datetime_val}
+    'Set value for a datetime entity.'
+    return await _dao_collapsed2_15(hass, entity_id, datetime_val, 'Datetime entity set value failed: ')
 
 
 async def _todo_list_lists(hass: HomeAssistant) -> dict[str, Any]:
@@ -9238,15 +8571,8 @@ async def _service_call_with_response(
 async def _webhook_unregister(
     hass: HomeAssistant, webhook_id: str,
 ) -> dict[str, Any]:
-    """Unregister a webhook."""
-    try:
-        from homeassistant.components.webhook import async_unregister
-        async_unregister(hass, webhook_id)
-        return {"ok": True, "webhook_id": webhook_id, "action": "unregistered"}
-    except ImportError:
-        return {"error": "webhook component not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Webhook unregister failed: {exc}"}
+    'Unregister a webhook.'
+    return await _dao_collapsed2_19(hass, webhook_id, 'unregistered', 'Webhook unregister failed: ')
 
 
 async def _addon_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -9289,52 +8615,22 @@ async def _addon_info(
 async def _addon_start(
     hass: HomeAssistant, slug: str,
 ) -> dict[str, Any]:
-    """Start an addon."""
-    try:
-        from homeassistant.components.hassio.handler import HassIO
-        hassio: HassIO = hass.data.get("hassio")
-        if hassio is None:
-            return {"error": "hassio not available (not HA OS)"}
-        await hassio.send_command(f"/addons/{slug}/start", method="post")
-        return {"ok": True, "slug": slug, "action": "started"}
-    except ImportError:
-        return {"error": "hassio component not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Addon start failed: {exc}"}
+    'Start an addon.'
+    return await _dao_collapsed2_20(hass, slug, '/start', 'started', 'Addon start failed: ')
 
 
 async def _addon_stop(
     hass: HomeAssistant, slug: str,
 ) -> dict[str, Any]:
-    """Stop an addon."""
-    try:
-        from homeassistant.components.hassio.handler import HassIO
-        hassio: HassIO = hass.data.get("hassio")
-        if hassio is None:
-            return {"error": "hassio not available (not HA OS)"}
-        await hassio.send_command(f"/addons/{slug}/stop", method="post")
-        return {"ok": True, "slug": slug, "action": "stopped"}
-    except ImportError:
-        return {"error": "hassio component not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Addon stop failed: {exc}"}
+    'Stop an addon.'
+    return await _dao_collapsed2_20(hass, slug, '/stop', 'stopped', 'Addon stop failed: ')
 
 
 async def _addon_restart(
     hass: HomeAssistant, slug: str,
 ) -> dict[str, Any]:
-    """Restart an addon."""
-    try:
-        from homeassistant.components.hassio.handler import HassIO
-        hassio: HassIO = hass.data.get("hassio")
-        if hassio is None:
-            return {"error": "hassio not available (not HA OS)"}
-        await hassio.send_command(f"/addons/{slug}/restart", method="post")
-        return {"ok": True, "slug": slug, "action": "restarted"}
-    except ImportError:
-        return {"error": "hassio component not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Addon restart failed: {exc}"}
+    'Restart an addon.'
+    return await _dao_collapsed2_20(hass, slug, '/restart', 'restarted', 'Addon restart failed: ')
 
 
 async def _system_cpu_usage(hass: HomeAssistant) -> dict[str, Any]:
@@ -9845,14 +9141,8 @@ async def _group_set_entities(
 async def _zone_remove(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Remove a zone."""
-    try:
-        await hass.services.async_call(
-            "zone", "remove", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Zone remove failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "removed"}
+    'Remove a zone.'
+    return await _dao_collapsed2_1(hass, entity_id, 'zone', 'remove', 'Zone remove failed: ', 'removed')
 
 
 async def _frontend_reload_themes(hass: HomeAssistant) -> dict[str, Any]:
@@ -9888,31 +9178,15 @@ async def _system_log_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _climate_set_preset_mode(
     hass: HomeAssistant, entity_id: str, preset_mode: str,
 ) -> dict[str, Any]:
-    """Set climate preset mode."""
-    try:
-        await hass.services.async_call(
-            "climate", "set_preset_mode",
-            {"entity_id": entity_id, "preset_mode": preset_mode},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Climate set preset mode failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "preset_mode": preset_mode}
+    'Set climate preset mode.'
+    return await _dao_collapsed2_0(hass, entity_id, preset_mode, 'climate', 'Climate set preset mode failed: ')
 
 
 async def _vacuum_pause(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Pause a vacuum."""
-    try:
-        await hass.services.async_call(
-            "vacuum", "pause",
-            {"entity_id": entity_id},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Vacuum pause failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "paused"}
+    'Pause a vacuum.'
+    return await _dao_collapsed2_1(hass, entity_id, 'vacuum', 'pause', 'Vacuum pause failed: ', 'paused')
 
 
 async def _remote_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -9923,16 +9197,8 @@ async def _remote_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _media_player_seek(
     hass: HomeAssistant, entity_id: str, seek_position: float,
 ) -> dict[str, Any]:
-    """Seek to a position in media player."""
-    try:
-        await hass.services.async_call(
-            "media_player", "media_seek",
-            {"entity_id": entity_id, "seek_position": seek_position},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media player seek failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "seek_position": seek_position}
+    'Seek to a position in media player.'
+    return await _dao_collapsed2_21(hass, entity_id, seek_position)
 
 
 # ---------------------------------------------------------------------------
@@ -10682,16 +9948,8 @@ async def _text_entity_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _text_entity_set_value(
     hass: HomeAssistant, entity_id: str, value: str,
 ) -> dict[str, Any]:
-    """Set a text entity value."""
-    try:
-        await hass.services.async_call(
-            "text", "set_value",
-            {"entity_id": entity_id, "value": value},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Text entity set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Set a text entity value.'
+    return await _dao_collapsed2_5(hass, entity_id, value, 'text', 'set_value', 'Text entity set value failed: ')
 
 
 async def _lawn_mower_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -11038,16 +10296,8 @@ async def _backup_create_full(hass: HomeAssistant) -> dict[str, Any]:
 async def _backup_remove(
     hass: HomeAssistant, slug: str,
 ) -> dict[str, Any]:
-    """Remove a backup."""
-    try:
-        from homeassistant.components.backup import async_get_manager
-        manager = async_get_manager(hass)
-        await manager.async_remove_backup(slug)
-        return {"ok": True, "slug": slug, "action": "removed"}
-    except ImportError:
-        return {"error": "backup component not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Backup remove failed: {exc}"}
+    'Remove a backup.'
+    return await _dao_collapsed2_22(hass, slug, 'removed', 'Backup remove failed: ')
 
 
 async def _homeassistant_reload_all(hass: HomeAssistant) -> dict[str, Any]:
@@ -11570,15 +10820,8 @@ async def _webhook_register(
 async def _webhook_remove(
     hass: HomeAssistant, webhook_id: str,
 ) -> dict[str, Any]:
-    """Remove a webhook."""
-    try:
-        from homeassistant.components.webhook import async_unregister
-        async_unregister(hass, webhook_id)
-        return {"ok": True, "webhook_id": webhook_id, "action": "removed"}
-    except ImportError:
-        return {"error": "webhook component not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Webhook remove failed: {exc}"}
+    'Remove a webhook.'
+    return await _dao_collapsed2_19(hass, webhook_id, 'removed', 'Webhook remove failed: ')
 
 
 async def _mqtt_subscribe(
@@ -11611,14 +10854,8 @@ async def _mqtt_dump(
 async def _rest_command_call(
     hass: HomeAssistant, command_name: str,
 ) -> dict[str, Any]:
-    """Call a configured rest_command."""
-    try:
-        await hass.services.async_call(
-            "rest_command", command_name, {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"REST command call failed: {exc}"}
-    return {"ok": True, "command": command_name, "action": "called"}
+    'Call a configured rest_command.'
+    return await _dao_collapsed2_23(hass, command_name, 'rest_command', 'REST command call failed: ', 'called')
 
 
 async def _supervisor_info(hass: HomeAssistant) -> dict[str, Any]:
@@ -11648,27 +10885,15 @@ async def _supervisor_addon_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _supervisor_addon_start(
     hass: HomeAssistant, slug: str,
 ) -> dict[str, Any]:
-    """Start a supervisor add-on."""
-    try:
-        await hass.services.async_call(
-            "hassio", "addon_start", {"addon": slug}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Supervisor addon start failed: {exc}"}
-    return {"ok": True, "slug": slug, "action": "started"}
+    'Start a supervisor add-on.'
+    return await _dao_collapsed2_24(hass, slug, 'addon_start', 'Supervisor addon start failed: ', 'started')
 
 
 async def _supervisor_addon_stop(
     hass: HomeAssistant, slug: str,
 ) -> dict[str, Any]:
-    """Stop a supervisor add-on."""
-    try:
-        await hass.services.async_call(
-            "hassio", "addon_stop", {"addon": slug}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Supervisor addon stop failed: {exc}"}
-    return {"ok": True, "slug": slug, "action": "stopped"}
+    'Stop a supervisor add-on.'
+    return await _dao_collapsed2_24(hass, slug, 'addon_stop', 'Supervisor addon stop failed: ', 'stopped')
 
 
 async def _core_state_info(hass: HomeAssistant) -> dict[str, Any]:
@@ -11754,15 +10979,8 @@ async def _assist_satellite_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _assist_satellite_intercept(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Intercept assist satellite for manual handling."""
-    try:
-        await hass.services.async_call(
-            "assist_satellite", "intercept",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Assist satellite intercept failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "intercepted"}
+    'Intercept assist satellite for manual handling.'
+    return await _dao_collapsed2_1(hass, entity_id, 'assist_satellite', 'intercept', 'Assist satellite intercept failed: ', 'intercepted')
 
 
 async def _media_player_browse_media(
@@ -11813,29 +11031,15 @@ async def _scene_create_snapshot(
 async def _input_select_set_first(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Set input_select to first option."""
-    try:
-        await hass.services.async_call(
-            "input_select", "select_first",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input select set first failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "set_first"}
+    'Set input_select to first option.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_select', 'select_first', 'Input select set first failed: ', 'set_first')
 
 
 async def _input_select_set_last(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Set input_select to last option."""
-    try:
-        await hass.services.async_call(
-            "input_select", "select_last",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input select set last failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "set_last"}
+    'Set input_select to last option.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_select', 'select_last', 'Input select set last failed: ', 'set_last')
 
 
 async def _automation_trigger_with_context(
@@ -11862,17 +11066,8 @@ async def _script_turn_on_with_variables(
     hass: HomeAssistant, entity_id: str,
     variables: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Turn on a script with variables."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if variables:
-        data["variables"] = variables
-    try:
-        await hass.services.async_call(
-            "script", "turn_on", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Script turn on with variables failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turned_on"}
+    'Turn on a script with variables.'
+    return await _dao_collapsed2_12(hass, entity_id, variables, 'Script turn on with variables failed: ', 'turned_on')
 
 
 async def _system_set_location(
@@ -12611,34 +11806,16 @@ async def _fan_increase_speed(
     hass: HomeAssistant, entity_id: str,
     percentage_step: int | None = None,
 ) -> dict[str, Any]:
-    """Increase fan speed."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if percentage_step is not None:
-        data["percentage_step"] = percentage_step
-    try:
-        await hass.services.async_call(
-            "fan", "increase_speed", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Fan increase speed failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "speed_increased"}
+    'Increase fan speed.'
+    return await _dao_collapsed2_25(hass, entity_id, percentage_step, 'increase_speed', 'Fan increase speed failed: ', 'speed_increased')
 
 
 async def _fan_decrease_speed(
     hass: HomeAssistant, entity_id: str,
     percentage_step: int | None = None,
 ) -> dict[str, Any]:
-    """Decrease fan speed."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if percentage_step is not None:
-        data["percentage_step"] = percentage_step
-    try:
-        await hass.services.async_call(
-            "fan", "decrease_speed", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Fan decrease speed failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "speed_decreased"}
+    'Decrease fan speed.'
+    return await _dao_collapsed2_25(hass, entity_id, percentage_step, 'decrease_speed', 'Fan decrease speed failed: ', 'speed_decreased')
 
 
 async def _notify_persistent_notification(
@@ -12693,16 +11870,8 @@ async def _backup_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _backup_delete(
     hass: HomeAssistant, slug: str,
 ) -> dict[str, Any]:
-    """Delete a backup."""
-    try:
-        from homeassistant.components.backup import async_get_manager
-        manager = async_get_manager(hass)
-        await manager.async_remove_backup(slug)
-        return {"ok": True, "slug": slug, "action": "deleted"}
-    except ImportError:
-        return {"error": "backup component not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Backup delete failed: {exc}"}
+    'Delete a backup.'
+    return await _dao_collapsed2_22(hass, slug, 'deleted', 'Backup delete failed: ')
 
 
 async def _backup_restore(
@@ -12758,15 +11927,8 @@ async def _automation_disable(
 async def _automation_enable(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Enable an automation."""
-    try:
-        await hass.services.async_call(
-            "automation", "turn_on",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Automation enable failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "enabled"}
+    'Enable an automation.'
+    return await _dao_collapsed2_1(hass, entity_id, 'automation', 'turn_on', 'Automation enable failed: ', 'enabled')
 
 
 # ---------------------------------------------------------------------------
@@ -12805,29 +11967,15 @@ async def _conversation_set_agent(
 async def _water_heater_turn_on(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Turn on a water heater."""
-    try:
-        await hass.services.async_call(
-            "water_heater", "turn_on",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Water heater turn on failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turned_on"}
+    'Turn on a water heater.'
+    return await _dao_collapsed2_1(hass, entity_id, 'water_heater', 'turn_on', 'Water heater turn on failed: ', 'turned_on')
 
 
 async def _water_heater_turn_off(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Turn off a water heater."""
-    try:
-        await hass.services.async_call(
-            "water_heater", "turn_off",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Water heater turn off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turned_off"}
+    'Turn off a water heater.'
+    return await _dao_collapsed2_1(hass, entity_id, 'water_heater', 'turn_off', 'Water heater turn off failed: ', 'turned_off')
 
 
 async def _event_fire(
@@ -12847,33 +11995,15 @@ async def _persistent_notification_create_custom(
     title: str | None = None,
     notification_id: str | None = None,
 ) -> dict[str, Any]:
-    """Create a persistent notification with custom options."""
-    data: dict[str, Any] = {"message": message}
-    if title:
-        data["title"] = title
-    if notification_id:
-        data["notification_id"] = notification_id
-    try:
-        await hass.services.async_call(
-            "persistent_notification", "create", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Persistent notification create failed: {exc}"}
-    return {"ok": True, "message": message, "action": "created"}
+    'Create a persistent notification with custom options.'
+    return await _dao_collapsed2_26(hass, message, title, notification_id)
 
 
 async def _image_processing_scan(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Trigger an image processing scan."""
-    try:
-        await hass.services.async_call(
-            "image_processing", "scan",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Image processing scan failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "scanned"}
+    'Trigger an image processing scan.'
+    return await _dao_collapsed2_1(hass, entity_id, 'image_processing', 'scan', 'Image processing scan failed: ', 'scanned')
 
 
 async def _device_automation_list_triggers(
@@ -12940,15 +12070,8 @@ async def _device_automation_list_actions(
 async def _input_datetime_set_date(
     hass: HomeAssistant, entity_id: str, date: str,
 ) -> dict[str, Any]:
-    """Set the date of an input_datetime entity."""
-    try:
-        await hass.services.async_call(
-            "input_datetime", "set_datetime",
-            {"entity_id": entity_id, "date": date}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input datetime set date failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "date": date}
+    'Set the date of an input_datetime entity.'
+    return await _dao_collapsed2_8(hass, entity_id, date, 'input_datetime', 'set_datetime', 'Input datetime set date failed: ')
 
 
 async def _input_datetime_set_time(
@@ -12968,35 +12091,15 @@ async def _input_datetime_set_time(
 async def _alarm_arm_custom_bypass(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Arm alarm with custom bypass."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_arm_custom_bypass",
-            data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm arm custom bypass failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "armed_custom_bypass"}
+    'Arm alarm with custom bypass.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_arm_custom_bypass', 'Alarm arm custom bypass failed: ', 'armed_custom_bypass')
 
 
 async def _alarm_arm_vacation(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Arm alarm in vacation mode."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_arm_vacation",
-            data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm arm vacation failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "armed_vacation"}
+    'Arm alarm in vacation mode.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_arm_vacation', 'Alarm arm vacation failed: ', 'armed_vacation')
 
 
 async def _media_source_browse(
@@ -13073,85 +12176,43 @@ async def _statistics_adjust_sum(
 async def _utility_meter_calibrate(
     hass: HomeAssistant, entity_id: str, value: float,
 ) -> dict[str, Any]:
-    """Calibrate a utility meter."""
-    try:
-        await hass.services.async_call(
-            "utility_meter", "calibrate",
-            {"entity_id": entity_id, "value": value}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Utility meter calibrate failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Calibrate a utility meter.'
+    return await _dao_collapsed2_5(hass, entity_id, value, 'utility_meter', 'calibrate', 'Utility meter calibrate failed: ')
 
 
 async def _utility_meter_reset(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Reset a utility meter."""
-    try:
-        await hass.services.async_call(
-            "utility_meter", "reset",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Utility meter reset failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+    'Reset a utility meter.'
+    return await _dao_collapsed2_1(hass, entity_id, 'utility_meter', 'reset', 'Utility meter reset failed: ', 'reset')
 
 
 async def _select_select_first(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Select the first option."""
-    try:
-        await hass.services.async_call(
-            "select", "select_first",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Select first failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "first_selected"}
+    'Select the first option.'
+    return await _dao_collapsed2_1(hass, entity_id, 'select', 'select_first', 'Select first failed: ', 'first_selected')
 
 
 async def _select_select_last(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Select the last option."""
-    try:
-        await hass.services.async_call(
-            "select", "select_last",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Select last failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "last_selected"}
+    'Select the last option.'
+    return await _dao_collapsed2_1(hass, entity_id, 'select', 'select_last', 'Select last failed: ', 'last_selected')
 
 
 async def _select_select_next(
     hass: HomeAssistant, entity_id: str, cycle: bool = True,
 ) -> dict[str, Any]:
-    """Select the next option."""
-    try:
-        await hass.services.async_call(
-            "select", "select_next",
-            {"entity_id": entity_id, "cycle": cycle}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Select next failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "next_selected"}
+    'Select the next option.'
+    return await _dao_collapsed2_18(hass, entity_id, cycle, 'select', 'select_next', 'Select next failed: ', 'next_selected')
 
 
 async def _select_select_previous(
     hass: HomeAssistant, entity_id: str, cycle: bool = True,
 ) -> dict[str, Any]:
-    """Select the previous option."""
-    try:
-        await hass.services.async_call(
-            "select", "select_previous",
-            {"entity_id": entity_id, "cycle": cycle}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Select previous failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "previous_selected"}
+    'Select the previous option.'
+    return await _dao_collapsed2_18(hass, entity_id, cycle, 'select', 'select_previous', 'Select previous failed: ', 'previous_selected')
 
 
 # ---------------------------------------------------------------------------
@@ -13312,14 +12373,8 @@ async def _template_reload(hass: HomeAssistant) -> dict[str, Any]:
 async def _shell_command_execute(
     hass: HomeAssistant, command_name: str,
 ) -> dict[str, Any]:
-    """Execute a shell_command by name."""
-    try:
-        await hass.services.async_call(
-            "shell_command", command_name, {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Shell command execute failed: {exc}"}
-    return {"ok": True, "command": command_name, "action": "executed"}
+    'Execute a shell_command by name.'
+    return await _dao_collapsed2_23(hass, command_name, 'shell_command', 'Shell command execute failed: ', 'executed')
 
 
 async def _notify_all(
@@ -13339,31 +12394,15 @@ async def _notify_all(
 async def _config_entry_disable(
     hass: HomeAssistant, entry_id: str,
 ) -> dict[str, Any]:
-    """Disable a config entry."""
-    try:
-        result = await hass.config_entries.async_set_disabled_by(
-            entry_id, "user",
-        )
-    except AttributeError:
-        return {"error": "config_entries.async_set_disabled_by not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Config entry disable failed: {exc}"}
-    return {"ok": True, "entry_id": entry_id, "action": "disabled", "result": str(result)}
+    'Disable a config entry.'
+    return await _dao_collapsed2_27(hass, entry_id, 'user', 'Config entry disable failed: ', 'disabled')
 
 
 async def _config_entry_enable(
     hass: HomeAssistant, entry_id: str,
 ) -> dict[str, Any]:
-    """Enable a config entry."""
-    try:
-        result = await hass.config_entries.async_set_disabled_by(
-            entry_id, None,
-        )
-    except AttributeError:
-        return {"error": "config_entries.async_set_disabled_by not available"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Config entry enable failed: {exc}"}
-    return {"ok": True, "entry_id": entry_id, "action": "enabled", "result": str(result)}
+    'Enable a config entry.'
+    return await _dao_collapsed2_27(hass, entry_id, None, 'Config entry enable failed: ', 'enabled')
 
 
 async def _config_entry_reload(
@@ -13659,40 +12698,22 @@ async def _timer_change(
 async def _counter_increment(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Increment a counter."""
-    try:
-        await hass.services.async_call(
-            "counter", "increment", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Counter increment failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "incremented"}
+    'Increment a counter.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'increment', 'Counter increment failed: ', 'incremented')
 
 
 async def _counter_decrement(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Decrement a counter."""
-    try:
-        await hass.services.async_call(
-            "counter", "decrement", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Counter decrement failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "decremented"}
+    'Decrement a counter.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'decrement', 'Counter decrement failed: ', 'decremented')
 
 
 async def _counter_reset(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Reset a counter to its initial value."""
-    try:
-        await hass.services.async_call(
-            "counter", "reset", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Counter reset failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "reset"}
+    'Reset a counter to its initial value.'
+    return await _dao_collapsed2_1(hass, entity_id, 'counter', 'reset', 'Counter reset failed: ', 'reset')
 
 
 async def _scene_apply(
@@ -13729,14 +12750,8 @@ async def _automation_trigger(
 async def _script_turn_off(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Turn off/stop a running script."""
-    try:
-        await hass.services.async_call(
-            "script", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Script turn off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turned_off"}
+    'Turn off/stop a running script.'
+    return await _dao_collapsed2_1(hass, entity_id, 'script', 'turn_off', 'Script turn off failed: ', 'turned_off')
 
 
 # ---------------------------------------------------------------------------
@@ -13767,14 +12782,8 @@ async def _zone_create(
 async def _zone_delete(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Delete a zone."""
-    try:
-        await hass.services.async_call(
-            "zone", "delete", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Zone delete failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "deleted"}
+    'Delete a zone.'
+    return await _dao_collapsed2_1(hass, entity_id, 'zone', 'delete', 'Zone delete failed: ', 'deleted')
 
 
 async def _person_create(
@@ -13798,14 +12807,8 @@ async def _person_create(
 async def _person_delete(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Delete a person."""
-    try:
-        await hass.services.async_call(
-            "person", "delete", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Person delete failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "deleted"}
+    'Delete a person.'
+    return await _dao_collapsed2_1(hass, entity_id, 'person', 'delete', 'Person delete failed: ', 'deleted')
 
 
 async def _image_snapshot(
@@ -13870,27 +12873,15 @@ async def _update_install(
 async def _update_skip(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Skip an available update."""
-    try:
-        await hass.services.async_call(
-            "update", "skip", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Update skip failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "skipped"}
+    'Skip an available update.'
+    return await _dao_collapsed2_1(hass, entity_id, 'update', 'skip', 'Update skip failed: ', 'skipped')
 
 
 async def _update_clear_skipped(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Clear a skipped update."""
-    try:
-        await hass.services.async_call(
-            "update", "clear_skipped", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Update clear skipped failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "clear_skipped"}
+    'Clear a skipped update.'
+    return await _dao_collapsed2_1(hass, entity_id, 'update', 'clear_skipped', 'Update clear skipped failed: ', 'clear_skipped')
 
 
 async def _camera_play_stream(
@@ -13912,29 +12903,15 @@ async def _camera_play_stream(
 async def _camera_enable_motion(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Enable motion detection on a camera."""
-    try:
-        await hass.services.async_call(
-            "camera", "enable_motion_detection",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Camera enable motion failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "motion_enabled"}
+    'Enable motion detection on a camera.'
+    return await _dao_collapsed2_1(hass, entity_id, 'camera', 'enable_motion_detection', 'Camera enable motion failed: ', 'motion_enabled')
 
 
 async def _camera_disable_motion(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Disable motion detection on a camera."""
-    try:
-        await hass.services.async_call(
-            "camera", "disable_motion_detection",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Camera disable motion failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "motion_disabled"}
+    'Disable motion detection on a camera.'
+    return await _dao_collapsed2_1(hass, entity_id, 'camera', 'disable_motion_detection', 'Camera disable motion failed: ', 'motion_disabled')
 
 
 async def _calendar_create_event(
@@ -13996,15 +12973,8 @@ async def _calendar_get_events(
 async def _todo_remove_completed_items(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Remove completed items from a todo list."""
-    try:
-        await hass.services.async_call(
-            "todo", "remove_completed_items",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Todo remove completed failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "completed_removed"}
+    'Remove completed items from a todo list.'
+    return await _dao_collapsed2_1(hass, entity_id, 'todo', 'remove_completed_items', 'Todo remove completed failed: ', 'completed_removed')
 
 
 async def _weather_get_forecasts(
@@ -14047,14 +13017,8 @@ async def _mqtt_publish(
 async def _rest_command_execute(
     hass: HomeAssistant, command_name: str,
 ) -> dict[str, Any]:
-    """Execute a rest_command by name."""
-    try:
-        await hass.services.async_call(
-            "rest_command", command_name, {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"REST command execute failed: {exc}"}
-    return {"ok": True, "command": command_name, "action": "executed"}
+    'Execute a rest_command by name.'
+    return await _dao_collapsed2_23(hass, command_name, 'rest_command', 'REST command execute failed: ', 'executed')
 
 
 async def _logbook_get_entries(
@@ -14091,15 +13055,8 @@ async def _logbook_get_entries(
 async def _homeassistant_update_entity(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Force-update an entity's state."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "update_entity",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Update entity failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "updated"}
+    "Force-update an entity's state."
+    return await _dao_collapsed2_1(hass, entity_id, 'homeassistant', 'update_entity', 'Update entity failed: ', 'updated')
 
 
 async def _system_log_clear(hass: HomeAssistant) -> dict[str, Any]:
@@ -14207,47 +13164,22 @@ async def _reload_domain(
 async def _humidifier_toggle(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Toggle a humidifier."""
-    try:
-        await hass.services.async_call(
-            "humidifier", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Humidifier toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle a humidifier.'
+    return await _dao_collapsed2_1(hass, entity_id, 'humidifier', 'toggle', 'Humidifier toggle failed: ', 'toggled')
 
 
 async def _alarm_control_panel_arm_custom_bypass(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Arm alarm with custom bypass."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_arm_custom_bypass",
-            data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm arm custom bypass failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "arm_custom_bypass"}
+    'Arm alarm with custom bypass.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_arm_custom_bypass', 'Alarm arm custom bypass failed: ', 'arm_custom_bypass')
 
 
 async def _alarm_control_panel_trigger(
     hass: HomeAssistant, entity_id: str, code: str | None = None,
 ) -> dict[str, Any]:
-    """Trigger an alarm."""
-    data: dict[str, Any] = {"entity_id": entity_id}
-    if code:
-        data["code"] = code
-    try:
-        await hass.services.async_call(
-            "alarm_control_panel", "alarm_trigger", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Alarm trigger failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "triggered"}
+    'Trigger an alarm.'
+    return await _dao_collapsed2_17(hass, entity_id, code, 'alarm_control_panel', 'alarm_trigger', 'Alarm trigger failed: ', 'triggered')
 
 
 async def _remote_turn_on(
@@ -14269,27 +13201,15 @@ async def _remote_turn_on(
 async def _remote_turn_off(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Turn off a remote."""
-    try:
-        await hass.services.async_call(
-            "remote", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Remote turn off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off a remote.'
+    return await _dao_collapsed2_1(hass, entity_id, 'remote', 'turn_off', 'Remote turn off failed: ', 'turn_off')
 
 
 async def _remote_toggle(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Toggle a remote."""
-    try:
-        await hass.services.async_call(
-            "remote", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Remote toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle a remote.'
+    return await _dao_collapsed2_1(hass, entity_id, 'remote', 'toggle', 'Remote toggle failed: ', 'toggled')
 
 
 async def _remote_delete_command(
@@ -14312,14 +13232,8 @@ async def _remote_delete_command(
 async def _input_button_press(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Press an input_button entity."""
-    try:
-        await hass.services.async_call(
-            "input_button", "press", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input button press failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "pressed"}
+    'Press an input_button entity.'
+    return await _dao_collapsed2_1(hass, entity_id, 'input_button', 'press', 'Input button press failed: ', 'pressed')
 
 
 async def _group_set(
@@ -14355,15 +13269,8 @@ async def _group_remove(
 async def _counter_set_value(
     hass: HomeAssistant, entity_id: str, value: int,
 ) -> dict[str, Any]:
-    """Set a counter to a specific value."""
-    try:
-        await hass.services.async_call(
-            "counter", "set_value",
-            {"entity_id": entity_id, "value": value}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Counter set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Set a counter to a specific value.'
+    return await _dao_collapsed2_5(hass, entity_id, value, 'counter', 'set_value', 'Counter set value failed: ')
 
 
 # ---------------------------------------------------------------------------
@@ -14390,113 +13297,56 @@ async def _vacuum_clean_segment(
 async def _select_select_option(
     hass: HomeAssistant, entity_id: str, option: str,
 ) -> dict[str, Any]:
-    """Select an option on a select entity."""
-    try:
-        await hass.services.async_call(
-            "select", "select_option",
-            {"entity_id": entity_id, "option": option}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Select option failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "option": option}
+    'Select an option on a select entity.'
+    return await _dao_collapsed2_6(hass, entity_id, option, 'select', 'Select option failed: ')
 
 
 async def _valve_stop(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Stop a valve."""
-    try:
-        await hass.services.async_call(
-            "valve", "stop_valve", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Valve stop failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "stopped"}
+    'Stop a valve.'
+    return await _dao_collapsed2_1(hass, entity_id, 'valve', 'stop_valve', 'Valve stop failed: ', 'stopped')
 
 
 async def _valve_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Toggle a valve."""
-    try:
-        await hass.services.async_call(
-            "valve", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Valve toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle a valve.'
+    return await _dao_collapsed2_1(hass, entity_id, 'valve', 'toggle', 'Valve toggle failed: ', 'toggled')
 
 
 async def _lawn_mower_start_mowing(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Start lawn mower mowing."""
-    try:
-        await hass.services.async_call(
-            "lawn_mower", "start_mowing", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Lawn mower start failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "mowing"}
+    'Start lawn mower mowing.'
+    return await _dao_collapsed2_1(hass, entity_id, 'lawn_mower', 'start_mowing', 'Lawn mower start failed: ', 'mowing')
 
 
 async def _lawn_mower_pause(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Pause lawn mower."""
-    try:
-        await hass.services.async_call(
-            "lawn_mower", "pause", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Lawn mower pause failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "paused"}
+    'Pause lawn mower.'
+    return await _dao_collapsed2_1(hass, entity_id, 'lawn_mower', 'pause', 'Lawn mower pause failed: ', 'paused')
 
 
 async def _media_player_media_seek(
     hass: HomeAssistant, entity_id: str, seek_position: float,
 ) -> dict[str, Any]:
-    """Seek to a position in media playback."""
-    try:
-        await hass.services.async_call(
-            "media_player", "media_seek",
-            {"entity_id": entity_id, "seek_position": seek_position},
-            blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media player seek failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "seek_position": seek_position}
+    'Seek to a position in media playback.'
+    return await _dao_collapsed2_21(hass, entity_id, seek_position)
 
 
 async def _siren_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Toggle a siren."""
-    try:
-        await hass.services.async_call(
-            "siren", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Siren toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle a siren.'
+    return await _dao_collapsed2_1(hass, entity_id, 'siren', 'toggle', 'Siren toggle failed: ', 'toggled')
 
 
 async def _cover_stop_tilt(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Stop cover tilt."""
-    try:
-        await hass.services.async_call(
-            "cover", "stop_cover_tilt", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover stop tilt failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "tilt_stopped"}
+    'Stop cover tilt.'
+    return await _dao_collapsed2_1(hass, entity_id, 'cover', 'stop_cover_tilt', 'Cover stop tilt failed: ', 'tilt_stopped')
 
 
 async def _cover_toggle_tilt(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Toggle cover tilt."""
-    try:
-        await hass.services.async_call(
-            "cover", "toggle_cover_tilt", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover toggle tilt failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "tilt_toggled"}
+    'Toggle cover tilt.'
+    return await _dao_collapsed2_1(hass, entity_id, 'cover', 'toggle_cover_tilt', 'Cover toggle tilt failed: ', 'tilt_toggled')
 
 
 async def _notify_send_message(
@@ -14528,36 +13378,18 @@ async def _notify_send_message(
 
 
 async def _light_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Toggle a light."""
-    try:
-        await hass.services.async_call(
-            "light", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Light toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle a light.'
+    return await _dao_collapsed2_1(hass, entity_id, 'light', 'toggle', 'Light toggle failed: ', 'toggled')
 
 
 async def _fan_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Toggle a fan."""
-    try:
-        await hass.services.async_call(
-            "fan", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Fan toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle a fan.'
+    return await _dao_collapsed2_1(hass, entity_id, 'fan', 'toggle', 'Fan toggle failed: ', 'toggled')
 
 
 async def _cover_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Toggle a cover (open/close)."""
-    try:
-        await hass.services.async_call(
-            "cover", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cover toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle a cover (open/close).'
+    return await _dao_collapsed2_1(hass, entity_id, 'cover', 'toggle', 'Cover toggle failed: ', 'toggled')
 
 
 async def _homeassistant_restart(hass: HomeAssistant) -> dict[str, Any]:
@@ -14573,28 +13405,15 @@ async def _homeassistant_stop(hass: HomeAssistant) -> dict[str, Any]:
 async def _media_player_media_stop(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Stop media playback."""
-    try:
-        await hass.services.async_call(
-            "media_player", "media_stop", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media player stop failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "stopped"}
+    'Stop media playback.'
+    return await _dao_collapsed2_1(hass, entity_id, 'media_player', 'media_stop', 'Media player stop failed: ', 'stopped')
 
 
 async def _media_player_clear_playlist(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Clear media player playlist."""
-    try:
-        await hass.services.async_call(
-            "media_player", "clear_playlist",
-            {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media player clear playlist failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "playlist_cleared"}
+    'Clear media player playlist.'
+    return await _dao_collapsed2_1(hass, entity_id, 'media_player', 'clear_playlist', 'Media player clear playlist failed: ', 'playlist_cleared')
 
 
 async def _reload_automations(hass: HomeAssistant) -> dict[str, Any]:
@@ -14628,14 +13447,8 @@ async def _light_flash(
 
 
 async def _switch_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Toggle a switch."""
-    try:
-        await hass.services.async_call(
-            "switch", "toggle", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Switch toggle failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "toggled"}
+    'Toggle a switch.'
+    return await _dao_collapsed2_1(hass, entity_id, 'switch', 'toggle', 'Switch toggle failed: ', 'toggled')
 
 
 async def _media_player_join(
@@ -14655,14 +13468,8 @@ async def _media_player_join(
 async def _media_player_unjoin(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Remove media player from a group."""
-    try:
-        await hass.services.async_call(
-            "media_player", "unjoin", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media player unjoin failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "unjoined"}
+    'Remove media player from a group.'
+    return await _dao_collapsed2_1(hass, entity_id, 'media_player', 'unjoin', 'Media player unjoin failed: ', 'unjoined')
 
 
 async def _water_heater_set_away_mode(
@@ -14681,25 +13488,13 @@ async def _water_heater_set_away_mode(
 
 
 async def _climate_turn_on(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn on a climate device."""
-    try:
-        await hass.services.async_call(
-            "climate", "turn_on", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Climate turn on failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_on"}
+    'Turn on a climate device.'
+    return await _dao_collapsed2_1(hass, entity_id, 'climate', 'turn_on', 'Climate turn on failed: ', 'turn_on')
 
 
 async def _climate_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
-    """Turn off a climate device."""
-    try:
-        await hass.services.async_call(
-            "climate", "turn_off", {"entity_id": entity_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Climate turn off failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "action": "turn_off"}
+    'Turn off a climate device.'
+    return await _dao_collapsed2_1(hass, entity_id, 'climate', 'turn_off', 'Climate turn off failed: ', 'turn_off')
 
 
 # ---------------------------------------------------------------------------
@@ -14710,27 +13505,15 @@ async def _climate_turn_off(hass: HomeAssistant, entity_id: str) -> dict[str, An
 async def _add_shopping_list_item(
     hass: HomeAssistant, name: str,
 ) -> dict[str, Any]:
-    """Add an item to the shopping list."""
-    try:
-        await hass.services.async_call(
-            "shopping_list", "add_item", {"name": name}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Add shopping list item failed: {exc}"}
-    return {"ok": True, "name": name, "action": "added"}
+    'Add an item to the shopping list.'
+    return await _dao_collapsed2_28(hass, name, 'add_item', 'Add shopping list item failed: ', 'added')
 
 
 async def _complete_shopping_list_item(
     hass: HomeAssistant, name: str,
 ) -> dict[str, Any]:
-    """Mark a shopping list item as complete."""
-    try:
-        await hass.services.async_call(
-            "shopping_list", "complete_item", {"name": name}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Complete shopping list item failed: {exc}"}
-    return {"ok": True, "name": name, "action": "completed"}
+    'Mark a shopping list item as complete.'
+    return await _dao_collapsed2_28(hass, name, 'complete_item', 'Complete shopping list item failed: ', 'completed')
 
 
 async def _get_shopping_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -14776,15 +13559,8 @@ async def _media_player_select_sound_mode(
 async def _climate_set_humidity(
     hass: HomeAssistant, entity_id: str, humidity: int,
 ) -> dict[str, Any]:
-    """Set climate target humidity."""
-    try:
-        await hass.services.async_call(
-            "climate", "set_humidity",
-            {"entity_id": entity_id, "humidity": humidity}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Climate set humidity failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "humidity": humidity}
+    'Set climate target humidity.'
+    return await _dao_collapsed2_16(hass, entity_id, humidity, 'climate', 'Climate set humidity failed: ')
 
 
 # ---------------------------------------------------------------------------
@@ -14796,15 +13572,8 @@ async def _climate_set_humidity(
 async def _input_text_set_value(
     hass: HomeAssistant, entity_id: str, value: str,
 ) -> dict[str, Any]:
-    """Set an input_text value."""
-    try:
-        await hass.services.async_call(
-            "input_text", "set_value",
-            {"entity_id": entity_id, "value": value}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input text set value failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value}
+    'Set an input_text value.'
+    return await _dao_collapsed2_5(hass, entity_id, value, 'input_text', 'set_value', 'Input text set value failed: ')
 
 
 async def _set_device_tracker_location(
@@ -14874,33 +13643,15 @@ async def _persistent_notification_create(
     hass: HomeAssistant, message: str,
     title: str | None = None, notification_id: str | None = None,
 ) -> dict[str, Any]:
-    """Create a persistent notification."""
-    data: dict[str, Any] = {"message": message}
-    if title:
-        data["title"] = title
-    if notification_id:
-        data["notification_id"] = notification_id
-    try:
-        await hass.services.async_call(
-            "persistent_notification", "create", data, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Persistent notification create failed: {exc}"}
-    return {"ok": True, "message": message, "action": "created"}
+    'Create a persistent notification.'
+    return await _dao_collapsed2_26(hass, message, title, notification_id)
 
 
 async def _persistent_notification_dismiss(
     hass: HomeAssistant, notification_id: str,
 ) -> dict[str, Any]:
-    """Dismiss a persistent notification."""
-    try:
-        await hass.services.async_call(
-            "persistent_notification", "dismiss",
-            {"notification_id": notification_id}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Persistent notification dismiss failed: {exc}"}
-    return {"ok": True, "notification_id": notification_id, "action": "dismissed"}
+    'Dismiss a persistent notification.'
+    return await _dao_collapsed2_11(hass, notification_id, 'Persistent notification dismiss failed: ')
 
 
 async def _get_network_info(hass: HomeAssistant) -> dict[str, Any]:
@@ -14924,36 +13675,18 @@ async def _get_network_info(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _start_addon(hass: HomeAssistant, slug: str) -> dict[str, Any]:
-    """Start a Home Assistant add-on by slug."""
-    try:
-        await hass.services.async_call(
-            "hassio", "addon_start", {"addon": slug}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Start addon failed: {exc}"}
-    return {"ok": True, "slug": slug, "action": "started"}
+    'Start a Home Assistant add-on by slug.'
+    return await _dao_collapsed2_24(hass, slug, 'addon_start', 'Start addon failed: ', 'started')
 
 
 async def _stop_addon(hass: HomeAssistant, slug: str) -> dict[str, Any]:
-    """Stop a Home Assistant add-on by slug."""
-    try:
-        await hass.services.async_call(
-            "hassio", "addon_stop", {"addon": slug}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Stop addon failed: {exc}"}
-    return {"ok": True, "slug": slug, "action": "stopped"}
+    'Stop a Home Assistant add-on by slug.'
+    return await _dao_collapsed2_24(hass, slug, 'addon_stop', 'Stop addon failed: ', 'stopped')
 
 
 async def _restart_addon(hass: HomeAssistant, slug: str) -> dict[str, Any]:
-    """Restart a Home Assistant add-on by slug."""
-    try:
-        await hass.services.async_call(
-            "hassio", "addon_restart", {"addon": slug}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Restart addon failed: {exc}"}
-    return {"ok": True, "slug": slug, "action": "restarted"}
+    'Restart a Home Assistant add-on by slug.'
+    return await _dao_collapsed2_24(hass, slug, 'addon_restart', 'Restart addon failed: ', 'restarted')
 
 
 async def _get_addon_logs(
@@ -17257,6 +15990,417 @@ async def _dao_collapsed_71(hass, __slot0__):
     for s in hass.states.async_all('automation'):
         results.append({'entity_id': s.entity_id, 'state': s.state, 'last_triggered': str(s.attributes.get('last_triggered')), 'friendly_name': s.attributes.get('friendly_name')})
     return {'ok': True, 'count': len(results), __slot0__: results}
+
+
+
+# === 為道日損 round2 · collapsed multi-arg duplicate-wrapper helpers (generated; each subsumes a class differing only in constants) ===
+
+async def _dao_collapsed2_0(hass, entity_id, preset_mode, __slot0__, __slot1__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, 'set_preset_mode', {'entity_id': entity_id, 'preset_mode': preset_mode}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'preset_mode': preset_mode}
+
+
+async def _dao_collapsed2_1(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 99 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'action': __slot3__}
+
+
+async def _dao_collapsed2_2(hass, entity_id, code, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        svc_data: dict[str, Any] = {'entity_id': entity_id}
+        if code:
+            svc_data['code'] = code
+        await hass.services.async_call(__slot0__, __slot1__, svc_data, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'action': __slot3__}
+
+
+async def _dao_collapsed2_3(hass, entity_id, temperature, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call('water_heater', 'set_temperature', {'entity_id': entity_id, 'temperature': temperature}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot0__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'temperature': temperature}
+
+
+async def _dao_collapsed2_4(hass, entity_id, mode, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call('humidifier', 'set_mode', {'entity_id': entity_id, 'mode': mode}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot0__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'mode': mode}
+
+
+async def _dao_collapsed2_5(hass, entity_id, value, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 7 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'value': value}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'value': value}
+
+
+async def _dao_collapsed2_6(hass, entity_id, option, __slot0__, __slot1__):
+    """Derived primitive: shared body of 5 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, 'select_option', {'entity_id': entity_id, 'option': option}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'option': option}
+
+
+async def _dao_collapsed2_7(hass, entity_id, item, due_date, description, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    data: dict[str, Any] = {'entity_id': entity_id, 'item': item}
+    if due_date:
+        data['due_date'] = due_date
+    if description:
+        data['description'] = description
+    try:
+        await hass.services.async_call('todo', 'add_item', data, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot0__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'item': item}
+
+
+async def _dao_collapsed2_8(hass, entity_id, date, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'date': date}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'date': date}
+
+
+async def _dao_collapsed2_9(hass, entity_id, time, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'time': time}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'time': time}
+
+
+async def _dao_collapsed2_10(hass, entity_id, value, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'value': float(value)}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, __slot3__: float(value)}
+
+
+async def _dao_collapsed2_11(hass, notification_id, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call('persistent_notification', 'dismiss', {'notification_id': notification_id}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot0__}{exc}'}
+    return {'ok': True, 'notification_id': notification_id, 'action': 'dismissed'}
+
+
+async def _dao_collapsed2_12(hass, entity_id, variables, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    data: dict[str, Any] = {'entity_id': entity_id}
+    if variables:
+        data['variables'] = variables
+    try:
+        await hass.services.async_call('script', 'turn_on', data, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot0__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'action': __slot1__}
+
+
+async def _dao_collapsed2_13(hass, entity_id, value, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, 'set_value', {'entity_id': entity_id, 'value': float(value)}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'value': value}
+
+
+async def _dao_collapsed2_14(hass, entity_id, position, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'position': position}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'position': position}
+
+
+async def _dao_collapsed2_15(hass, entity_id, datetime_val, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call('datetime', 'set_value', {'entity_id': entity_id, 'datetime': datetime_val}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot0__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'datetime': datetime_val}
+
+
+async def _dao_collapsed2_16(hass, entity_id, humidity, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, 'set_humidity', {'entity_id': entity_id, 'humidity': humidity}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'humidity': humidity}
+
+
+async def _dao_collapsed2_17(hass, entity_id, code, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 12 collapsed wrappers."""
+    data: dict[str, Any] = {'entity_id': entity_id}
+    if code:
+        data['code'] = code
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, data, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'action': __slot3__}
+
+
+async def _dao_collapsed2_18(hass, entity_id, cycle, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id, 'cycle': cycle}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'action': __slot3__}
+
+
+async def _dao_collapsed2_19(hass, webhook_id, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        from homeassistant.components.webhook import async_unregister
+        async_unregister(hass, webhook_id)
+        return {'ok': True, 'webhook_id': webhook_id, 'action': __slot0__}
+    except ImportError:
+        return {'error': 'webhook component not available'}
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+
+
+async def _dao_collapsed2_20(hass, slug, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    try:
+        from homeassistant.components.hassio.handler import HassIO
+        hassio: HassIO = hass.data.get('hassio')
+        if hassio is None:
+            return {'error': 'hassio not available (not HA OS)'}
+        await hassio.send_command(f'/addons/{slug}{__slot0__}', method='post')
+        return {'ok': True, 'slug': slug, 'action': __slot1__}
+    except ImportError:
+        return {'error': 'hassio component not available'}
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+
+
+async def _dao_collapsed2_21(hass, entity_id, seek_position):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call('media_player', 'media_seek', {'entity_id': entity_id, 'seek_position': seek_position}, blocking=True)
+    except Exception as exc:
+        return {'error': f'Media player seek failed: {exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'seek_position': seek_position}
+
+
+async def _dao_collapsed2_22(hass, slug, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        from homeassistant.components.backup import async_get_manager
+        manager = async_get_manager(hass)
+        await manager.async_remove_backup(slug)
+        return {'ok': True, 'slug': slug, 'action': __slot0__}
+    except ImportError:
+        return {'error': 'backup component not available'}
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+
+
+async def _dao_collapsed2_23(hass, command_name, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, command_name, {}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'command': command_name, 'action': __slot2__}
+
+
+async def _dao_collapsed2_24(hass, slug, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 5 collapsed wrappers."""
+    try:
+        await hass.services.async_call('hassio', __slot0__, {'addon': slug}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'slug': slug, 'action': __slot2__}
+
+
+async def _dao_collapsed2_25(hass, entity_id, percentage_step, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    data: dict[str, Any] = {'entity_id': entity_id}
+    if percentage_step is not None:
+        data['percentage_step'] = percentage_step
+    try:
+        await hass.services.async_call('fan', __slot0__, data, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'entity_id': entity_id, 'action': __slot2__}
+
+
+async def _dao_collapsed2_26(hass, message, title, notification_id):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    data: dict[str, Any] = {'message': message}
+    if title:
+        data['title'] = title
+    if notification_id:
+        data['notification_id'] = notification_id
+    try:
+        await hass.services.async_call('persistent_notification', 'create', data, blocking=True)
+    except Exception as exc:
+        return {'error': f'Persistent notification create failed: {exc}'}
+    return {'ok': True, 'message': message, 'action': 'created'}
+
+
+async def _dao_collapsed2_27(hass, entry_id, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        result = await hass.config_entries.async_set_disabled_by(entry_id, __slot0__)
+    except AttributeError:
+        return {'error': 'config_entries.async_set_disabled_by not available'}
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'entry_id': entry_id, 'action': __slot2__, 'result': str(result)}
+
+
+async def _dao_collapsed2_28(hass, name, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        await hass.services.async_call('shopping_list', __slot0__, {'name': name}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot1__}{exc}'}
+    return {'ok': True, 'name': name, 'action': __slot2__}
+
+
+async def _dao_collapsed2_29(hass, entity_values, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for eid, val in entity_values.items():
+        try:
+            await hass.services.async_call(__slot0__, 'set_value', {'entity_id': eid, 'value': val})
+            results.append({'entity_id': eid, 'value': val, 'ok': True})
+        except Exception as exc:
+            results.append({'entity_id': eid, 'error': str(exc)})
+    return {'ok': True, 'count': len(results), 'results': results}
+
+
+async def _dao_collapsed2_30(hass, entity_id, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {'error': f"{__slot0__}{entity_id}' not found"}
+    lt = state.attributes.get('last_triggered')
+    return {'ok': True, 'entity_id': entity_id, 'state': state.state, 'last_triggered': str(lt) if lt else None, 'friendly_name': state.attributes.get('friendly_name')}
+
+
+async def _dao_collapsed2_31(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {'error': f"{__slot0__}{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {'ok': True, 'entity_id': entity_id, 'state': state.state, __slot1__: attrs.get(__slot4__), __slot2__: attrs.get(__slot5__), __slot3__: attrs.get(__slot6__)}
+
+
+async def _dao_collapsed2_32(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__):
+    """Derived primitive: shared body of 5 collapsed wrappers."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {'error': f"{__slot0__}{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {'ok': True, 'entity_id': entity_id, __slot1__: state.state, __slot2__: attrs.get(__slot6__), __slot3__: attrs.get(__slot7__), __slot4__: attrs.get(__slot8__), __slot5__: attrs.get(__slot9__)}
+
+
+async def _dao_collapsed2_33(hass, area_id, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    ent_reg = er.async_get(hass)
+    results = []
+    for entry in ent_reg.entities.values():
+        if entry.area_id != area_id:
+            continue
+        if entry.domain not in ('light', 'switch', 'fan', 'media_player'):
+            continue
+        try:
+            await hass.services.async_call(entry.domain, __slot0__, {'entity_id': entry.entity_id})
+            results.append({'entity_id': entry.entity_id, 'ok': True})
+        except Exception as exc:
+            results.append({'entity_id': entry.entity_id, 'error': str(exc)})
+    return {'ok': True, 'area_id': area_id, 'count': len(results), 'results': results}
+
+
+async def _dao_collapsed2_34(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__, __slot10__, __slot11__, __slot12__, __slot13__, __slot14__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {'error': f"{__slot0__}{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {'ok': True, 'entity_id': entity_id, 'state': state.state, __slot1__: attrs.get(__slot8__), __slot2__: attrs.get(__slot9__), __slot3__: attrs.get(__slot10__), __slot4__: attrs.get(__slot11__), __slot5__: attrs.get(__slot12__), __slot6__: attrs.get(__slot13__, []), __slot7__: attrs.get(__slot14__)}
+
+
+async def _dao_collapsed2_35(hass, entity_id, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {'error': f"{__slot0__}{entity_id}' not found"}
+    return {'ok': True, 'entity_id': entity_id, __slot1__: state.state, 'friendly_name': state.attributes.get('friendly_name')}
+
+
+async def _dao_collapsed2_36(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {'error': f"{__slot0__}{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {'ok': True, 'entity_id': entity_id, 'state': state.state, __slot1__: attrs.get(__slot3__), __slot2__: attrs.get(__slot4__)}
+
+
+async def _dao_collapsed2_37(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {'error': f"Weather '{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    forecast = attrs.get('forecast', [])
+    return {'ok': True, 'entity_id': entity_id, 'current': {__slot1__: state.state, 'temperature': attrs.get('temperature'), 'humidity': attrs.get('humidity'), __slot2__: attrs.get(__slot5__), __slot3__: attrs.get(__slot6__), __slot4__: attrs.get(__slot7__)}, __slot0__: len(forecast), 'forecast': forecast[:__slot8__]}
+
+
+async def _dao_collapsed2_38(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {'entity_id': entity_id})
+        return {'ok': True, 'entity_id': entity_id, __slot2__: __slot3__}
+    except Exception as exc:
+        return {'error': f'{__slot4__}{exc}'}
+
+
+async def _dao_collapsed2_39(hass, entity_id, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__, __slot10__, __slot11__, __slot12__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {'error': f"{__slot0__}{entity_id}' not found"}
+    attrs = dict(state.attributes)
+    return {'ok': True, 'entity_id': entity_id, 'state': state.state, __slot1__: attrs.get(__slot7__), __slot2__: attrs.get(__slot8__), __slot3__: attrs.get(__slot9__), __slot4__: attrs.get(__slot10__), __slot5__: attrs.get(__slot11__), __slot6__: attrs.get(__slot12__), 'friendly_name': attrs.get('friendly_name')}
 
 
 async def _search_tools(hass: HomeAssistant, query: str, limit: Any = 20) -> dict[str, Any]:
@@ -24424,18 +23568,8 @@ async def _integration_diagnostics(
 async def _input_number_batch_set(
     hass: HomeAssistant, entity_values: dict[str, float],
 ) -> dict[str, Any]:
-    """Set multiple input_number entities at once."""
-    results = []
-    for eid, val in entity_values.items():
-        try:
-            await hass.services.async_call(
-                "input_number", "set_value",
-                {"entity_id": eid, "value": val},
-            )
-            results.append({"entity_id": eid, "value": val, "ok": True})
-        except Exception as exc:  # noqa: BLE001
-            results.append({"entity_id": eid, "error": str(exc)})
-    return {"ok": True, "count": len(results), "results": results}
+    'Set multiple input_number entities at once.'
+    return await _dao_collapsed2_29(hass, entity_values, 'input_number')
 
 
 async def _input_select_batch_select(
@@ -24458,18 +23592,8 @@ async def _input_select_batch_select(
 async def _input_text_batch_set(
     hass: HomeAssistant, entity_values: dict[str, str],
 ) -> dict[str, Any]:
-    """Set values for multiple input_text entities at once."""
-    results = []
-    for eid, val in entity_values.items():
-        try:
-            await hass.services.async_call(
-                "input_text", "set_value",
-                {"entity_id": eid, "value": val},
-            )
-            results.append({"entity_id": eid, "value": val, "ok": True})
-        except Exception as exc:  # noqa: BLE001
-            results.append({"entity_id": eid, "error": str(exc)})
-    return {"ok": True, "count": len(results), "results": results}
+    'Set values for multiple input_text entities at once.'
+    return await _dao_collapsed2_29(hass, entity_values, 'input_text')
 
 
 async def _light_group_control(
@@ -24958,18 +24082,8 @@ async def _event_bus_subscribe_once(
 async def _automation_get_last_triggered(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get the last triggered time for an automation."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Automation '{entity_id}' not found"}
-    lt = state.attributes.get("last_triggered")
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "last_triggered": str(lt) if lt else None,
-        "friendly_name": state.attributes.get("friendly_name"),
-    }
+    'Get the last triggered time for an automation.'
+    return await _dao_collapsed2_30(hass, entity_id, "Automation '")
 
 
 async def _automation_duplicate(
@@ -25020,18 +24134,8 @@ async def _automation_duplicate(
 async def _script_get_last_triggered(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get the last triggered time for a script."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Script '{entity_id}' not found"}
-    lt = state.attributes.get("last_triggered")
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "last_triggered": str(lt) if lt else None,
-        "friendly_name": state.attributes.get("friendly_name"),
-    }
+    'Get the last triggered time for a script.'
+    return await _dao_collapsed2_30(hass, entity_id, "Script '")
 
 
 async def _entity_set_category(
@@ -25205,19 +24309,8 @@ async def _water_heater_set_mode(
 async def _image_get_state(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get state and metadata of an image entity."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Image entity '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "access_token": attrs.get("access_token"),
-        "entity_picture": attrs.get("entity_picture"),
-        "friendly_name": attrs.get("friendly_name"),
-    }
+    'Get state and metadata of an image entity.'
+    return await _dao_collapsed2_31(hass, entity_id, "Image entity '", 'access_token', 'entity_picture', 'friendly_name', 'access_token', 'entity_picture', 'friendly_name')
 
 
 async def _switch_batch_control(
@@ -26145,20 +25238,8 @@ async def _climate_get_hvac_modes(
 async def _cover_get_position(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get cover position and tilt details."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Cover '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "current_position": attrs.get("current_position"),
-        "current_tilt_position": attrs.get("current_tilt_position"),
-        "device_class": attrs.get("device_class"),
-        "supported_features": attrs.get("supported_features"),
-    }
+    'Get cover position and tilt details.'
+    return await _dao_collapsed2_32(hass, entity_id, "Cover '", 'state', 'current_position', 'current_tilt_position', 'device_class', 'supported_features', 'current_position', 'current_tilt_position', 'device_class', 'supported_features')
 
 
 async def _cover_set_tilt(
@@ -27114,45 +26195,15 @@ async def _entity_set_icon(
 async def _area_turn_off_all(
     hass: HomeAssistant, area_id: str,
 ) -> dict[str, Any]:
-    """Turn off all controllable entities in an area."""
-    ent_reg = er.async_get(hass)
-    results = []
-    for entry in ent_reg.entities.values():
-        if entry.area_id != area_id:
-            continue
-        if entry.domain not in ("light", "switch", "fan", "media_player"):
-            continue
-        try:
-            await hass.services.async_call(
-                entry.domain, "turn_off", {"entity_id": entry.entity_id},
-            )
-            results.append({"entity_id": entry.entity_id, "ok": True})
-        except Exception as exc:  # noqa: BLE001
-            results.append({"entity_id": entry.entity_id, "error": str(exc)})
-    return {"ok": True, "area_id": area_id, "count": len(results),
-            "results": results}
+    'Turn off all controllable entities in an area.'
+    return await _dao_collapsed2_33(hass, area_id, 'turn_off')
 
 
 async def _area_turn_on_all(
     hass: HomeAssistant, area_id: str,
 ) -> dict[str, Any]:
-    """Turn on all controllable entities in an area."""
-    ent_reg = er.async_get(hass)
-    results = []
-    for entry in ent_reg.entities.values():
-        if entry.area_id != area_id:
-            continue
-        if entry.domain not in ("light", "switch", "fan", "media_player"):
-            continue
-        try:
-            await hass.services.async_call(
-                entry.domain, "turn_on", {"entity_id": entry.entity_id},
-            )
-            results.append({"entity_id": entry.entity_id, "ok": True})
-        except Exception as exc:  # noqa: BLE001
-            results.append({"entity_id": entry.entity_id, "error": str(exc)})
-    return {"ok": True, "area_id": area_id, "count": len(results),
-            "results": results}
+    'Turn on all controllable entities in an area.'
+    return await _dao_collapsed2_33(hass, area_id, 'turn_on')
 
 
 # ---------------------------------------------------------------------------
@@ -27164,45 +26215,15 @@ async def _area_turn_on_all(
 async def _humidifier_get_info(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get humidifier entity details."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Humidifier '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "humidity": attrs.get("humidity"),
-        "current_humidity": attrs.get("current_humidity"),
-        "min_humidity": attrs.get("min_humidity"),
-        "max_humidity": attrs.get("max_humidity"),
-        "mode": attrs.get("mode"),
-        "available_modes": attrs.get("available_modes", []),
-        "supported_features": attrs.get("supported_features"),
-    }
+    'Get humidifier entity details.'
+    return await _dao_collapsed2_34(hass, entity_id, "Humidifier '", 'humidity', 'current_humidity', 'min_humidity', 'max_humidity', 'mode', 'available_modes', 'supported_features', 'humidity', 'current_humidity', 'min_humidity', 'max_humidity', 'mode', 'available_modes', 'supported_features')
 
 
 async def _water_heater_get_info(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get water heater entity details."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Water heater '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "current_temperature": attrs.get("current_temperature"),
-        "target_temperature": attrs.get("temperature"),
-        "min_temp": attrs.get("min_temp"),
-        "max_temp": attrs.get("max_temp"),
-        "operation_mode": attrs.get("operation_mode"),
-        "operation_list": attrs.get("operation_list", []),
-        "away_mode": attrs.get("away_mode"),
-    }
+    'Get water heater entity details.'
+    return await _dao_collapsed2_34(hass, entity_id, "Water heater '", 'current_temperature', 'target_temperature', 'min_temp', 'max_temp', 'operation_mode', 'operation_list', 'away_mode', 'current_temperature', 'temperature', 'min_temp', 'max_temp', 'operation_mode', 'operation_list', 'away_mode')
 
 
 async def _siren_get_info(
@@ -27291,50 +26312,22 @@ async def _select_choose_option(
 async def _date_get_value(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get date entity value."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Date entity '{entity_id}' not found"}
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "date": state.state,
-        "friendly_name": state.attributes.get("friendly_name"),
-    }
+    'Get date entity value.'
+    return await _dao_collapsed2_35(hass, entity_id, "Date entity '", 'date')
 
 
 async def _time_get_value(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get time entity value."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Time entity '{entity_id}' not found"}
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "time": state.state,
-        "friendly_name": state.attributes.get("friendly_name"),
-    }
+    'Get time entity value.'
+    return await _dao_collapsed2_35(hass, entity_id, "Time entity '", 'time')
 
 
 async def _text_get_value(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get text entity value."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Text entity '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "value": state.state,
-        "min": attrs.get("min"),
-        "max": attrs.get("max"),
-        "pattern": attrs.get("pattern"),
-        "mode": attrs.get("mode"),
-    }
+    'Get text entity value.'
+    return await _dao_collapsed2_32(hass, entity_id, "Text entity '", 'value', 'min', 'max', 'pattern', 'mode', 'min', 'max', 'pattern', 'mode')
 
 
 async def _update_list_available(hass: HomeAssistant) -> dict[str, Any]:
@@ -27407,37 +26400,15 @@ async def _image_processing_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _lawn_mower_get_info(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get lawn mower entity details."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Lawn mower '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "activity": attrs.get("activity"),
-        "supported_features": attrs.get("supported_features"),
-    }
+    'Get lawn mower entity details.'
+    return await _dao_collapsed2_36(hass, entity_id, "Lawn mower '", 'activity', 'supported_features', 'activity', 'supported_features')
 
 
 async def _valve_get_info(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get valve entity details."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Valve '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "current_position": attrs.get("current_position"),
-        "is_closing": attrs.get("is_closing"),
-        "is_opening": attrs.get("is_opening"),
-        "supported_features": attrs.get("supported_features"),
-    }
+    'Get valve entity details.'
+    return await _dao_collapsed2_32(hass, entity_id, "Valve '", 'state', 'current_position', 'is_closing', 'is_opening', 'supported_features', 'current_position', 'is_closing', 'is_opening', 'supported_features')
 
 
 async def _calendar_get_upcoming(
@@ -27482,26 +26453,8 @@ async def _calendar_get_upcoming(
 async def _weather_get_hourly_forecast(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get hourly weather forecast."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Weather '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    forecast = attrs.get("forecast", [])
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "current": {
-            "condition": state.state,
-            "temperature": attrs.get("temperature"),
-            "humidity": attrs.get("humidity"),
-            "wind_speed": attrs.get("wind_speed"),
-            "wind_bearing": attrs.get("wind_bearing"),
-            "pressure": attrs.get("pressure"),
-        },
-        "hourly_count": len(forecast),
-        "forecast": forecast[:48],
-    }
+    'Get hourly weather forecast.'
+    return await _dao_collapsed2_37(hass, entity_id, 'hourly_count', 'condition', 'wind_speed', 'wind_bearing', 'pressure', 'wind_speed', 'wind_bearing', 'pressure', 48)
 
 
 async def _recorder_get_statistics_during(
@@ -27788,19 +26741,8 @@ async def _geo_location_list(hass: HomeAssistant) -> dict[str, Any]:
 async def _proximity_get_info(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get proximity entity info."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Proximity '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "nearest": attrs.get("nearest"),
-        "dir_of_travel": attrs.get("dir_of_travel"),
-        "unit_of_measurement": attrs.get("unit_of_measurement"),
-    }
+    'Get proximity entity info.'
+    return await _dao_collapsed2_31(hass, entity_id, "Proximity '", 'nearest', 'dir_of_travel', 'unit_of_measurement', 'nearest', 'dir_of_travel', 'unit_of_measurement')
 
 
 async def _alert_list_all(hass: HomeAssistant) -> dict[str, Any]:
@@ -28099,14 +27041,8 @@ async def _entity_list_stale(
 async def _automation_trigger_now(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Manually trigger an automation immediately."""
-    try:
-        await hass.services.async_call(
-            "automation", "trigger", {"entity_id": entity_id},
-        )
-        return {"ok": True, "entity_id": entity_id, "triggered": True}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Automation trigger failed: {exc}"}
+    'Manually trigger an automation immediately.'
+    return await _dao_collapsed2_38(hass, entity_id, 'automation', 'trigger', 'triggered', True, 'Automation trigger failed: ')
 
 
 async def _weather_get_alerts(
@@ -29449,34 +28385,22 @@ async def _fan_set_speed(
 async def _media_player_pause(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Pause media player."""
-    try:
-        await hass.services.async_call("media_player", "media_pause", {"entity_id": entity_id})
-        return {"ok": True, "entity_id": entity_id, "action": "pause"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media pause failed: {exc}"}
+    'Pause media player.'
+    return await _dao_collapsed2_38(hass, entity_id, 'media_player', 'media_pause', 'action', 'pause', 'Media pause failed: ')
 
 
 async def _media_player_resume(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Resume media player."""
-    try:
-        await hass.services.async_call("media_player", "media_play", {"entity_id": entity_id})
-        return {"ok": True, "entity_id": entity_id, "action": "play"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media resume failed: {exc}"}
+    'Resume media player.'
+    return await _dao_collapsed2_38(hass, entity_id, 'media_player', 'media_play', 'action', 'play', 'Media resume failed: ')
 
 
 async def _media_player_next_track(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Skip to next track."""
-    try:
-        await hass.services.async_call("media_player", "media_next_track", {"entity_id": entity_id})
-        return {"ok": True, "entity_id": entity_id, "action": "next_track"}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Media next track failed: {exc}"}
+    'Skip to next track.'
+    return await _dao_collapsed2_38(hass, entity_id, 'media_player', 'media_next_track', 'action', 'next_track', 'Media next track failed: ')
 
 
 async def _media_player_volume_set(
@@ -29865,26 +28789,8 @@ async def _calendar_list_all(hass: HomeAssistant) -> dict[str, Any]:
 async def _weather_get_daily_forecast(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get daily weather forecast."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Weather '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    forecast = attrs.get("forecast", [])
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "current": {
-            "state": state.state,
-            "temperature": attrs.get("temperature"),
-            "humidity": attrs.get("humidity"),
-            "pressure": attrs.get("pressure"),
-            "wind_speed": attrs.get("wind_speed"),
-            "wind_bearing": attrs.get("wind_bearing"),
-        },
-        "forecast_count": len(forecast),
-        "forecast": forecast[:14],
-    }
+    'Get daily weather forecast.'
+    return await _dao_collapsed2_37(hass, entity_id, 'forecast_count', 'state', 'pressure', 'wind_speed', 'wind_bearing', 'pressure', 'wind_speed', 'wind_bearing', 14)
 
 
 async def _weather_compare_locations(hass: HomeAssistant) -> dict[str, Any]:
@@ -29965,23 +28871,8 @@ async def _tag_scan_last(hass: HomeAssistant) -> dict[str, Any]:
 async def _device_tracker_get_location(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get detailed location for a device tracker entity."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Device tracker '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "latitude": attrs.get("latitude"),
-        "longitude": attrs.get("longitude"),
-        "gps_accuracy": attrs.get("gps_accuracy"),
-        "altitude": attrs.get("altitude"),
-        "battery_level": attrs.get("battery_level"),
-        "source_type": attrs.get("source_type"),
-        "friendly_name": attrs.get("friendly_name"),
-    }
+    'Get detailed location for a device tracker entity.'
+    return await _dao_collapsed2_39(hass, entity_id, "Device tracker '", 'latitude', 'longitude', 'gps_accuracy', 'altitude', 'battery_level', 'source_type', 'latitude', 'longitude', 'gps_accuracy', 'altitude', 'battery_level', 'source_type')
 
 
 async def _sun_next_events(hass: HomeAssistant) -> dict[str, Any]:
@@ -30206,20 +29097,8 @@ async def _zwave_list_nodes(hass: HomeAssistant) -> dict[str, Any]:
 async def _zwave_get_node_info(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get Z-Wave node info from entity."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Entity '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "node_id": attrs.get("node_id"),
-        "value_id": attrs.get("value_id"),
-        "friendly_name": attrs.get("friendly_name"),
-        "device_class": attrs.get("device_class"),
-    }
+    'Get Z-Wave node info from entity.'
+    return await _dao_collapsed2_32(hass, entity_id, "Entity '", 'state', 'node_id', 'value_id', 'friendly_name', 'device_class', 'node_id', 'value_id', 'friendly_name', 'device_class')
 
 
 async def _matter_list_devices(hass: HomeAssistant) -> dict[str, Any]:
@@ -30577,19 +29456,8 @@ async def _integration_get_entry_details(
 async def _image_get_snapshot(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get image entity snapshot info."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Image entity '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "entity_picture": attrs.get("entity_picture"),
-        "access_token": attrs.get("access_token"),
-        "friendly_name": attrs.get("friendly_name"),
-    }
+    'Get image entity snapshot info.'
+    return await _dao_collapsed2_31(hass, entity_id, "Image entity '", 'entity_picture', 'access_token', 'friendly_name', 'entity_picture', 'access_token', 'friendly_name')
 
 
 async def _remote_list_commands(
@@ -31295,20 +30163,8 @@ async def _media_browser_browse(
 async def _camera_get_stream_url(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get camera stream URL."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Camera '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {
-        "ok": True,
-        "entity_id": entity_id,
-        "state": state.state,
-        "entity_picture": attrs.get("entity_picture"),
-        "access_token": attrs.get("access_token"),
-        "frontend_stream_type": attrs.get("frontend_stream_type"),
-        "friendly_name": attrs.get("friendly_name"),
-    }
+    'Get camera stream URL.'
+    return await _dao_collapsed2_32(hass, entity_id, "Camera '", 'state', 'entity_picture', 'access_token', 'frontend_stream_type', 'friendly_name', 'entity_picture', 'access_token', 'frontend_stream_type', 'friendly_name')
 
 
 async def _camera_list_with_streams(hass: HomeAssistant) -> dict[str, Any]:
@@ -32621,14 +31477,8 @@ async def _lovelace_get_views(hass: HomeAssistant) -> dict[str, Any]:
 async def _bluetooth_get_rssi(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get Bluetooth RSSI info for a device."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Entity '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {"ok": True, "entity_id": entity_id, "state": state.state,
-            "rssi": attrs.get("rssi"), "source": attrs.get("source"),
-            "friendly_name": attrs.get("friendly_name")}
+    'Get Bluetooth RSSI info for a device.'
+    return await _dao_collapsed2_31(hass, entity_id, "Entity '", 'rssi', 'source', 'friendly_name', 'rssi', 'source', 'friendly_name')
 
 
 async def _utility_meter_list_all(hass: HomeAssistant) -> dict[str, Any]:
@@ -32899,14 +31749,8 @@ async def _schedule_create_weekly(
 async def _schedule_get_next_event(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get next scheduled event for a schedule entity."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Schedule entity '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {"ok": True, "entity_id": entity_id, "state": state.state,
-            "next_event": attrs.get("next_event"),
-            "friendly_name": attrs.get("friendly_name")}
+    'Get next scheduled event for a schedule entity.'
+    return await _dao_collapsed2_36(hass, entity_id, "Schedule entity '", 'next_event', 'friendly_name', 'next_event', 'friendly_name')
 
 
 async def _network_interface_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -33474,19 +32318,8 @@ async def _gas_usage_summary(hass: HomeAssistant) -> dict[str, Any]:
 async def _vacuum_cleaning_history(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
-    """Get vacuum cleaning history/stats."""
-    state = hass.states.get(entity_id)
-    if state is None:
-        return {"error": f"Vacuum '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    return {"ok": True, "entity_id": entity_id, "state": state.state,
-            "status": attrs.get("status"),
-            "battery_level": attrs.get("battery_level"),
-            "fan_speed": attrs.get("fan_speed"),
-            "cleaned_area": attrs.get("cleaned_area"),
-            "cleaning_time": attrs.get("cleaning_time"),
-            "last_run_stats": attrs.get("last_run_stats"),
-            "friendly_name": attrs.get("friendly_name")}
+    'Get vacuum cleaning history/stats.'
+    return await _dao_collapsed2_39(hass, entity_id, "Vacuum '", 'status', 'battery_level', 'fan_speed', 'cleaned_area', 'cleaning_time', 'last_run_stats', 'status', 'battery_level', 'fan_speed', 'cleaned_area', 'cleaning_time', 'last_run_stats')
 
 
 async def _vacuum_map_rooms(
