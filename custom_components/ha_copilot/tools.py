@@ -24004,17 +24004,19 @@ async def _recorder_get_statistics_metadata(
 async def _recorder_list_runs(hass: HomeAssistant) -> dict[str, Any]:
     """List recorder run periods."""
     try:
-        from homeassistant.components.recorder.models import RecorderRuns
-        instance = _recorder_get_instance(hass)
+        # RecorderRuns moved from recorder.models -> recorder.db_schema; use the
+        # read-only session_scope (same proven path as get_recorder_runs).
+        from homeassistant.components.recorder.db_schema import RecorderRuns
+        from homeassistant.components.recorder.util import session_scope
         def _get_runs():
-            with instance.get_session() as session:
+            with session_scope(hass=hass, read_only=True) as session:
                 runs = session.query(RecorderRuns).order_by(
                     RecorderRuns.start.desc()
                 ).limit(50).all()
                 return [{"start": str(r.start), "end": str(r.end),
-                         "closed_incorrect": r.closed_incorrect,
-                         "created": str(r.created)} for r in runs]
-        items = await hass.async_add_executor_job(_get_runs)
+                         "closed_incorrect": bool(r.closed_incorrect),
+                         "created": str(getattr(r, "created", ""))} for r in runs]
+        items = await _recorder_get_instance(hass).async_add_executor_job(_get_runs)
         return {"ok": True, "count": len(items), "runs": items}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Recorder list runs failed: {exc}"}
