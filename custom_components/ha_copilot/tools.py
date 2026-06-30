@@ -12128,17 +12128,28 @@ async def _statistics_adjust_sum(
 ) -> dict[str, Any]:
     """Adjust sum statistics."""
     try:
-        from homeassistant.components.recorder.statistics import (
-            async_adjust_statistics,
-        )
         from datetime import datetime as dt
         s = dt.fromisoformat(start_time)
-        await async_adjust_statistics(hass, statistic_id, s, adjustment, "sum")
-    except ImportError:
-        return {"error": "recorder statistics not available"}
+        instance = _recorder_get_instance(hass)
+        # async_adjust_statistics moved from the statistics module to the
+        # recorder instance (HA 2025.x) and now needs the series' unit, not the
+        # literal "sum". Resolve it from metadata (same source as the twin
+        # clear/get statistics tools).
+        meta = await instance.async_add_executor_job(
+            functools.partial(_recorder_statistics.get_metadata,
+                               hass, statistic_ids={statistic_id}))
+        entry = meta.get(statistic_id)
+        if not entry:
+            return {"error": f"no statistics metadata for '{statistic_id}'"}
+        if not entry[1].get("has_sum"):
+            return {"error": f"'{statistic_id}' has no sum statistics to adjust "
+                             "(mean-only series)"}
+        unit = entry[1].get("statistics_unit_of_measurement")
+        instance.async_adjust_statistics(statistic_id, s, adjustment, unit)
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Statistics adjust sum failed: {exc}"}
-    return {"ok": True, "statistic_id": statistic_id, "adjustment": adjustment}
+    return {"ok": True, "statistic_id": statistic_id, "adjustment": adjustment,
+            "note": "adjustment is queued on the recorder thread"}
 
 
 async def _utility_meter_calibrate(
