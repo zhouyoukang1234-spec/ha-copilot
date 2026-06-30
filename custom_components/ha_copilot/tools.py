@@ -6673,14 +6673,8 @@ async def _list_notify_targets(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _clear_system_log(hass: HomeAssistant) -> dict[str, Any]:
-    """Clear the system log."""
-    try:
-        await hass.services.async_call(
-            "system_log", "clear", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Clear system log failed: {exc}"}
-    return {"ok": True, "action": "system_log_cleared"}
+    'Clear the system log.'
+    return await _dao_collapsed_0(hass, 'system_log', 'clear', 'Clear system log failed: ', 'system_log_cleared')
 
 
 async def _batch_reload_integrations(
@@ -8644,16 +8638,8 @@ async def _entity_history_batch(
 
 
 async def _template_list_helpers(hass: HomeAssistant) -> dict[str, Any]:
-    """List template helper entities."""
-    try:
-        states = hass.states.async_all("template")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "helpers": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Template list helpers failed: {exc}"}
+    'List template helper entities.'
+    return await _dao_collapsed_1(hass, 'template', 'helpers', 'Template list helpers failed: ')
 
 
 async def _input_boolean_batch_toggle(
@@ -9151,16 +9137,8 @@ async def _text_list(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _date_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all date entities."""
-    try:
-        states = hass.states.async_all("date")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "dates": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Date list failed: {exc}"}
+    'List all date entities.'
+    return await _dao_collapsed_1(hass, 'date', 'dates', 'Date list failed: ')
 
 
 async def _time_entity_set_value(
@@ -9194,16 +9172,8 @@ async def _datetime_entity_set_value(
 
 
 async def _todo_list_lists(hass: HomeAssistant) -> dict[str, Any]:
-    """List all to-do list entities."""
-    try:
-        states = hass.states.async_all("todo")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "lists": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Todo list lists failed: {exc}"}
+    'List all to-do list entities.'
+    return await _dao_collapsed_1(hass, 'todo', 'lists', 'Todo list lists failed: ')
 
 
 # ---------------------------------------------------------------------------
@@ -9886,14 +9856,8 @@ async def _zone_remove(
 
 
 async def _frontend_reload_themes(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload frontend themes."""
-    try:
-        await hass.services.async_call(
-            "frontend", "reload_themes", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Frontend reload themes failed: {exc}"}
-    return {"ok": True, "action": "themes_reloaded"}
+    'Reload frontend themes.'
+    return await _dao_collapsed_0(hass, 'frontend', 'reload_themes', 'Frontend reload themes failed: ', 'themes_reloaded')
 
 
 async def _system_log_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -9952,17 +9916,8 @@ async def _vacuum_pause(
 
 
 async def _remote_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all remote entities."""
-    try:
-        states = hass.states.async_all("remote")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "current_activity": s.attributes.get("current_activity")}
-            for s in states
-        ]
-        return {"ok": True, "remotes": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Remote list failed: {exc}"}
+    'List all remote entities.'
+    return await _dao_collapsed_2(hass, 'remote', 'current_activity', 'current_activity', 'remotes', 'Remote list failed: ')
 
 
 async def _media_player_seek(
@@ -10209,19 +10164,8 @@ async def _application_credentials_list(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _weather_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all weather entities."""
-    try:
-        states = hass.states.async_all("weather")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "temperature": s.attributes.get("temperature"),
-             "humidity": s.attributes.get("humidity"),
-             "wind_speed": s.attributes.get("wind_speed")}
-            for s in states
-        ]
-        return {"ok": True, "weather": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Weather list failed: {exc}"}
+    'List all weather entities.'
+    return await _dao_collapsed_3(hass, 'weather', 'temperature', 'humidity', 'wind_speed', 'temperature', 'humidity', 'wind_speed', 'weather', 'Weather list failed: ')
 
 
 async def _weather_forecast(
@@ -10365,17 +10309,8 @@ async def _network_list_adapters(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _event_entity_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all event entities."""
-    try:
-        states = hass.states.async_all("event")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "event_types": s.attributes.get("event_types", [])}
-            for s in states
-        ]
-        return {"ok": True, "events": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Event entity list failed: {exc}"}
+    'List all event entities.'
+    return await _dao_collapsed_4(hass, 'event', 'event_types', 'event_types', 'events', 'Event entity list failed: ')
 
 
 async def _device_list_triggers(
@@ -10705,110 +10640,43 @@ async def _helper_delete(
 
 
 async def _siren_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all siren entities."""
-    try:
-        states = hass.states.async_all("siren")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "sirens": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Siren list failed: {exc}"}
+    'List all siren entities.'
+    return await _dao_collapsed_1(hass, 'siren', 'sirens', 'Siren list failed: ')
 
 
 async def _select_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all select entities."""
-    try:
-        states = hass.states.async_all("select")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "options": s.attributes.get("options", [])}
-            for s in states
-        ]
-        return {"ok": True, "selects": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Select list failed: {exc}"}
+    'List all select entities.'
+    return await _dao_collapsed_4(hass, 'select', 'options', 'options', 'selects', 'Select list failed: ')
 
 
 async def _number_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all number entities."""
-    try:
-        states = hass.states.async_all("number")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "min": s.attributes.get("min"), "max": s.attributes.get("max"),
-             "step": s.attributes.get("step")}
-            for s in states
-        ]
-        return {"ok": True, "numbers": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Number list failed: {exc}"}
+    'List all number entities.'
+    return await _dao_collapsed_3(hass, 'number', 'min', 'max', 'step', 'min', 'max', 'step', 'numbers', 'Number list failed: ')
 
 
 async def _button_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all button entities."""
-    try:
-        states = hass.states.async_all("button")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "buttons": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Button list failed: {exc}"}
+    'List all button entities.'
+    return await _dao_collapsed_1(hass, 'button', 'buttons', 'Button list failed: ')
 
 
 async def _date_entity_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all date entities."""
-    try:
-        states = hass.states.async_all("date")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "dates": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Date entity list failed: {exc}"}
+    'List all date entities.'
+    return await _dao_collapsed_1(hass, 'date', 'dates', 'Date entity list failed: ')
 
 
 async def _time_entity_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all time entities."""
-    try:
-        states = hass.states.async_all("time")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "times": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Time entity list failed: {exc}"}
+    'List all time entities.'
+    return await _dao_collapsed_1(hass, 'time', 'times', 'Time entity list failed: ')
 
 
 async def _datetime_entity_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all datetime entities."""
-    try:
-        states = hass.states.async_all("datetime")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "datetimes": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Datetime entity list failed: {exc}"}
+    'List all datetime entities.'
+    return await _dao_collapsed_1(hass, 'datetime', 'datetimes', 'Datetime entity list failed: ')
 
 
 async def _text_entity_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all text entities."""
-    try:
-        states = hass.states.async_all("text")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "texts": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Text entity list failed: {exc}"}
+    'List all text entities.'
+    return await _dao_collapsed_1(hass, 'text', 'texts', 'Text entity list failed: ')
 
 
 async def _text_entity_set_value(
@@ -10827,30 +10695,13 @@ async def _text_entity_set_value(
 
 
 async def _lawn_mower_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all lawn mower entities."""
-    try:
-        states = hass.states.async_all("lawn_mower")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "lawn_mowers": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Lawn mower list failed: {exc}"}
+    'List all lawn mower entities.'
+    return await _dao_collapsed_1(hass, 'lawn_mower', 'lawn_mowers', 'Lawn mower list failed: ')
 
 
 async def _valve_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all valve entities."""
-    try:
-        states = hass.states.async_all("valve")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "current_position": s.attributes.get("current_position")}
-            for s in states
-        ]
-        return {"ok": True, "valves": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Valve list failed: {exc}"}
+    'List all valve entities.'
+    return await _dao_collapsed_2(hass, 'valve', 'current_position', 'current_position', 'valves', 'Valve list failed: ')
 
 
 async def _water_heater_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -10943,16 +10794,8 @@ async def _tts_list_engines(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _stt_list_engines(hass: HomeAssistant) -> dict[str, Any]:
-    """List STT engines."""
-    try:
-        states = hass.states.async_all("stt")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "engines": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"STT list engines failed: {exc}"}
+    'List STT engines.'
+    return await _dao_collapsed_1(hass, 'stt', 'engines', 'STT list engines failed: ')
 
 
 async def _update_entity_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -11188,14 +11031,8 @@ async def _usb_device_list(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _backup_create_full(hass: HomeAssistant) -> dict[str, Any]:
-    """Create a full backup."""
-    try:
-        await hass.services.async_call(
-            "backup", "create", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Backup create full failed: {exc}"}
-    return {"ok": True, "action": "backup_started"}
+    'Create a full backup.'
+    return await _dao_collapsed_0(hass, 'backup', 'create', 'Backup create full failed: ', 'backup_started')
 
 
 async def _backup_remove(
@@ -11214,14 +11051,8 @@ async def _backup_remove(
 
 
 async def _homeassistant_reload_all(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload all YAML-based configurations."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "reload_all", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Homeassistant reload all failed: {exc}"}
-    return {"ok": True, "action": "all_reloaded"}
+    'Reload all YAML-based configurations.'
+    return await _dao_collapsed_0(hass, 'homeassistant', 'reload_all', 'Homeassistant reload all failed: ', 'all_reloaded')
 
 
 async def _frontend_get_themes(hass: HomeAssistant) -> dict[str, Any]:
@@ -11280,45 +11111,18 @@ async def _event_fire_custom(
 
 
 async def _input_number_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all input_number entities."""
-    try:
-        states = hass.states.async_all("input_number")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "min": s.attributes.get("min"), "max": s.attributes.get("max"),
-             "step": s.attributes.get("step")}
-            for s in states
-        ]
-        return {"ok": True, "numbers": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input number list failed: {exc}"}
+    'List all input_number entities.'
+    return await _dao_collapsed_3(hass, 'input_number', 'min', 'max', 'step', 'min', 'max', 'step', 'numbers', 'Input number list failed: ')
 
 
 async def _input_text_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all input_text entities."""
-    try:
-        states = hass.states.async_all("input_text")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "texts": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input text list failed: {exc}"}
+    'List all input_text entities.'
+    return await _dao_collapsed_1(hass, 'input_text', 'texts', 'Input text list failed: ')
 
 
 async def _input_select_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all input_select entities."""
-    try:
-        states = hass.states.async_all("input_select")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "options": s.attributes.get("options", [])}
-            for s in states
-        ]
-        return {"ok": True, "selects": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input select list failed: {exc}"}
+    'List all input_select entities.'
+    return await _dao_collapsed_4(hass, 'input_select', 'options', 'options', 'selects', 'Input select list failed: ')
 
 
 async def _input_datetime_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -11337,69 +11141,28 @@ async def _input_datetime_list(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _counter_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all counter entities."""
-    try:
-        states = hass.states.async_all("counter")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "counters": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Counter list failed: {exc}"}
+    'List all counter entities.'
+    return await _dao_collapsed_1(hass, 'counter', 'counters', 'Counter list failed: ')
 
 
 async def _timer_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all timer entities."""
-    try:
-        states = hass.states.async_all("timer")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "duration": s.attributes.get("duration")}
-            for s in states
-        ]
-        return {"ok": True, "timers": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Timer list failed: {exc}"}
+    'List all timer entities.'
+    return await _dao_collapsed_2(hass, 'timer', 'duration', 'duration', 'timers', 'Timer list failed: ')
 
 
 async def _schedule_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all schedule entities."""
-    try:
-        states = hass.states.async_all("schedule")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "schedules": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Schedule list failed: {exc}"}
+    'List all schedule entities.'
+    return await _dao_collapsed_1(hass, 'schedule', 'schedules', 'Schedule list failed: ')
 
 
 async def _image_entity_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all image entities."""
-    try:
-        states = hass.states.async_all("image")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "images": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Image entity list failed: {exc}"}
+    'List all image entities.'
+    return await _dao_collapsed_1(hass, 'image', 'images', 'Image entity list failed: ')
 
 
 async def _calendar_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all calendar entities."""
-    try:
-        states = hass.states.async_all("calendar")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "calendars": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Calendar list failed: {exc}"}
+    'List all calendar entities.'
+    return await _dao_collapsed_1(hass, 'calendar', 'calendars', 'Calendar list failed: ')
 
 
 async def _entity_platform_info(
@@ -11443,31 +11206,13 @@ async def _device_tracker_list_active(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _automation_list_all(hass: HomeAssistant) -> dict[str, Any]:
-    """List all automations with their states."""
-    try:
-        states = hass.states.async_all("automation")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "last_triggered": str(s.attributes.get("last_triggered", ""))}
-            for s in states
-        ]
-        return {"ok": True, "automations": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Automation list all failed: {exc}"}
+    'List all automations with their states.'
+    return await _dao_collapsed_5(hass, 'automation', 'automations', 'Automation list all failed: ')
 
 
 async def _script_list_all(hass: HomeAssistant) -> dict[str, Any]:
-    """List all scripts with their states."""
-    try:
-        states = hass.states.async_all("script")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "last_triggered": str(s.attributes.get("last_triggered", ""))}
-            for s in states
-        ]
-        return {"ok": True, "scripts": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Script list all failed: {exc}"}
+    'List all scripts with their states.'
+    return await _dao_collapsed_5(hass, 'script', 'scripts', 'Script list all failed: ')
 
 
 async def _scene_list_all(hass: HomeAssistant) -> dict[str, Any]:
@@ -11484,17 +11229,8 @@ async def _scene_list_all(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _group_list_all(hass: HomeAssistant) -> dict[str, Any]:
-    """List all groups."""
-    try:
-        states = hass.states.async_all("group")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "entities": s.attributes.get("entity_id", [])}
-            for s in states
-        ]
-        return {"ok": True, "groups": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Group list all failed: {exc}"}
+    'List all groups.'
+    return await _dao_collapsed_4(hass, 'group', 'entities', 'entity_id', 'groups', 'Group list all failed: ')
 
 
 # ---------------------------------------------------------------------------
@@ -11540,35 +11276,13 @@ async def _energy_solar_forecast(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _energy_gas_consumption(hass: HomeAssistant) -> dict[str, Any]:
-    """Get gas consumption entities."""
-    try:
-        states = hass.states.async_all("sensor")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "unit": s.attributes.get("unit_of_measurement", "")}
-            for s in states
-            if "gas" in s.entity_id.lower()
-            or s.attributes.get("device_class") == "gas"
-        ]
-        return {"ok": True, "sensors": result[:50]}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Energy gas consumption failed: {exc}"}
+    'Get gas consumption entities.'
+    return await _dao_collapsed_6(hass, 'gas', 'gas', 'Energy gas consumption failed: ')
 
 
 async def _energy_water_consumption(hass: HomeAssistant) -> dict[str, Any]:
-    """Get water consumption entities."""
-    try:
-        states = hass.states.async_all("sensor")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state,
-             "unit": s.attributes.get("unit_of_measurement", "")}
-            for s in states
-            if "water" in s.entity_id.lower()
-            or s.attributes.get("device_class") == "water"
-        ]
-        return {"ok": True, "sensors": result[:50]}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Energy water consumption failed: {exc}"}
+    'Get water consumption entities.'
+    return await _dao_collapsed_6(hass, 'water', 'water', 'Energy water consumption failed: ')
 
 
 async def _statistics_during_period(
@@ -11977,16 +11691,8 @@ async def _core_state_info(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _input_boolean_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all input_boolean entities."""
-    try:
-        states = hass.states.async_all("input_boolean")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "booleans": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Input boolean list failed: {exc}"}
+    'List all input_boolean entities.'
+    return await _dao_collapsed_1(hass, 'input_boolean', 'booleans', 'Input boolean list failed: ')
 
 
 async def _system_metrics(hass: HomeAssistant) -> dict[str, Any]:
@@ -12036,29 +11742,13 @@ async def _persistent_notification_list(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _wake_word_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List wake word engines."""
-    try:
-        states = hass.states.async_all("wake_word")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "wake_words": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Wake word list failed: {exc}"}
+    'List wake word engines.'
+    return await _dao_collapsed_1(hass, 'wake_word', 'wake_words', 'Wake word list failed: ')
 
 
 async def _assist_satellite_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List assist satellite entities."""
-    try:
-        states = hass.states.async_all("assist_satellite")
-        result = [
-            {"entity_id": s.entity_id, "name": s.name, "state": s.state}
-            for s in states
-        ]
-        return {"ok": True, "satellites": result}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Assist satellite list failed: {exc}"}
+    'List assist satellite entities.'
+    return await _dao_collapsed_1(hass, 'assist_satellite', 'satellites', 'Assist satellite list failed: ')
 
 
 async def _assist_satellite_intercept(
@@ -13031,14 +12721,8 @@ async def _backup_restore(
 
 
 async def _conversation_reload(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload conversation component."""
-    try:
-        await hass.services.async_call(
-            "conversation", "reload", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Conversation reload failed: {exc}"}
-    return {"ok": True, "action": "conversation_reloaded"}
+    'Reload conversation component.'
+    return await _dao_collapsed_0(hass, 'conversation', 'reload', 'Conversation reload failed: ', 'conversation_reloaded')
 
 
 async def _logger_set_default_level(
@@ -13358,23 +13042,13 @@ async def _stt_listen(
 
 
 async def _script_reload(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload scripts from YAML."""
-    try:
-        await hass.services.async_call("script", "reload", {}, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Script reload failed: {exc}"}
-    return {"ok": True, "action": "scripts_reloaded"}
+    'Reload scripts from YAML.'
+    return await _dao_collapsed_0(hass, 'script', 'reload', 'Script reload failed: ', 'scripts_reloaded')
 
 
 async def _homeassistant_check_config(hass: HomeAssistant) -> dict[str, Any]:
-    """Check Home Assistant configuration validity."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "check_config", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Check config failed: {exc}"}
-    return {"ok": True, "action": "config_valid"}
+    'Check Home Assistant configuration validity.'
+    return await _dao_collapsed_0(hass, 'homeassistant', 'check_config', 'Check config failed: ', 'config_valid')
 
 
 async def _statistics_adjust_sum(
@@ -13558,25 +13232,13 @@ async def _statistics_list(
 
 
 async def _cloud_remote_connect(hass: HomeAssistant) -> dict[str, Any]:
-    """Connect Home Assistant Cloud remote."""
-    try:
-        await hass.services.async_call(
-            "cloud", "remote_connect", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cloud remote connect failed: {exc}"}
-    return {"ok": True, "action": "remote_connected"}
+    'Connect Home Assistant Cloud remote.'
+    return await _dao_collapsed_0(hass, 'cloud', 'remote_connect', 'Cloud remote connect failed: ', 'remote_connected')
 
 
 async def _cloud_remote_disconnect(hass: HomeAssistant) -> dict[str, Any]:
-    """Disconnect Home Assistant Cloud remote."""
-    try:
-        await hass.services.async_call(
-            "cloud", "remote_disconnect", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Cloud remote disconnect failed: {exc}"}
-    return {"ok": True, "action": "remote_disconnected"}
+    'Disconnect Home Assistant Cloud remote.'
+    return await _dao_collapsed_0(hass, 'cloud', 'remote_disconnect', 'Cloud remote disconnect failed: ', 'remote_disconnected')
 
 
 async def _webhook_trigger(
@@ -13643,12 +13305,8 @@ async def _integration_reload(
 
 
 async def _template_reload(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload template entities from YAML."""
-    try:
-        await hass.services.async_call("template", "reload", {}, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Template reload failed: {exc}"}
-    return {"ok": True, "action": "template_reloaded"}
+    'Reload template entities from YAML.'
+    return await _dao_collapsed_0(hass, 'template', 'reload', 'Template reload failed: ', 'template_reloaded')
 
 
 async def _shell_command_execute(
@@ -13919,14 +13577,8 @@ async def _category_list(
 async def _persistent_notification_dismiss_all(
     hass: HomeAssistant,
 ) -> dict[str, Any]:
-    """Dismiss all persistent notifications."""
-    try:
-        await hass.services.async_call(
-            "persistent_notification", "dismiss_all", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Dismiss all notifications failed: {exc}"}
-    return {"ok": True, "action": "all_dismissed"}
+    'Dismiss all persistent notifications.'
+    return await _dao_collapsed_0(hass, 'persistent_notification', 'dismiss_all', 'Dismiss all notifications failed: ', 'all_dismissed')
 
 
 async def _assist_pipeline_run(
@@ -13971,45 +13623,23 @@ async def _tag_scan(
 
 
 async def _reload_zone(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload zones from YAML."""
-    try:
-        await hass.services.async_call("zone", "reload", {}, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reload zone failed: {exc}"}
-    return {"ok": True, "action": "zones_reloaded"}
+    'Reload zones from YAML.'
+    return await _dao_collapsed_0(hass, 'zone', 'reload', 'Reload zone failed: ', 'zones_reloaded')
 
 
 async def _reload_customize(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload customize from YAML."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "reload_custom_templates", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reload customize failed: {exc}"}
-    return {"ok": True, "action": "customize_reloaded"}
+    'Reload customize from YAML.'
+    return await _dao_collapsed_0(hass, 'homeassistant', 'reload_custom_templates', 'Reload customize failed: ', 'customize_reloaded')
 
 
 async def _reload_core_config(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload core configuration from YAML."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "reload_core_config", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reload core config failed: {exc}"}
-    return {"ok": True, "action": "core_config_reloaded"}
+    'Reload core configuration from YAML.'
+    return await _dao_collapsed_0(hass, 'homeassistant', 'reload_core_config', 'Reload core config failed: ', 'core_config_reloaded')
 
 
 async def _reload_all(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload all YAML configurations."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "reload_all", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reload all failed: {exc}"}
-    return {"ok": True, "action": "all_reloaded"}
+    'Reload all YAML configurations.'
+    return await _dao_collapsed_0(hass, 'homeassistant', 'reload_all', 'Reload all failed: ', 'all_reloaded')
 
 
 async def _timer_change(
@@ -14394,12 +14024,8 @@ async def _weather_get_forecasts(
 
 
 async def _backup_create(hass: HomeAssistant) -> dict[str, Any]:
-    """Create a Home Assistant backup."""
-    try:
-        await hass.services.async_call("backup", "create", {}, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Backup create failed: {exc}"}
-    return {"ok": True, "action": "backup_created"}
+    'Create a Home Assistant backup.'
+    return await _dao_collapsed_0(hass, 'backup', 'create', 'Backup create failed: ', 'backup_created')
 
 
 async def _mqtt_publish(
@@ -14477,14 +14103,8 @@ async def _homeassistant_update_entity(
 
 
 async def _system_log_clear(hass: HomeAssistant) -> dict[str, Any]:
-    """Clear the system log."""
-    try:
-        await hass.services.async_call(
-            "system_log", "clear", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"System log clear failed: {exc}"}
-    return {"ok": True, "action": "log_cleared"}
+    'Clear the system log.'
+    return await _dao_collapsed_0(hass, 'system_log', 'clear', 'System log clear failed: ', 'log_cleared')
 
 
 async def _system_log_write(
@@ -14527,12 +14147,8 @@ async def _tts_speak(
 
 
 async def _tts_clear_cache(hass: HomeAssistant) -> dict[str, Any]:
-    """Clear TTS cache."""
-    try:
-        await hass.services.async_call("tts", "clear_cache", {}, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"TTS clear cache failed: {exc}"}
-    return {"ok": True, "action": "cache_cleared"}
+    'Clear TTS cache.'
+    return await _dao_collapsed_0(hass, 'tts', 'clear_cache', 'TTS clear cache failed: ', 'cache_cleared')
 
 
 async def _recorder_purge(
@@ -14551,21 +14167,13 @@ async def _recorder_purge(
 
 
 async def _recorder_disable(hass: HomeAssistant) -> dict[str, Any]:
-    """Disable the recorder."""
-    try:
-        await hass.services.async_call("recorder", "disable", {}, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Recorder disable failed: {exc}"}
-    return {"ok": True, "action": "disabled"}
+    'Disable the recorder.'
+    return await _dao_collapsed_0(hass, 'recorder', 'disable', 'Recorder disable failed: ', 'disabled')
 
 
 async def _recorder_enable(hass: HomeAssistant) -> dict[str, Any]:
-    """Enable the recorder."""
-    try:
-        await hass.services.async_call("recorder", "enable", {}, blocking=True)
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Recorder enable failed: {exc}"}
-    return {"ok": True, "action": "enabled"}
+    'Enable the recorder.'
+    return await _dao_collapsed_0(hass, 'recorder', 'enable', 'Recorder enable failed: ', 'enabled')
 
 
 async def _logger_set_level(
@@ -14953,25 +14561,13 @@ async def _cover_toggle(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
 
 
 async def _homeassistant_restart(hass: HomeAssistant) -> dict[str, Any]:
-    """Restart Home Assistant."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "restart", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"HA restart failed: {exc}"}
-    return {"ok": True, "action": "restart"}
+    'Restart Home Assistant.'
+    return await _dao_collapsed_0(hass, 'homeassistant', 'restart', 'HA restart failed: ', 'restart')
 
 
 async def _homeassistant_stop(hass: HomeAssistant) -> dict[str, Any]:
-    """Stop Home Assistant."""
-    try:
-        await hass.services.async_call(
-            "homeassistant", "stop", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"HA stop failed: {exc}"}
-    return {"ok": True, "action": "stop"}
+    'Stop Home Assistant.'
+    return await _dao_collapsed_0(hass, 'homeassistant', 'stop', 'HA stop failed: ', 'stop')
 
 
 async def _media_player_media_stop(
@@ -15002,25 +14598,13 @@ async def _media_player_clear_playlist(
 
 
 async def _reload_automations(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload automations."""
-    try:
-        await hass.services.async_call(
-            "automation", "reload", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reload automations failed: {exc}"}
-    return {"ok": True, "action": "automations_reloaded"}
+    'Reload automations.'
+    return await _dao_collapsed_0(hass, 'automation', 'reload', 'Reload automations failed: ', 'automations_reloaded')
 
 
 async def _reload_scripts(hass: HomeAssistant) -> dict[str, Any]:
-    """Reload scripts."""
-    try:
-        await hass.services.async_call(
-            "script", "reload", {}, blocking=True,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Reload scripts failed: {exc}"}
-    return {"ok": True, "action": "scripts_reloaded"}
+    'Reload scripts.'
+    return await _dao_collapsed_0(hass, 'script', 'reload', 'Reload scripts failed: ', 'scripts_reloaded')
 
 
 # ---------------------------------------------------------------------------
@@ -16689,6 +16273,739 @@ async def _aggregate_entities(
             "max": max(nums),
         })
     return out
+
+
+
+# === 為道日損 · collapsed duplicate-wrapper helpers (generated; each subsumes a class of wrappers differing only in constants) ===
+
+async def _dao_collapsed_0(hass, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 24 collapsed wrappers."""
+    try:
+        await hass.services.async_call(__slot0__, __slot1__, {}, blocking=True)
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+    return {'ok': True, 'action': __slot3__}
+
+
+async def _dao_collapsed_1(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 19 collapsed wrappers."""
+    try:
+        states = hass.states.async_all(__slot0__)
+        result = [{'entity_id': s.entity_id, 'name': s.name, 'state': s.state} for s in states]
+        return {'ok': True, __slot1__: result}
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+
+
+async def _dao_collapsed_2(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    try:
+        states = hass.states.async_all(__slot0__)
+        result = [{'entity_id': s.entity_id, 'name': s.name, 'state': s.state, __slot1__: s.attributes.get(__slot2__)} for s in states]
+        return {'ok': True, __slot3__: result}
+    except Exception as exc:
+        return {'error': f'{__slot4__}{exc}'}
+
+
+async def _dao_collapsed_3(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    try:
+        states = hass.states.async_all(__slot0__)
+        result = [{'entity_id': s.entity_id, 'name': s.name, 'state': s.state, __slot1__: s.attributes.get(__slot4__), __slot2__: s.attributes.get(__slot5__), __slot3__: s.attributes.get(__slot6__)} for s in states]
+        return {'ok': True, __slot7__: result}
+    except Exception as exc:
+        return {'error': f'{__slot8__}{exc}'}
+
+
+async def _dao_collapsed_4(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    try:
+        states = hass.states.async_all(__slot0__)
+        result = [{'entity_id': s.entity_id, 'name': s.name, 'state': s.state, __slot1__: s.attributes.get(__slot2__, [])} for s in states]
+        return {'ok': True, __slot3__: result}
+    except Exception as exc:
+        return {'error': f'{__slot4__}{exc}'}
+
+
+async def _dao_collapsed_5(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        states = hass.states.async_all(__slot0__)
+        result = [{'entity_id': s.entity_id, 'name': s.name, 'state': s.state, 'last_triggered': str(s.attributes.get('last_triggered', ''))} for s in states]
+        return {'ok': True, __slot1__: result}
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+
+
+async def _dao_collapsed_6(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        states = hass.states.async_all('sensor')
+        result = [{'entity_id': s.entity_id, 'name': s.name, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement', '')} for s in states if __slot0__ in s.entity_id.lower() or s.attributes.get('device_class') == __slot1__]
+        return {'ok': True, 'sensors': result[:50]}
+    except Exception as exc:
+        return {'error': f'{__slot2__}{exc}'}
+
+
+async def _dao_collapsed_7(hass, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for state in hass.states.async_all('device_tracker'):
+        if state.state == __slot0__:
+            results.append({'entity_id': state.entity_id, 'friendly_name': state.attributes.get('friendly_name'), 'source_type': state.attributes.get('source_type')})
+    return {'ok': True, 'count': len(results), 'trackers': results}
+
+
+async def _dao_collapsed_8(hass, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    try:
+        config_dir = hass.config.config_dir
+        bp_dir = os.path.join(config_dir, 'blueprints', __slot0__)
+
+        def _list():
+            results = []
+            if not os.path.isdir(bp_dir):
+                return results
+            for root, _dirs, files in os.walk(bp_dir):
+                for f in files:
+                    if f.endswith(('.yaml', '.yml')):
+                        rel = os.path.relpath(os.path.join(root, f), bp_dir)
+                        results.append(rel)
+            return results
+        items = await hass.async_add_executor_job(_list)
+        return {'ok': True, 'count': len(items), 'blueprints': items}
+    except Exception as exc:
+        return {'error': f'Blueprint list failed: {exc}'}
+
+
+async def _dao_collapsed_9(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for state in hass.states.async_all(__slot0__):
+        attrs = dict(state.attributes)
+        results.append({'entity_id': state.entity_id, __slot1__: state.state, 'friendly_name': attrs.get('friendly_name'), __slot2__: attrs.get(__slot4__), __slot3__: attrs.get(__slot5__)})
+    return {'ok': True, 'count': len(results), __slot6__: results}
+
+
+async def _dao_collapsed_10(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for state in hass.states.async_all(__slot0__):
+        attrs = dict(state.attributes)
+        results.append({'entity_id': state.entity_id, 'state': state.state, __slot1__: attrs.get(__slot5__), __slot2__: attrs.get(__slot6__), __slot3__: attrs.get(__slot7__), __slot4__: attrs.get(__slot8__)})
+    return {'ok': True, 'count': len(results), __slot9__: results}
+
+
+async def _dao_collapsed_11(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__, __slot10__, __slot11__, __slot12__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for state in hass.states.async_all(__slot0__):
+        attrs = dict(state.attributes)
+        results.append({'entity_id': state.entity_id, __slot1__: state.state, __slot2__: attrs.get(__slot7__), __slot3__: attrs.get(__slot8__), __slot4__: attrs.get(__slot9__), __slot5__: attrs.get(__slot10__), __slot6__: attrs.get(__slot11__)})
+    return {'ok': True, 'count': len(results), __slot12__: results}
+
+
+async def _dao_collapsed_12(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    on_count = off_count = 0
+    for state in hass.states.async_all(__slot0__):
+        if state.state == 'on':
+            on_count += 1
+        else:
+            off_count += 1
+    return {'ok': True, 'total': on_count + off_count, __slot1__: on_count, __slot2__: off_count}
+
+
+async def _dao_collapsed_13(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for state in hass.states.async_all(__slot0__):
+        results.append({'entity_id': state.entity_id, 'state': state.state, __slot1__: state.attributes.get(__slot4__), __slot2__: state.attributes.get(__slot5__), __slot3__: str(state.last_changed)})
+    return {'ok': True, 'count': len(results), __slot6__: results}
+
+
+async def _dao_collapsed_14(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        if s.attributes.get('device_class') == __slot0__ or __slot1__ in (s.attributes.get('friendly_name') or '').lower():
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot2__: results}
+
+
+async def _dao_collapsed_15(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot0__, __slot1__, __slot2__, __slot3__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot4__: results}
+
+
+async def _dao_collapsed_16(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__):
+    """Derived primitive: shared body of 16 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot1__ in name or __slot2__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot3__: s.attributes.get(__slot4__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot5__: results}
+
+
+async def _dao_collapsed_17(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__, __slot10__, __slot11__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        if s.state == __slot1__:
+            results.append({'entity_id': s.entity_id, __slot2__: s.attributes.get(__slot6__), __slot3__: s.attributes.get(__slot7__), __slot4__: s.attributes.get(__slot8__), __slot5__: s.attributes.get(__slot9__)})
+    return {'ok': True, __slot10__: len(results), __slot11__: results}
+
+
+async def _dao_collapsed_18(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot1__, __slot2__, __slot3__, __slot4__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot5__: s.attributes.get(__slot6__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot7__: results}
+
+
+async def _dao_collapsed_19(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot1__, __slot2__, __slot3__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot4__: s.attributes.get(__slot5__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot6__: results}
+
+
+async def _dao_collapsed_20(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('binary_sensor'):
+        if s.attributes.get('device_class') == __slot0__:
+            results.append({'entity_id': s.entity_id, __slot1__: s.state == 'on', 'friendly_name': s.attributes.get('friendly_name')})
+    active = [r for r in results if r[__slot2__]]
+    return {'ok': True, __slot3__: len(results), __slot4__: len(active), __slot5__: results}
+
+
+async def _dao_collapsed_21(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 9 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name and (__slot1__ in name or __slot2__ in name or __slot3__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot4__: results}
+
+
+async def _dao_collapsed_22(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        results.append({'entity_id': s.entity_id, 'state': s.state, __slot1__: s.attributes.get(__slot3__), __slot2__: s.attributes.get(__slot4__)})
+    return {'ok': True, 'count': len(results), __slot5__: results}
+
+
+async def _dao_collapsed_23(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name or __slot1__ in name or __slot2__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'sensors': results}
+
+
+async def _dao_collapsed_24(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 6 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot1__: results}
+
+
+async def _dao_collapsed_25(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__):
+    """Derived primitive: shared body of 9 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        results.append({'entity_id': s.entity_id, 'state': s.state, __slot1__: s.attributes.get(__slot4__), __slot2__: s.attributes.get(__slot5__), __slot3__: s.attributes.get(__slot6__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot7__: results}
+
+
+async def _dao_collapsed_26(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 16 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name and __slot1__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot2__: results}
+
+
+async def _dao_collapsed_27(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 18 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name or __slot1__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot2__: results}
+
+
+async def _dao_collapsed_28(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__, __slot10__, __slot11__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        results.append({'entity_id': s.entity_id, __slot1__: s.state, __slot2__: s.attributes.get('temperature'), __slot3__: s.attributes.get(__slot7__), __slot4__: s.attributes.get(__slot8__), __slot5__: s.attributes.get(__slot9__), __slot6__: s.attributes.get(__slot10__)})
+    return {'ok': True, 'count': len(results), __slot11__: results}
+
+
+async def _dao_collapsed_29(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        if s.state == __slot1__:
+            hours = (now - s.last_changed).total_seconds() / 3600
+            results.append({'entity_id': s.entity_id, __slot2__: round(hours, 1), 'friendly_name': s.attributes.get('friendly_name')})
+    results.sort(key=lambda x: x[__slot3__], reverse=True)
+    return {'ok': True, __slot4__: len(results), __slot5__: results}
+
+
+async def _dao_collapsed_30(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    listeners = hass.bus.async_listeners()
+    total = sum(listeners.values()) if isinstance(listeners, dict) else 0
+    top = sorted(listeners.items(), key=lambda x: x[1], reverse=True)[:__slot0__] if isinstance(listeners, dict) else []
+    return {'ok': True, 'total_listeners': total, __slot1__: len(listeners) if isinstance(listeners, dict) else 0, 'top_events': [{'event': e, 'listeners': c} for e, c in top]}
+
+
+async def _dao_collapsed_31(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot1__ in name or __slot2__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot3__: s.attributes.get(__slot5__), __slot4__: s.attributes.get(__slot6__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot7__: results}
+
+
+async def _dao_collapsed_32(hass, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 14 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name and (__slot1__ in name or __slot2__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot3__: results}
+
+
+async def _dao_collapsed_33(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 24 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot1__: results}
+
+
+async def _dao_collapsed_34(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__, __slot9__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot1__, __slot2__, __slot3__, __slot4__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot5__: s.attributes.get(__slot7__), __slot6__: s.attributes.get(__slot8__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot9__: results}
+
+
+async def _dao_collapsed_35(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 6 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name and (__slot1__ in name or __slot2__ in name or __slot3__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot4__: results}
+
+
+async def _dao_collapsed_36(hass):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('timer'):
+        results.append({'entity_id': s.entity_id, 'state': s.state, 'duration': s.attributes.get('duration'), 'remaining': s.attributes.get('remaining'), 'friendly_name': s.attributes.get('friendly_name')})
+    active = [r for r in results if r['state'] == 'active']
+    return {'ok': True, 'total': len(results), 'active': len(active), 'timers': results}
+
+
+async def _dao_collapsed_37(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('tag'):
+        results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    tag_data = hass.data.get('tag', {})
+    return {'ok': True, __slot0__: len(results), __slot1__: results, 'tag_data_available': bool(tag_data)}
+
+
+async def _dao_collapsed_38(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot0__, __slot1__, __slot2__))) and any((kw in name for kw in (__slot3__, __slot4__, __slot5__, __slot6__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot7__: results}
+
+
+async def _dao_collapsed_39(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__, __slot7__, __slot8__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot1__, __slot2__, __slot3__, __slot4__, __slot5__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot6__: s.attributes.get(__slot7__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot8__: results}
+
+
+async def _dao_collapsed_40(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        results.append({'entity_id': s.entity_id, 'state': s.state, __slot1__: s.attributes.get(__slot3__), __slot2__: s.attributes.get(__slot4__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot5__: results}
+
+
+async def _dao_collapsed_41(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        if s.attributes.get('device_class') == 'power':
+            try:
+                val = float(s.state)
+                results.append({'entity_id': s.entity_id, 'power_w': val, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+            except (ValueError, TypeError):
+                pass
+    results.sort(key=lambda x: x['power_w'], reverse=True)
+    total = sum((r['power_w'] for r in results))
+    return {'ok': True, 'count': len(results), __slot0__: round(total, 1), __slot1__: results[:__slot2__]}
+
+
+async def _dao_collapsed_42(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name and any((kw in name for kw in (__slot1__, __slot2__, __slot3__, __slot4__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot5__: results}
+
+
+async def _dao_collapsed_43(hass, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    now = datetime.now(timezone.utc)
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        hours = (now - s.last_changed).total_seconds() / 3600
+        results.append({'entity_id': s.entity_id, __slot1__: s.state, __slot2__: round(hours, 1), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot3__: results}
+
+
+async def _dao_collapsed_44(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot0__, __slot1__))) and any((kw in name for kw in (__slot2__, __slot3__, __slot4__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'sensors': results}
+
+
+async def _dao_collapsed_45(hass):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('lock'):
+        codes = s.attributes.get('code_format')
+        results.append({'entity_id': s.entity_id, 'state': s.state, 'code_format': codes, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'locks': results}
+
+
+async def _dao_collapsed_46(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    now = datetime.now(timezone.utc)
+    active = inactive = 0
+    details = []
+    for s in hass.states.async_all('binary_sensor'):
+        if s.attributes.get('device_class') == __slot0__:
+            hours = (now - s.last_changed).total_seconds() / 3600
+            if s.state == 'on':
+                active += 1
+            else:
+                inactive += 1
+            details.append({'entity_id': s.entity_id, __slot1__: s.state == 'on', 'hours_since_change': round(hours, 1)})
+    return {'ok': True, 'active': active, 'inactive': inactive, 'total': active + inactive, 'sensors': details[:20]}
+
+
+async def _dao_collapsed_47(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot1__, __slot2__, __slot3__, __slot4__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot5__: s.state == 'on', 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot6__: results}
+
+
+async def _dao_collapsed_48(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot1__, __slot2__, __slot3__))):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot4__: results}
+
+
+async def _dao_collapsed_49(hass, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot1__ in name and __slot2__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot3__: results}
+
+
+async def _dao_collapsed_50(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if any((kw in name for kw in (__slot0__, __slot1__, __slot2__))) and s.attributes.get('device_class') == 'battery':
+            try:
+                results.append({'entity_id': s.entity_id, __slot3__: float(s.state), 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+            except (ValueError, TypeError):
+                pass
+    return {'ok': True, 'count': len(results), __slot4__: results}
+
+
+async def _dao_collapsed_51(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot1__: results}
+
+
+async def _dao_collapsed_52(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        dc = s.attributes.get('device_class', '')
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if dc == __slot0__ or __slot1__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'sensors': results}
+
+
+async def _dao_collapsed_53(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 4 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot1__ in name and (__slot2__ in name or __slot3__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot4__: results}
+
+
+async def _dao_collapsed_54(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot1__ in name and (__slot2__ in name or __slot3__ in name or __slot4__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot5__: results}
+
+
+async def _dao_collapsed_55(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        dc = s.attributes.get('device_class', '')
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if dc == __slot0__ or (__slot1__ in name and ('meter' in name or 'consumption' in name)):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'meters': results}
+
+
+async def _dao_collapsed_56(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__, __slot6__):
+    """Derived primitive: shared body of 7 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot1__ in name or __slot2__ in name or __slot3__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot4__: s.attributes.get(__slot5__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot6__: results}
+
+
+async def _dao_collapsed_57(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for domain in (__slot0__, 'switch', __slot1__):
+        for s in hass.states.async_all(domain):
+            name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+            if any((kw in name for kw in (__slot2__, __slot3__, __slot4__))):
+                results.append({'entity_id': s.entity_id, 'state': s.state, 'domain': domain, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'devices': results}
+
+
+async def _dao_collapsed_58(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for domain in ('switch', __slot0__):
+        for s in hass.states.async_all(domain):
+            name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+            if __slot1__ in name and (__slot2__ in name or __slot3__ in name):
+                results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot4__: results}
+
+
+async def _dao_collapsed_59(hass, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 6 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot1__ in name or __slot2__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot3__: results}
+
+
+async def _dao_collapsed_60(hass, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 10 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name and (__slot1__ in name or __slot2__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot3__: results}
+
+
+async def _dao_collapsed_61(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if (__slot0__ in name or __slot1__ in name) and (__slot2__ in name or __slot3__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot4__: results}
+
+
+async def _dao_collapsed_62(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        dc = s.attributes.get('device_class', '')
+        if dc == 'sound_pressure' or __slot0__ in name or 'decibel' in name or (__slot1__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'sensors': results}
+
+
+async def _dao_collapsed_63(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        if __slot0__ in s.entity_id or __slot1__ in s.entity_id:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'sensors': results}
+
+
+async def _dao_collapsed_64(hass, __slot0__, __slot1__, __slot2__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        dc = s.attributes.get('device_class', '')
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if dc == __slot0__ or __slot1__ in name or __slot2__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'sensors': results}
+
+
+async def _dao_collapsed_65(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        if s.attributes.get('device_class') == __slot0__:
+            try:
+                results.append({'entity_id': s.entity_id, __slot1__: float(s.state), 'unit': s.attributes.get('unit_of_measurement'), 'friendly_name': s.attributes.get('friendly_name')})
+            except (ValueError, TypeError):
+                pass
+    return {'ok': True, 'count': len(results), 'sensors': results}
+
+
+async def _dao_collapsed_66(hass, __slot0__, __slot1__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    entries = hass.config_entries.async_entries(__slot0__)
+    devices = []
+    for s in hass.states.async_all():
+        if __slot1__ in s.entity_id:
+            devices.append({'entity_id': s.entity_id, 'state': s.state, 'available': s.state != 'unavailable'})
+    unavail = sum((1 for d in devices if not d['available']))
+    return {'ok': True, 'entries': len(entries), 'devices': len(devices), 'unavailable': unavail}
+
+
+async def _dao_collapsed_67(hass, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('sensor'):
+        if __slot0__ in s.entity_id:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), 'sensors': results}
+
+
+async def _dao_collapsed_68(hass, __slot0__, __slot1__, __slot2__, __slot3__, __slot4__, __slot5__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all(__slot0__):
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot1__ in name and __slot2__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, __slot3__: s.attributes.get(__slot4__), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot5__: results}
+
+
+async def _dao_collapsed_69(hass, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 14 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name or __slot1__ in name or __slot2__ in name:
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot3__: results}
+
+
+async def _dao_collapsed_70(hass, __slot0__, __slot1__, __slot2__, __slot3__):
+    """Derived primitive: shared body of 3 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all():
+        name = (s.attributes.get('friendly_name') or s.entity_id).lower()
+        if __slot0__ in name or (__slot1__ in name and __slot2__ in name):
+            results.append({'entity_id': s.entity_id, 'state': s.state, 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot3__: results}
+
+
+async def _dao_collapsed_71(hass, __slot0__):
+    """Derived primitive: shared body of 2 collapsed wrappers."""
+    results = []
+    for s in hass.states.async_all('automation'):
+        results.append({'entity_id': s.entity_id, 'state': s.state, 'last_triggered': str(s.attributes.get('last_triggered')), 'friendly_name': s.attributes.get('friendly_name')})
+    return {'ok': True, 'count': len(results), __slot0__: results}
 
 
 async def _search_tools(hass: HomeAssistant, query: str, limit: Any = 20) -> dict[str, Any]:
@@ -26350,29 +26667,13 @@ async def _timer_create(
 
 
 async def _device_tracker_list_home(hass: HomeAssistant) -> dict[str, Any]:
-    """List all device trackers currently at home."""
-    results = []
-    for state in hass.states.async_all("device_tracker"):
-        if state.state == "home":
-            results.append({
-                "entity_id": state.entity_id,
-                "friendly_name": state.attributes.get("friendly_name"),
-                "source_type": state.attributes.get("source_type"),
-            })
-    return {"ok": True, "count": len(results), "trackers": results}
+    'List all device trackers currently at home.'
+    return await _dao_collapsed_7(hass, 'home')
 
 
 async def _device_tracker_list_away(hass: HomeAssistant) -> dict[str, Any]:
-    """List all device trackers currently away/not_home."""
-    results = []
-    for state in hass.states.async_all("device_tracker"):
-        if state.state == "not_home":
-            results.append({
-                "entity_id": state.entity_id,
-                "friendly_name": state.attributes.get("friendly_name"),
-                "source_type": state.attributes.get("source_type"),
-            })
-    return {"ok": True, "count": len(results), "trackers": results}
+    'List all device trackers currently away/not_home.'
+    return await _dao_collapsed_7(hass, 'not_home')
 
 
 async def _system_uptime(hass: HomeAssistant) -> dict[str, Any]:
@@ -26958,49 +27259,13 @@ async def _person_list_all(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _blueprint_list_automations(hass: HomeAssistant) -> dict[str, Any]:
-    """List available automation blueprints."""
-    try:
-        config_dir = hass.config.config_dir
-        bp_dir = os.path.join(config_dir, "blueprints", "automation")
-
-        def _list():
-            results = []
-            if not os.path.isdir(bp_dir):
-                return results
-            for root, _dirs, files in os.walk(bp_dir):
-                for f in files:
-                    if f.endswith((".yaml", ".yml")):
-                        rel = os.path.relpath(os.path.join(root, f), bp_dir)
-                        results.append(rel)
-            return results
-
-        items = await hass.async_add_executor_job(_list)
-        return {"ok": True, "count": len(items), "blueprints": items}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Blueprint list failed: {exc}"}
+    'List available automation blueprints.'
+    return await _dao_collapsed_8(hass, 'automation')
 
 
 async def _blueprint_list_scripts(hass: HomeAssistant) -> dict[str, Any]:
-    """List available script blueprints."""
-    try:
-        config_dir = hass.config.config_dir
-        bp_dir = os.path.join(config_dir, "blueprints", "script")
-
-        def _list():
-            results = []
-            if not os.path.isdir(bp_dir):
-                return results
-            for root, _dirs, files in os.walk(bp_dir):
-                for f in files:
-                    if f.endswith((".yaml", ".yml")):
-                        rel = os.path.relpath(os.path.join(root, f), bp_dir)
-                        results.append(rel)
-            return results
-
-        items = await hass.async_add_executor_job(_list)
-        return {"ok": True, "count": len(items), "blueprints": items}
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"Blueprint list failed: {exc}"}
+    'List available script blueprints.'
+    return await _dao_collapsed_8(hass, 'script')
 
 
 async def _entity_list_by_platform(
@@ -29895,34 +30160,13 @@ async def _climate_list_all_detailed(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _switch_list_with_power(hass: HomeAssistant) -> dict[str, Any]:
-    """List switches with power consumption info."""
-    results = []
-    for state in hass.states.async_all("switch"):
-        attrs = dict(state.attributes)
-        results.append({
-            "entity_id": state.entity_id,
-            "state": state.state,
-            "friendly_name": attrs.get("friendly_name"),
-            "current_power_w": attrs.get("current_power_w"),
-            "today_energy_kwh": attrs.get("today_energy_kwh"),
-        })
-    return {"ok": True, "count": len(results), "switches": results}
+    'List switches with power consumption info.'
+    return await _dao_collapsed_9(hass, 'switch', 'state', 'current_power_w', 'today_energy_kwh', 'current_power_w', 'today_energy_kwh', 'switches')
 
 
 async def _cover_list_with_position(hass: HomeAssistant) -> dict[str, Any]:
-    """List covers with current position."""
-    results = []
-    for state in hass.states.async_all("cover"):
-        attrs = dict(state.attributes)
-        results.append({
-            "entity_id": state.entity_id,
-            "state": state.state,
-            "friendly_name": attrs.get("friendly_name"),
-            "current_position": attrs.get("current_position"),
-            "current_tilt_position": attrs.get("current_tilt_position"),
-            "device_class": attrs.get("device_class"),
-        })
-    return {"ok": True, "count": len(results), "covers": results}
+    'List covers with current position.'
+    return await _dao_collapsed_10(hass, 'cover', 'friendly_name', 'current_position', 'current_tilt_position', 'device_class', 'friendly_name', 'current_position', 'current_tilt_position', 'device_class', 'covers')
 
 
 async def _lock_list_with_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -30080,19 +30324,8 @@ async def _remote_list_commands(
 
 
 async def _alarm_get_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Get status of all alarm control panels."""
-    results = []
-    for state in hass.states.async_all("alarm_control_panel"):
-        attrs = dict(state.attributes)
-        results.append({
-            "entity_id": state.entity_id,
-            "state": state.state,
-            "code_arm_required": attrs.get("code_arm_required"),
-            "supported_features": attrs.get("supported_features"),
-            "friendly_name": attrs.get("friendly_name"),
-            "changed_by": attrs.get("changed_by"),
-        })
-    return {"ok": True, "count": len(results), "panels": results}
+    'Get status of all alarm control panels.'
+    return await _dao_collapsed_10(hass, 'alarm_control_panel', 'code_arm_required', 'supported_features', 'friendly_name', 'changed_by', 'code_arm_required', 'supported_features', 'friendly_name', 'changed_by', 'panels')
 
 
 async def _schedule_get_info(
@@ -30792,36 +31025,13 @@ async def _camera_get_stream_url(
 
 
 async def _camera_list_with_streams(hass: HomeAssistant) -> dict[str, Any]:
-    """List all cameras with stream info."""
-    results = []
-    for state in hass.states.async_all("camera"):
-        attrs = dict(state.attributes)
-        results.append({
-            "entity_id": state.entity_id,
-            "state": state.state,
-            "friendly_name": attrs.get("friendly_name"),
-            "entity_picture": attrs.get("entity_picture"),
-            "frontend_stream_type": attrs.get("frontend_stream_type"),
-            "model_name": attrs.get("model_name"),
-            "brand": attrs.get("brand"),
-        })
-    return {"ok": True, "count": len(results), "cameras": results}
+    'List all cameras with stream info.'
+    return await _dao_collapsed_11(hass, 'camera', 'state', 'friendly_name', 'entity_picture', 'frontend_stream_type', 'model_name', 'brand', 'friendly_name', 'entity_picture', 'frontend_stream_type', 'model_name', 'brand', 'cameras')
 
 
 async def _geo_location_list_sources(hass: HomeAssistant) -> dict[str, Any]:
-    """List geo_location sources and entities."""
-    results = []
-    for state in hass.states.async_all("geo_location"):
-        attrs = dict(state.attributes)
-        results.append({
-            "entity_id": state.entity_id,
-            "state": state.state,
-            "source": attrs.get("source"),
-            "latitude": attrs.get("latitude"),
-            "longitude": attrs.get("longitude"),
-            "distance": attrs.get("distance"),
-        })
-    return {"ok": True, "count": len(results), "sources": results}
+    'List geo_location sources and entities.'
+    return await _dao_collapsed_10(hass, 'geo_location', 'source', 'latitude', 'longitude', 'distance', 'source', 'latitude', 'longitude', 'distance', 'sources')
 
 
 async def _service_get_fields(
@@ -30852,20 +31062,8 @@ async def _service_list_all(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _input_text_list_all(hass: HomeAssistant) -> dict[str, Any]:
-    """List all input_text helpers."""
-    results = []
-    for state in hass.states.async_all("input_text"):
-        attrs = dict(state.attributes)
-        results.append({
-            "entity_id": state.entity_id,
-            "value": state.state,
-            "friendly_name": attrs.get("friendly_name"),
-            "mode": attrs.get("mode"),
-            "min": attrs.get("min"),
-            "max": attrs.get("max"),
-            "pattern": attrs.get("pattern"),
-        })
-    return {"ok": True, "count": len(results), "helpers": results}
+    'List all input_text helpers.'
+    return await _dao_collapsed_11(hass, 'input_text', 'value', 'friendly_name', 'mode', 'min', 'max', 'pattern', 'friendly_name', 'mode', 'min', 'max', 'pattern', 'helpers')
 
 
 async def _input_number_list_all(hass: HomeAssistant) -> dict[str, Any]:
@@ -30918,18 +31116,8 @@ async def _input_select_list_all(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _input_datetime_list_all(hass: HomeAssistant) -> dict[str, Any]:
-    """List all input_datetime helpers."""
-    results = []
-    for state in hass.states.async_all("input_datetime"):
-        attrs = dict(state.attributes)
-        results.append({
-            "entity_id": state.entity_id,
-            "value": state.state,
-            "friendly_name": attrs.get("friendly_name"),
-            "has_date": attrs.get("has_date"),
-            "has_time": attrs.get("has_time"),
-        })
-    return {"ok": True, "count": len(results), "helpers": results}
+    'List all input_datetime helpers.'
+    return await _dao_collapsed_9(hass, 'input_datetime', 'value', 'has_date', 'has_time', 'has_date', 'has_time', 'helpers')
 
 
 async def _state_get_last_n_changes(
@@ -31008,27 +31196,13 @@ async def _entity_get_all_attributes(
 
 
 async def _automation_count_by_state(hass: HomeAssistant) -> dict[str, Any]:
-    """Count automations by state (on/off)."""
-    on_count = off_count = 0
-    for state in hass.states.async_all("automation"):
-        if state.state == "on":
-            on_count += 1
-        else:
-            off_count += 1
-    return {"ok": True, "total": on_count + off_count,
-            "on": on_count, "off": off_count}
+    'Count automations by state (on/off).'
+    return await _dao_collapsed_12(hass, 'automation', 'on', 'off')
 
 
 async def _script_count_by_state(hass: HomeAssistant) -> dict[str, Any]:
-    """Count scripts by state (on/off)."""
-    on_count = off_count = 0
-    for state in hass.states.async_all("script"):
-        if state.state == "on":
-            on_count += 1
-        else:
-            off_count += 1
-    return {"ok": True, "total": on_count + off_count,
-            "running": on_count, "idle": off_count}
+    'Count scripts by state (on/off).'
+    return await _dao_collapsed_12(hass, 'script', 'running', 'idle')
 
 
 async def _device_count_by_manufacturer(hass: HomeAssistant) -> dict[str, Any]:
@@ -31917,17 +32091,8 @@ async def _security_status_summary(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _lock_status_all(hass: HomeAssistant) -> dict[str, Any]:
-    """Get status of all locks."""
-    results = []
-    for state in hass.states.async_all("lock"):
-        results.append({
-            "entity_id": state.entity_id,
-            "state": state.state,
-            "friendly_name": state.attributes.get("friendly_name"),
-            "changed_by": state.attributes.get("changed_by"),
-            "last_changed": str(state.last_changed),
-        })
-    return {"ok": True, "count": len(results), "locks": results}
+    'Get status of all locks.'
+    return await _dao_collapsed_13(hass, 'lock', 'friendly_name', 'changed_by', 'last_changed', 'friendly_name', 'changed_by', 'locks')
 
 
 async def _comfort_index_calculate(hass: HomeAssistant) -> dict[str, Any]:
@@ -32512,20 +32677,8 @@ async def _backup_schedule_info(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _camera_snapshot_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all camera entities with snapshot info."""
-    results = []
-    for state in hass.states.async_all("camera"):
-        attrs = dict(state.attributes)
-        results.append({
-            "entity_id": state.entity_id,
-            "state": state.state,
-            "entity_picture": attrs.get("entity_picture"),
-            "access_token": attrs.get("access_token"),
-            "brand": attrs.get("brand"),
-            "model": attrs.get("model_name"),
-            "friendly_name": attrs.get("friendly_name"),
-        })
-    return {"ok": True, "count": len(results), "cameras": results}
+    'List all camera entities with snapshot info.'
+    return await _dao_collapsed_11(hass, 'camera', 'state', 'entity_picture', 'access_token', 'brand', 'model', 'friendly_name', 'entity_picture', 'access_token', 'brand', 'model_name', 'friendly_name', 'cameras')
 
 
 async def _camera_motion_detected(hass: HomeAssistant) -> dict[str, Any]:
@@ -32717,17 +32870,8 @@ async def _notification_channel_list(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _notification_history(hass: HomeAssistant) -> dict[str, Any]:
-    """Get persistent notification history."""
-    results = []
-    for state in hass.states.async_all("persistent_notification"):
-        results.append({
-            "entity_id": state.entity_id,
-            "state": state.state,
-            "title": state.attributes.get("title"),
-            "message": state.attributes.get("message"),
-            "created_at": str(state.last_changed),
-        })
-    return {"ok": True, "count": len(results), "notifications": results}
+    'Get persistent notification history.'
+    return await _dao_collapsed_13(hass, 'persistent_notification', 'title', 'message', 'created_at', 'title', 'message', 'notifications')
 
 
 async def _system_log_errors(hass: HomeAssistant) -> dict[str, Any]:
@@ -33031,33 +33175,13 @@ async def _fan_speed_summary(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _water_usage_summary(hass: HomeAssistant) -> dict[str, Any]:
-    """Summarize water usage sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if s.attributes.get("device_class") == "water" or \
-           "water" in (s.attributes.get("friendly_name") or "").lower():
-            results.append({
-                "entity_id": s.entity_id,
-                "state": s.state,
-                "unit": s.attributes.get("unit_of_measurement"),
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "water_sensors": results}
+    'Summarize water usage sensors.'
+    return await _dao_collapsed_14(hass, 'water', 'water', 'water_sensors')
 
 
 async def _gas_usage_summary(hass: HomeAssistant) -> dict[str, Any]:
-    """Summarize gas usage sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if s.attributes.get("device_class") == "gas" or \
-           "gas" in (s.attributes.get("friendly_name") or "").lower():
-            results.append({
-                "entity_id": s.entity_id,
-                "state": s.state,
-                "unit": s.attributes.get("unit_of_measurement"),
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "gas_sensors": results}
+    'Summarize gas usage sensors.'
+    return await _dao_collapsed_14(hass, 'gas', 'gas', 'gas_sensors')
 
 
 async def _vacuum_cleaning_history(
@@ -34384,45 +34508,18 @@ async def _indoor_temperature_gradient(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _garden_irrigation_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Get garden irrigation system status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("irrigation", "sprinkler", "watering", "garden_valve")):
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "irrigation": results}
+    'Get garden irrigation system status.'
+    return await _dao_collapsed_15(hass, 'irrigation', 'sprinkler', 'watering', 'garden_valve', 'irrigation')
 
 
 async def _garden_soil_moisture(hass: HomeAssistant) -> dict[str, Any]:
-    """Get soil moisture sensor readings."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "soil" in name or "moisture" in name:
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "unit": s.attributes.get("unit_of_measurement"),
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Get soil moisture sensor readings.'
+    return await _dao_collapsed_16(hass, 'sensor', 'soil', 'moisture', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _firmware_update_available(hass: HomeAssistant) -> dict[str, Any]:
-    """Check for available firmware updates."""
-    results = []
-    for s in hass.states.async_all("update"):
-        if s.state == "on":
-            results.append({
-                "entity_id": s.entity_id,
-                "installed_version": s.attributes.get("installed_version"),
-                "latest_version": s.attributes.get("latest_version"),
-                "title": s.attributes.get("title"),
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "updates_available": len(results), "updates": results}
+    'Check for available firmware updates.'
+    return await _dao_collapsed_17(hass, 'update', 'on', 'installed_version', 'latest_version', 'title', 'friendly_name', 'installed_version', 'latest_version', 'title', 'friendly_name', 'updates_available', 'updates')
 
 
 async def _firmware_version_inventory(hass: HomeAssistant) -> dict[str, Any]:
@@ -34440,17 +34537,8 @@ async def _firmware_version_inventory(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _network_speed_test_results(hass: HomeAssistant) -> dict[str, Any]:
-    """Get network speed test sensor results."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("speedtest", "download", "upload", "ping")):
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "unit": s.attributes.get("unit_of_measurement"),
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "results": results}
+    'Get network speed test sensor results.'
+    return await _dao_collapsed_18(hass, 'sensor', 'speedtest', 'download', 'upload', 'ping', 'unit', 'unit_of_measurement', 'results')
 
 
 async def _automation_error_rate(hass: HomeAssistant) -> dict[str, Any]:
@@ -34719,17 +34807,8 @@ async def _energy_device_ranking(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _energy_return_to_grid(hass: HomeAssistant) -> dict[str, Any]:
-    """Check energy returned to grid (solar export)."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("export", "return", "grid_return", "feed_in")):
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "unit": s.attributes.get("unit_of_measurement"),
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "grid_return_sensors": results}
+    'Check energy returned to grid (solar export).'
+    return await _dao_collapsed_18(hass, 'sensor', 'export', 'return', 'grid_return', 'feed_in', 'unit', 'unit_of_measurement', 'grid_return_sensors')
 
 
 async def _audio_multiroom_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -34889,17 +34968,8 @@ async def _system_uptime_report(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _system_load_average(hass: HomeAssistant) -> dict[str, Any]:
-    """Get system load average from sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("load", "cpu_percent", "processor_use")):
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "unit": s.attributes.get("unit_of_measurement"),
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Get system load average from sensors.'
+    return await _dao_collapsed_19(hass, 'sensor', 'load', 'cpu_percent', 'processor_use', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _user_permission_summary(hass: HomeAssistant) -> dict[str, Any]:
@@ -34996,18 +35066,8 @@ async def _automation_chain_analysis(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _water_leak_detection(hass: HomeAssistant) -> dict[str, Any]:
-    """Detect water leak sensors and their status."""
-    results = []
-    for s in hass.states.async_all("binary_sensor"):
-        if s.attributes.get("device_class") == "moisture":
-            results.append({
-                "entity_id": s.entity_id,
-                "leak_detected": s.state == "on",
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    active = [r for r in results if r["leak_detected"]]
-    return {"ok": True, "total_sensors": len(results), "active_leaks": len(active),
-            "sensors": results}
+    'Detect water leak sensors and their status.'
+    return await _dao_collapsed_20(hass, 'moisture', 'leak_detected', 'leak_detected', 'total_sensors', 'active_leaks', 'sensors')
 
 
 async def _water_consumption_report(hass: HomeAssistant) -> dict[str, Any]:
@@ -35116,16 +35176,8 @@ async def _sleep_noise_level(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _pet_feeder_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check pet feeder status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("pet_feeder", "cat_feeder", "dog_feeder", "pet_food")):
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "feeders": results}
+    'Check pet feeder status.'
+    return await _dao_collapsed_15(hass, 'pet_feeder', 'cat_feeder', 'dog_feeder', 'pet_food', 'feeders')
 
 
 async def _pet_door_activity(hass: HomeAssistant) -> dict[str, Any]:
@@ -35165,16 +35217,8 @@ async def _ev_charging_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _ev_charging_schedule(hass: HomeAssistant) -> dict[str, Any]:
-    """Check EV charging schedule."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "ev" in name and ("schedule" in name or "timer" in name or "departure" in name):
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "schedules": results}
+    'Check EV charging schedule.'
+    return await _dao_collapsed_21(hass, 'ev', 'schedule', 'timer', 'departure', 'schedules')
 
 
 async def _solar_production_summary(hass: HomeAssistant) -> dict[str, Any]:
@@ -35231,45 +35275,18 @@ async def _network_new_device_alert(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smoke_detector_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smoke detector status."""
-    results = []
-    for s in hass.states.async_all("binary_sensor"):
-        if s.attributes.get("device_class") == "smoke":
-            results.append({
-                "entity_id": s.entity_id,
-                "alarm_active": s.state == "on",
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    active = [r for r in results if r["alarm_active"]]
-    return {"ok": True, "total": len(results), "active_alarms": len(active),
-            "detectors": results}
+    'Check smoke detector status.'
+    return await _dao_collapsed_20(hass, 'smoke', 'alarm_active', 'alarm_active', 'total', 'active_alarms', 'detectors')
 
 
 async def _carbon_monoxide_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check carbon monoxide detector status."""
-    results = []
-    for s in hass.states.async_all("binary_sensor"):
-        if s.attributes.get("device_class") == "carbon_monoxide":
-            results.append({
-                "entity_id": s.entity_id,
-                "alarm_active": s.state == "on",
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    active = [r for r in results if r["alarm_active"]]
-    return {"ok": True, "total": len(results), "active_alarms": len(active),
-            "detectors": results}
+    'Check carbon monoxide detector status.'
+    return await _dao_collapsed_20(hass, 'carbon_monoxide', 'alarm_active', 'alarm_active', 'total', 'active_alarms', 'detectors')
 
 
 async def _schedule_entity_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List all schedule entities."""
-    results = []
-    for s in hass.states.async_all("schedule"):
-        results.append({
-            "entity_id": s.entity_id, "state": s.state,
-            "friendly_name": s.attributes.get("friendly_name"),
-            "next_event": s.attributes.get("next_event"),
-        })
-    return {"ok": True, "count": len(results), "schedules": results}
+    'List all schedule entities.'
+    return await _dao_collapsed_22(hass, 'schedule', 'friendly_name', 'next_event', 'friendly_name', 'next_event', 'schedules')
 
 
 async def _schedule_active_now(hass: HomeAssistant) -> dict[str, Any]:
@@ -35505,16 +35522,8 @@ async def _voice_assistant_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _voice_command_history(hass: HomeAssistant) -> dict[str, Any]:
-    """Check for voice command related entities."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "voice" in name or "command" in name or "intent" in name:
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check for voice command related entities.'
+    return await _dao_collapsed_23(hass, 'voice', 'command', 'intent')
 
 
 async def _presence_geofence_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -35600,17 +35609,8 @@ async def _home_air_quality_index(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _home_radon_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check radon level sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "radon" in name:
-            results.append({
-                "entity_id": s.entity_id, "state": s.state,
-                "unit": s.attributes.get("unit_of_measurement"),
-                "friendly_name": s.attributes.get("friendly_name"),
-            })
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check radon level sensors.'
+    return await _dao_collapsed_24(hass, 'radon', 'sensors')
 
 
 async def _blind_position_overview(hass: HomeAssistant) -> dict[str, Any]:
@@ -35651,17 +35651,8 @@ async def _blind_sun_tracking(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _cleaning_robot_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Get cleaning robot status."""
-    results = []
-    for s in hass.states.async_all("vacuum"):
-        results.append({
-            "entity_id": s.entity_id, "state": s.state,
-            "battery": s.attributes.get("battery_level"),
-            "fan_speed": s.attributes.get("fan_speed"),
-            "status": s.attributes.get("status"),
-            "friendly_name": s.attributes.get("friendly_name"),
-        })
-    return {"ok": True, "count": len(results), "robots": results}
+    'Get cleaning robot status.'
+    return await _dao_collapsed_25(hass, 'vacuum', 'battery', 'fan_speed', 'status', 'battery_level', 'fan_speed', 'status', 'robots')
 
 
 async def _cleaning_room_history(hass: HomeAssistant) -> dict[str, Any]:
@@ -35731,26 +35722,13 @@ async def _vibration_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _pool_temperature_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check pool/spa temperature."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("pool", "spa", "hot_tub")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check pool/spa temperature.'
+    return await _dao_collapsed_19(hass, 'sensor', 'pool', 'spa', 'hot_tub', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _pool_pump_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check pool pump status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "pool" in name and "pump" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "pumps": results}
+    'Check pool pump status.'
+    return await _dao_collapsed_26(hass, 'pool', 'pump', 'pumps')
 
 
 async def _doorbell_ring_history(hass: HomeAssistant) -> dict[str, Any]:
@@ -35768,15 +35746,8 @@ async def _doorbell_ring_history(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _doorbell_camera_snapshot(hass: HomeAssistant) -> dict[str, Any]:
-    """Check doorbell camera status."""
-    results = []
-    for s in hass.states.async_all("camera"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "doorbell" in name or "front_door" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "brand": s.attributes.get("brand"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "cameras": results}
+    'Check doorbell camera status.'
+    return await _dao_collapsed_16(hass, 'camera', 'doorbell', 'front_door', 'brand', 'brand', 'cameras')
 
 
 async def _hvac_filter_runtime(hass: HomeAssistant) -> dict[str, Any]:
@@ -35807,27 +35778,13 @@ async def _hvac_efficiency_report(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_speaker_playing_summary(hass: HomeAssistant) -> dict[str, Any]:
-    """Summarize what smart speakers are playing."""
-    results = []
-    for s in hass.states.async_all("media_player"):
-        if s.state == "playing":
-            results.append({"entity_id": s.entity_id,
-                            "media_title": s.attributes.get("media_title"),
-                            "media_artist": s.attributes.get("media_artist"),
-                            "source": s.attributes.get("source"),
-                            "volume": s.attributes.get("volume_level")})
-    return {"ok": True, "playing_count": len(results), "speakers": results}
+    'Summarize what smart speakers are playing.'
+    return await _dao_collapsed_17(hass, 'media_player', 'playing', 'media_title', 'media_artist', 'source', 'volume', 'media_title', 'media_artist', 'source', 'volume_level', 'playing_count', 'speakers')
 
 
 async def _smart_speaker_tts_queue(hass: HomeAssistant) -> dict[str, Any]:
-    """Check TTS-related entities."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "tts" in name or "text_to_speech" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "tts_entities": results}
+    'Check TTS-related entities.'
+    return await _dao_collapsed_27(hass, 'tts', 'text_to_speech', 'tts_entities')
 
 
 async def _entity_staleness_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -36256,18 +36213,8 @@ async def _integration_error_log_scan(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _climate_setpoint_history(hass: HomeAssistant) -> dict[str, Any]:
-    """Track current climate setpoints."""
-    results = []
-    for s in hass.states.async_all("climate"):
-        results.append({
-            "entity_id": s.entity_id, "mode": s.state,
-            "target_temp": s.attributes.get("temperature"),
-            "target_temp_high": s.attributes.get("target_temp_high"),
-            "target_temp_low": s.attributes.get("target_temp_low"),
-            "current_temp": s.attributes.get("current_temperature"),
-            "preset": s.attributes.get("preset_mode"),
-        })
-    return {"ok": True, "count": len(results), "setpoints": results}
+    'Track current climate setpoints.'
+    return await _dao_collapsed_28(hass, 'climate', 'mode', 'target_temp', 'target_temp_high', 'target_temp_low', 'current_temp', 'preset', 'target_temp_high', 'target_temp_low', 'current_temperature', 'preset_mode', 'setpoints')
 
 
 async def _entity_naming_consistency(hass: HomeAssistant) -> dict[str, Any]:
@@ -36333,27 +36280,13 @@ async def _area_unassigned_entities(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _switch_on_time_ranking(hass: HomeAssistant) -> dict[str, Any]:
-    """Rank switches by time in on state."""
-    now = datetime.now(timezone.utc)
-    results = []
-    for s in hass.states.async_all("switch"):
-        if s.state == "on":
-            hours = (now - s.last_changed).total_seconds() / 3600
-            results.append({"entity_id": s.entity_id,
-                            "hours_on": round(hours, 1),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    results.sort(key=lambda x: x["hours_on"], reverse=True)
-    return {"ok": True, "on_count": len(results), "ranking": results}
+    'Rank switches by time in on state.'
+    return await _dao_collapsed_29(hass, 'switch', 'on', 'hours_on', 'hours_on', 'on_count', 'ranking')
 
 
 async def _event_bus_traffic_analysis(hass: HomeAssistant) -> dict[str, Any]:
-    """Analyze event bus traffic."""
-    listeners = hass.bus.async_listeners()
-    total = sum(listeners.values()) if isinstance(listeners, dict) else 0
-    top = sorted(listeners.items(), key=lambda x: x[1], reverse=True)[:15] if isinstance(listeners, dict) else []
-    return {"ok": True, "total_listeners": total,
-            "event_type_count": len(listeners) if isinstance(listeners, dict) else 0,
-            "top_events": [{"event": e, "listeners": c} for e, c in top]}
+    'Analyze event bus traffic.'
+    return await _dao_collapsed_30(hass, 15, 'event_type_count')
 
 
 async def _proximity_zone_summary(hass: HomeAssistant) -> dict[str, Any]:
@@ -36419,38 +36352,18 @@ async def _irrigation_schedule_overview(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _fireplace_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check fireplace status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "fireplace" in name or "hearth" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "fireplaces": results}
+    'Check fireplace status.'
+    return await _dao_collapsed_27(hass, 'fireplace', 'hearth', 'fireplaces')
 
 
 async def _sauna_status_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check sauna/steam room status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "sauna" in name or "steam_room" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sauna": results}
+    'Check sauna/steam room status.'
+    return await _dao_collapsed_27(hass, 'sauna', 'steam_room', 'sauna')
 
 
 async def _wine_cellar_conditions(hass: HomeAssistant) -> dict[str, Any]:
-    """Check wine cellar/storage conditions."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "wine" in name or "cellar" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "device_class": s.attributes.get("device_class"),
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check wine cellar/storage conditions.'
+    return await _dao_collapsed_31(hass, 'sensor', 'wine', 'cellar', 'device_class', 'unit', 'device_class', 'unit_of_measurement', 'sensors')
 
 
 async def _home_theater_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -36481,14 +36394,8 @@ async def _home_theater_audio_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _laundry_machine_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check laundry machine status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("washer", "dryer", "washing_machine", "laundry")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "machines": results}
+    'Check laundry machine status.'
+    return await _dao_collapsed_15(hass, 'washer', 'dryer', 'washing_machine', 'laundry', 'machines')
 
 
 async def _laundry_cycle_estimate(hass: HomeAssistant) -> dict[str, Any]:
@@ -36570,25 +36477,13 @@ async def _baby_room_environment(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _baby_monitor_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check baby monitor status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "baby" in name and ("monitor" in name or "camera" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "monitors": results}
+    'Check baby monitor status.'
+    return await _dao_collapsed_32(hass, 'baby', 'monitor', 'camera', 'monitors')
 
 
 async def _guest_mode_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check guest mode related entities."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "guest" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "guest_entities": results}
+    'Check guest mode related entities.'
+    return await _dao_collapsed_33(hass, 'guest', 'guest_entities')
 
 
 async def _guest_network_isolation(hass: HomeAssistant) -> dict[str, Any]:
@@ -36723,16 +36618,8 @@ async def _dns_resolution_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _home_office_environment(hass: HomeAssistant) -> dict[str, Any]:
-    """Check home office environment."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("office", "desk", "study", "workspace")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "device_class": s.attributes.get("device_class"),
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check home office environment.'
+    return await _dao_collapsed_34(hass, 'sensor', 'office', 'desk', 'study', 'workspace', 'device_class', 'unit', 'device_class', 'unit_of_measurement', 'sensors')
 
 
 async def _home_office_occupancy(hass: HomeAssistant) -> dict[str, Any]:
@@ -36802,14 +36689,8 @@ async def _lock_battery_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _intercom_system_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check intercom system status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "intercom" in name or "doorphone" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check intercom system status.'
+    return await _dao_collapsed_27(hass, 'intercom', 'doorphone', 'devices')
 
 
 async def _curtain_position_summary(hass: HomeAssistant) -> dict[str, Any]:
@@ -36838,15 +36719,8 @@ async def _air_purifier_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _air_purifier_filter_life(hass: HomeAssistant) -> dict[str, Any]:
-    """Check air purifier filter life."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "filter" in name and ("purifier" in name or "air" in name or "life" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "filters": results}
+    'Check air purifier filter life.'
+    return await _dao_collapsed_35(hass, 'filter', 'purifier', 'air', 'life', 'filters')
 
 
 async def _dehumidifier_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -36878,15 +36752,8 @@ async def _fan_speed_distribution(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _timer_active_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List active timers."""
-    results = []
-    for s in hass.states.async_all("timer"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "duration": s.attributes.get("duration"),
-                        "remaining": s.attributes.get("remaining"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    active = [r for r in results if r["state"] == "active"]
-    return {"ok": True, "total": len(results), "active": len(active), "timers": results}
+    'List active timers.'
+    return await _dao_collapsed_36(hass)
 
 
 async def _counter_value_summary(hass: HomeAssistant) -> dict[str, Any]:
@@ -36934,14 +36801,8 @@ async def _input_number_overview(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _nfc_tag_scan_history(hass: HomeAssistant) -> dict[str, Any]:
-    """Check NFC tag scan history."""
-    results = []
-    for s in hass.states.async_all("tag"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "friendly_name": s.attributes.get("friendly_name")})
-    tag_data = hass.data.get("tag", {})
-    return {"ok": True, "tag_count": len(results), "tags": results,
-            "tag_data_available": bool(tag_data)}
+    'Check NFC tag scan history.'
+    return await _dao_collapsed_37(hass, 'tag_count', 'tags')
 
 
 # ---------------------------------------------------------------------------
@@ -36951,16 +36812,8 @@ async def _nfc_tag_scan_history(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _vacuum_consumable_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check vacuum consumable status."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("vacuum", "roborock", "roomba")) and \
-           any(kw in name for kw in ("filter", "brush", "mop", "consumable")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "consumables": results}
+    'Check vacuum consumable status.'
+    return await _dao_collapsed_38(hass, 'vacuum', 'roborock', 'roomba', 'filter', 'brush', 'mop', 'consumable', 'consumables')
 
 
 async def _vacuum_error_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -36976,15 +36829,8 @@ async def _vacuum_error_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _water_heater_schedule(hass: HomeAssistant) -> dict[str, Any]:
-    """Check water heater schedule."""
-    results = []
-    for s in hass.states.async_all("water_heater"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "temperature": s.attributes.get("temperature"),
-                        "away_mode": s.attributes.get("away_mode"),
-                        "operation_mode": s.attributes.get("operation_mode"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "heaters": results}
+    'Check water heater schedule.'
+    return await _dao_collapsed_25(hass, 'water_heater', 'temperature', 'away_mode', 'operation_mode', 'temperature', 'away_mode', 'operation_mode', 'heaters')
 
 
 async def _garage_door_history(hass: HomeAssistant) -> dict[str, Any]:
@@ -37061,16 +36907,8 @@ async def _freezer_temperature_alert(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _network_bandwidth_usage(hass: HomeAssistant) -> dict[str, Any]:
-    """Check network bandwidth usage sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("bandwidth", "download", "upload", "throughput",
-                                      "network_speed")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check network bandwidth usage sensors.'
+    return await _dao_collapsed_39(hass, 'sensor', 'bandwidth', 'download', 'upload', 'throughput', 'network_speed', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _smart_plug_energy_ranking(hass: HomeAssistant) -> dict[str, Any]:
@@ -37108,14 +36946,8 @@ async def _smart_plug_always_on_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _alarm_panel_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check alarm panel status."""
-    results = []
-    for s in hass.states.async_all("alarm_control_panel"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "code_arm_required": s.attributes.get("code_arm_required"),
-                        "supported_features": s.attributes.get("supported_features"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "panels": results}
+    'Check alarm panel status.'
+    return await _dao_collapsed_40(hass, 'alarm_control_panel', 'code_arm_required', 'supported_features', 'code_arm_required', 'supported_features', 'panels')
 
 
 async def _alarm_zone_bypass_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -37175,15 +37007,8 @@ async def _utility_meter_reading(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _utility_tariff_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check utility tariff status."""
-    results = []
-    for s in hass.states.async_all("select"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "tariff" in name or "rate" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "options": s.attributes.get("options"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "tariffs": results}
+    'Check utility tariff status.'
+    return await _dao_collapsed_16(hass, 'select', 'tariff', 'rate', 'options', 'options', 'tariffs')
 
 
 async def _calendar_upcoming_events(hass: HomeAssistant) -> dict[str, Any]:
@@ -37199,15 +37024,8 @@ async def _calendar_upcoming_events(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _geolocation_entity_summary(hass: HomeAssistant) -> dict[str, Any]:
-    """Summarize geolocation entities."""
-    results = []
-    for s in hass.states.async_all("geo_location"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "latitude": s.attributes.get("latitude"),
-                        "longitude": s.attributes.get("longitude"),
-                        "source": s.attributes.get("source"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Summarize geolocation entities.'
+    return await _dao_collapsed_25(hass, 'geo_location', 'latitude', 'longitude', 'source', 'latitude', 'longitude', 'source', 'entities')
 
 
 async def _notification_service_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -37276,35 +37094,13 @@ async def _person_location_summary(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _person_time_at_home(hass: HomeAssistant) -> dict[str, Any]:
-    """Estimate time persons have been home."""
-    now = datetime.now(timezone.utc)
-    results = []
-    for s in hass.states.async_all("person"):
-        if s.state == "home":
-            hours = (now - s.last_changed).total_seconds() / 3600
-            results.append({"entity_id": s.entity_id,
-                            "hours_home": round(hours, 1),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    results.sort(key=lambda x: x["hours_home"], reverse=True)
-    return {"ok": True, "home_count": len(results), "persons": results}
+    'Estimate time persons have been home.'
+    return await _dao_collapsed_29(hass, 'person', 'home', 'hours_home', 'hours_home', 'home_count', 'persons')
 
 
 async def _energy_peak_usage_analysis(hass: HomeAssistant) -> dict[str, Any]:
-    """Analyze peak energy usage sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if s.attributes.get("device_class") == "power":
-            try:
-                val = float(s.state)
-                results.append({"entity_id": s.entity_id, "power_w": val,
-                                "unit": s.attributes.get("unit_of_measurement"),
-                                "friendly_name": s.attributes.get("friendly_name")})
-            except (ValueError, TypeError):
-                pass
-    results.sort(key=lambda x: x["power_w"], reverse=True)
-    total = sum(r["power_w"] for r in results)
-    return {"ok": True, "count": len(results), "total_power_w": round(total, 1),
-            "top_consumers": results[:10]}
+    'Analyze peak energy usage sensors.'
+    return await _dao_collapsed_41(hass, 'total_power_w', 'top_consumers', 10)
 
 
 async def _energy_off_peak_summary(hass: HomeAssistant) -> dict[str, Any]:
@@ -37327,15 +37123,8 @@ async def _energy_off_peak_summary(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _hvac_filter_reminder(hass: HomeAssistant) -> dict[str, Any]:
-    """Check HVAC filter reminders."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "filter" in name and any(kw in name for kw in ("hvac", "furnace", "ac", "air_handler")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "filters": results}
+    'Check HVAC filter reminders.'
+    return await _dao_collapsed_42(hass, 'filter', 'hvac', 'furnace', 'ac', 'air_handler', 'filters')
 
 
 async def _doorbell_ring_frequency(hass: HomeAssistant) -> dict[str, Any]:
@@ -37597,15 +37386,8 @@ async def _thermostat_schedule_deviation(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _water_flow_anomaly(hass: HomeAssistant) -> dict[str, Any]:
-    """Check for water flow anomalies."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("water_flow", "flow_rate", "water_usage")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check for water flow anomalies.'
+    return await _dao_collapsed_19(hass, 'sensor', 'water_flow', 'flow_rate', 'water_usage', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _water_main_shutoff_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -37634,15 +37416,8 @@ async def _mqtt_topic_summary(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _mqtt_message_rate(hass: HomeAssistant) -> dict[str, Any]:
-    """Check MQTT message rate sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "mqtt" in name and any(kw in name for kw in ("message", "rate", "count", "received")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check MQTT message rate sensors.'
+    return await _dao_collapsed_42(hass, 'mqtt', 'message', 'rate', 'count', 'received', 'sensors')
 
 
 async def _esphome_device_uptime(hass: HomeAssistant) -> dict[str, Any]:
@@ -37673,15 +37448,8 @@ async def _esphome_ota_update_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _siren_test_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check siren test status."""
-    now = datetime.now(timezone.utc)
-    results = []
-    for s in hass.states.async_all("siren"):
-        hours = (now - s.last_changed).total_seconds() / 3600
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "hours_since_activation": round(hours, 1),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sirens": results}
+    'Check siren test status.'
+    return await _dao_collapsed_43(hass, 'siren', 'state', 'hours_since_activation', 'sirens')
 
 
 async def _window_open_duration(hass: HomeAssistant) -> dict[str, Any]:
@@ -37799,15 +37567,8 @@ async def _washing_machine_notification_check(hass: HomeAssistant) -> dict[str, 
 
 
 async def _security_arm_disarm_log(hass: HomeAssistant) -> dict[str, Any]:
-    """Get security arm/disarm log."""
-    now = datetime.now(timezone.utc)
-    results = []
-    for s in hass.states.async_all("alarm_control_panel"):
-        hours = (now - s.last_changed).total_seconds() / 3600
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "hours_since_change": round(hours, 1),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "panels": results}
+    'Get security arm/disarm log.'
+    return await _dao_collapsed_43(hass, 'alarm_control_panel', 'state', 'hours_since_change', 'panels')
 
 
 async def _security_camera_offline_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -37821,38 +37582,18 @@ async def _security_camera_offline_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _pet_feeder_schedule(hass: HomeAssistant) -> dict[str, Any]:
-    """Check pet feeder schedule."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("pet_feeder", "cat_feeder", "dog_feeder", "pet_food")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "feeders": results}
+    'Check pet feeder schedule.'
+    return await _dao_collapsed_15(hass, 'pet_feeder', 'cat_feeder', 'dog_feeder', 'pet_food', 'feeders')
 
 
 async def _smart_display_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart display status."""
-    results = []
-    for s in hass.states.async_all("media_player"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("display", "echo_show", "nest_hub", "smart_screen")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "volume": s.attributes.get("volume_level"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "displays": results}
+    'Check smart display status.'
+    return await _dao_collapsed_18(hass, 'media_player', 'display', 'echo_show', 'nest_hub', 'smart_screen', 'volume', 'volume_level', 'displays')
 
 
 async def _doorbell_video_recording_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check doorbell video recording status."""
-    results = []
-    for s in hass.states.async_all("camera"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "doorbell" in name or "door_bell" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "is_recording": s.attributes.get("is_recording"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "doorbells": results}
+    'Check doorbell video recording status.'
+    return await _dao_collapsed_16(hass, 'camera', 'doorbell', 'door_bell', 'is_recording', 'is_recording', 'doorbells')
 
 
 async def _garage_occupancy_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -37909,27 +37650,13 @@ async def _heating_efficiency_score(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _ventilation_system_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check ventilation system status."""
-    results = []
-    for s in hass.states.async_all("fan"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("ventilation", "hrv", "erv", "vent", "exhaust")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "speed": s.attributes.get("percentage"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "systems": results}
+    'Check ventilation system status.'
+    return await _dao_collapsed_39(hass, 'fan', 'ventilation', 'hrv', 'erv', 'vent', 'exhaust', 'speed', 'percentage', 'systems')
 
 
 async def _ventilation_filter_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check ventilation filter status."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "filter" in name and any(kw in name for kw in ("vent", "hrv", "erv", "exhaust")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "filters": results}
+    'Check ventilation filter status.'
+    return await _dao_collapsed_42(hass, 'filter', 'vent', 'hrv', 'erv', 'exhaust', 'filters')
 
 
 async def _light_circadian_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -38139,16 +37866,8 @@ async def _ups_battery_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _ups_load_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check UPS load percentage."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("ups", "uninterruptible")) and \
-           any(kw in name for kw in ("load", "output", "watt")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check UPS load percentage.'
+    return await _dao_collapsed_44(hass, 'ups', 'uninterruptible', 'load', 'output', 'watt')
 
 
 async def _lock_auto_lock_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -38168,14 +37887,8 @@ async def _lock_auto_lock_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _lock_keypad_code_count(hass: HomeAssistant) -> dict[str, Any]:
-    """Check lock keypad code counts."""
-    results = []
-    for s in hass.states.async_all("lock"):
-        codes = s.attributes.get("code_format")
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "code_format": codes,
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "locks": results}
+    'Check lock keypad code counts.'
+    return await _dao_collapsed_45(hass)
 
 
 async def _smoke_detector_battery_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -38196,21 +37909,8 @@ async def _smoke_detector_battery_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _occupancy_pattern_analysis(hass: HomeAssistant) -> dict[str, Any]:
-    """Analyze occupancy patterns."""
-    now = datetime.now(timezone.utc)
-    active = inactive = 0
-    details = []
-    for s in hass.states.async_all("binary_sensor"):
-        if s.attributes.get("device_class") == "occupancy":
-            hours = (now - s.last_changed).total_seconds() / 3600
-            if s.state == "on":
-                active += 1
-            else:
-                inactive += 1
-            details.append({"entity_id": s.entity_id, "occupied": s.state == "on",
-                            "hours_since_change": round(hours, 1)})
-    return {"ok": True, "active": active, "inactive": inactive,
-            "total": active + inactive, "sensors": details[:20]}
+    'Analyze occupancy patterns.'
+    return await _dao_collapsed_46(hass, 'occupancy', 'occupied')
 
 
 async def _light_color_temp_distribution(hass: HomeAssistant) -> dict[str, Any]:
@@ -38282,21 +37982,8 @@ async def _noise_level_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _power_consumption_ranking(hass: HomeAssistant) -> dict[str, Any]:
-    """Rank entities by power consumption."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if s.attributes.get("device_class") == "power":
-            try:
-                val = float(s.state)
-                results.append({"entity_id": s.entity_id, "power_w": val,
-                                "unit": s.attributes.get("unit_of_measurement"),
-                                "friendly_name": s.attributes.get("friendly_name")})
-            except (ValueError, TypeError):
-                pass
-    results.sort(key=lambda x: x["power_w"], reverse=True)
-    total = sum(r["power_w"] for r in results)
-    return {"ok": True, "count": len(results), "total_w": round(total, 1),
-            "ranking": results[:20]}
+    'Rank entities by power consumption.'
+    return await _dao_collapsed_41(hass, 'total_w', 'ranking', 20)
 
 
 async def _zwave_node_health_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -38338,25 +38025,13 @@ async def _template_sensor_error_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _dishwasher_cycle_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check dishwasher cycle status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "dishwasher" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check dishwasher cycle status.'
+    return await _dao_collapsed_33(hass, 'dishwasher', 'devices')
 
 
 async def _dryer_cycle_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check dryer cycle status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "dryer" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check dryer cycle status.'
+    return await _dao_collapsed_33(hass, 'dryer', 'devices')
 
 
 async def _oven_preheat_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -38392,16 +38067,8 @@ async def _home_cinema_power_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _home_cinema_input_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check home cinema input sources."""
-    results = []
-    for s in hass.states.async_all("media_player"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("receiver", "avr", "cinema", "theater")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "source": s.attributes.get("source"),
-                            "source_list": s.attributes.get("source_list"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check home cinema input sources.'
+    return await _dao_collapsed_34(hass, 'media_player', 'receiver', 'avr', 'cinema', 'theater', 'source', 'source_list', 'source', 'source_list', 'devices')
 
 
 async def _garden_soil_moisture_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -38435,15 +38102,8 @@ async def _garden_light_schedule(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _package_delivery_detection(hass: HomeAssistant) -> dict[str, Any]:
-    """Check package delivery detection sensors."""
-    results = []
-    for s in hass.states.async_all("binary_sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("package", "delivery", "parcel", "mailbox")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "detected": s.state == "on",
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check package delivery detection sensors.'
+    return await _dao_collapsed_47(hass, 'binary_sensor', 'package', 'delivery', 'parcel', 'mailbox', 'detected', 'sensors')
 
 
 async def _smart_speaker_volume_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -38461,38 +38121,18 @@ async def _smart_speaker_volume_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_speaker_alarm_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List smart speaker alarms/timers."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("alexa_alarm", "google_alarm", "next_alarm")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "alarms": results}
+    'List smart speaker alarms/timers.'
+    return await _dao_collapsed_48(hass, 'sensor', 'alexa_alarm', 'google_alarm', 'next_alarm', 'alarms')
 
 
 async def _humidifier_target_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check humidifier target humidity."""
-    results = []
-    for s in hass.states.async_all("humidifier"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "target_humidity": s.attributes.get("humidity"),
-                        "current_humidity": s.attributes.get("current_humidity"),
-                        "mode": s.attributes.get("mode"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "humidifiers": results}
+    'Check humidifier target humidity.'
+    return await _dao_collapsed_25(hass, 'humidifier', 'target_humidity', 'current_humidity', 'mode', 'humidity', 'current_humidity', 'mode', 'humidifiers')
 
 
 async def _humidifier_water_level(hass: HomeAssistant) -> dict[str, Any]:
-    """Check humidifier water level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "humidifier" in name and ("water" in name or "tank" in name or "level" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check humidifier water level.'
+    return await _dao_collapsed_35(hass, 'humidifier', 'water', 'tank', 'level', 'sensors')
 
 
 async def _garage_heater_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -38572,16 +38212,8 @@ async def _bed_occupancy_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _vacuum_cleaning_area_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check vacuum cleaning area stats."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("vacuum", "roborock")) and \
-           any(kw in name for kw in ("area", "clean_area", "square")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check vacuum cleaning area stats.'
+    return await _dao_collapsed_44(hass, 'vacuum', 'roborock', 'area', 'clean_area', 'square')
 
 
 async def _integration_error_log(hass: HomeAssistant) -> dict[str, Any]:
@@ -38721,14 +38353,8 @@ async def _smart_switch_power_monitoring(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_switch_scheduling_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart switch schedules."""
-    results = []
-    for s in hass.states.async_all("automation"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("switch_schedule", "switch_timer", "scheduled_switch")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "schedules": results}
+    'Check smart switch schedules.'
+    return await _dao_collapsed_48(hass, 'automation', 'switch_schedule', 'switch_timer', 'scheduled_switch', 'schedules')
 
 
 async def _lock_battery_level(hass: HomeAssistant) -> dict[str, Any]:
@@ -38788,14 +38414,8 @@ async def _thermostat_humidity_reading(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _motion_activated_light_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check motion-activated light automations."""
-    results = []
-    for s in hass.states.async_all("automation"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "motion" in name and "light" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "automations": results}
+    'Check motion-activated light automations.'
+    return await _dao_collapsed_49(hass, 'automation', 'motion', 'light', 'automations')
 
 
 async def _grid_import_export_balance(hass: HomeAssistant) -> dict[str, Any]:
@@ -38875,24 +38495,13 @@ async def _entity_change_frequency(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _nfc_reader_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check NFC reader status."""
-    results = []
-    for s in hass.states.async_all("tag"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "friendly_name": s.attributes.get("friendly_name")})
-    tag_data = hass.data.get("tag", {})
-    return {"ok": True, "count": len(results), "readers": results,
-            "tag_data_available": bool(tag_data)}
+    'Check NFC reader status.'
+    return await _dao_collapsed_37(hass, 'count', 'readers')
 
 
 async def _remote_control_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check remote control status."""
-    results = []
-    for s in hass.states.async_all("remote"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "activity": s.attributes.get("current_activity"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "remotes": results}
+    'Check remote control status.'
+    return await _dao_collapsed_22(hass, 'remote', 'activity', 'friendly_name', 'current_activity', 'friendly_name', 'remotes')
 
 
 async def _media_library_size_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -38909,15 +38518,8 @@ async def _media_library_size_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _dehumidifier_water_tank_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check dehumidifier water tank."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "dehumid" in name and any(kw in name for kw in ("water", "tank", "level", "full")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check dehumidifier water tank.'
+    return await _dao_collapsed_42(hass, 'dehumid', 'water', 'tank', 'level', 'full', 'sensors')
 
 
 async def _ac_filter_maintenance(hass: HomeAssistant) -> dict[str, Any]:
@@ -38933,15 +38535,8 @@ async def _ac_filter_maintenance(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _geofence_radius_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check geofence/zone radius settings."""
-    results = []
-    for s in hass.states.async_all("zone"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "latitude": s.attributes.get("latitude"),
-                        "longitude": s.attributes.get("longitude"),
-                        "radius": s.attributes.get("radius"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "zones": results}
+    'Check geofence/zone radius settings.'
+    return await _dao_collapsed_25(hass, 'zone', 'latitude', 'longitude', 'radius', 'latitude', 'longitude', 'radius', 'zones')
 
 
 # ---------------------------------------------------------------------------
@@ -38971,32 +38566,13 @@ async def _ev_charger_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _ev_charging_session_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check EV charging session."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("ev", "charger", "wallbox")) and \
-           any(kw in name for kw in ("energy", "session", "kwh", "charging")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sessions": results}
+    'Check EV charging session.'
+    return await _dao_collapsed_38(hass, 'ev', 'charger', 'wallbox', 'energy', 'session', 'kwh', 'charging', 'sessions')
 
 
 async def _ev_battery_level(hass: HomeAssistant) -> dict[str, Any]:
-    """Check EV battery level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("ev", "tesla", "car")) and \
-           s.attributes.get("device_class") == "battery":
-            try:
-                results.append({"entity_id": s.entity_id, "battery": float(s.state),
-                                "unit": s.attributes.get("unit_of_measurement"),
-                                "friendly_name": s.attributes.get("friendly_name")})
-            except (ValueError, TypeError):
-                pass
-    return {"ok": True, "count": len(results), "vehicles": results}
+    'Check EV battery level.'
+    return await _dao_collapsed_50(hass, 'ev', 'tesla', 'car', 'battery', 'vehicles')
 
 
 async def _water_leak_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -39060,22 +38636,8 @@ async def _window_door_sensor_summary(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _motion_sensor_activity_summary(hass: HomeAssistant) -> dict[str, Any]:
-    """Summarize motion sensor activity."""
-    now = datetime.now(timezone.utc)
-    active = inactive = 0
-    details = []
-    for s in hass.states.async_all("binary_sensor"):
-        if s.attributes.get("device_class") == "motion":
-            hours = (now - s.last_changed).total_seconds() / 3600
-            if s.state == "on":
-                active += 1
-            else:
-                inactive += 1
-            details.append({"entity_id": s.entity_id,
-                            "detecting": s.state == "on",
-                            "hours_since_change": round(hours, 1)})
-    return {"ok": True, "active": active, "inactive": inactive,
-            "total": active + inactive, "sensors": details[:20]}
+    'Summarize motion sensor activity.'
+    return await _dao_collapsed_46(hass, 'motion', 'detecting')
 
 
 async def _power_strip_outlet_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -39120,16 +38682,8 @@ async def _presence_detection_accuracy(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _active_timer_list(hass: HomeAssistant) -> dict[str, Any]:
-    """List active timers."""
-    results = []
-    for s in hass.states.async_all("timer"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "duration": s.attributes.get("duration"),
-                        "remaining": s.attributes.get("remaining"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    active = [r for r in results if r["state"] == "active"]
-    return {"ok": True, "total": len(results), "active": len(active),
-            "timers": results}
+    'List active timers.'
+    return await _dao_collapsed_36(hass)
 
 
 async def _input_number_range_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -39160,16 +38714,8 @@ async def _input_select_usage(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _weather_forecast_summary(hass: HomeAssistant) -> dict[str, Any]:
-    """Summarize weather forecast."""
-    results = []
-    for s in hass.states.async_all("weather"):
-        results.append({"entity_id": s.entity_id, "condition": s.state,
-                        "temperature": s.attributes.get("temperature"),
-                        "humidity": s.attributes.get("humidity"),
-                        "pressure": s.attributes.get("pressure"),
-                        "wind_speed": s.attributes.get("wind_speed"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "forecasts": results}
+    'Summarize weather forecast.'
+    return await _dao_collapsed_28(hass, 'weather', 'condition', 'temperature', 'humidity', 'pressure', 'wind_speed', 'friendly_name', 'humidity', 'pressure', 'wind_speed', 'friendly_name', 'forecasts')
 
 
 async def _sun_position_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -39196,24 +38742,13 @@ async def _datetime_helper_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _schedule_helper_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check schedule helpers."""
-    results = []
-    for s in hass.states.async_all("schedule"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "schedules": results}
+    'Check schedule helpers.'
+    return await _dao_collapsed_51(hass, 'schedule', 'schedules')
 
 
 async def _person_zone_history(hass: HomeAssistant) -> dict[str, Any]:
-    """Check person zone history."""
-    now = datetime.now(timezone.utc)
-    results = []
-    for s in hass.states.async_all("person"):
-        hours = (now - s.last_changed).total_seconds() / 3600
-        results.append({"entity_id": s.entity_id, "zone": s.state,
-                        "hours_in_zone": round(hours, 1),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "persons": results}
+    'Check person zone history.'
+    return await _dao_collapsed_43(hass, 'person', 'zone', 'hours_in_zone', 'persons')
 
 
 async def _integration_update_available(hass: HomeAssistant) -> dict[str, Any]:
@@ -39326,16 +38861,8 @@ async def _co2_level_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _voc_level_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check VOC level readings."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        dc = s.attributes.get("device_class", "")
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if dc == "volatile_organic_compounds" or "voc" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check VOC level readings.'
+    return await _dao_collapsed_52(hass, 'volatile_organic_compounds', 'voc')
 
 
 async def _smart_plug_energy_daily(hass: HomeAssistant) -> dict[str, Any]:
@@ -39428,14 +38955,8 @@ async def _media_player_queue_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _alarm_panel_zone_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check alarm panel zone status."""
-    results = []
-    for s in hass.states.async_all("alarm_control_panel"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "code_arm_required": s.attributes.get("code_arm_required"),
-                        "supported_features": s.attributes.get("supported_features"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "panels": results}
+    'Check alarm panel zone status.'
+    return await _dao_collapsed_40(hass, 'alarm_control_panel', 'code_arm_required', 'supported_features', 'code_arm_required', 'supported_features', 'panels')
 
 
 async def _area_entity_count(hass: HomeAssistant) -> dict[str, Any]:
@@ -39522,15 +39043,8 @@ async def _fridge_door_open_alert(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _roof_window_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check roof window status."""
-    results = []
-    for s in hass.states.async_all("cover"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("roof", "skylight", "velux")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "position": s.attributes.get("current_position"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "windows": results}
+    'Check roof window status.'
+    return await _dao_collapsed_19(hass, 'cover', 'roof', 'skylight', 'velux', 'position', 'current_position', 'windows')
 
 
 async def _pellet_stove_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -39570,27 +39084,13 @@ async def _hot_water_tank_temperature(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _floor_heating_zone_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check floor heating zones."""
-    results = []
-    for s in hass.states.async_all("climate"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "floor" in name or "underfloor" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "temperature": s.attributes.get("temperature"),
-                            "current_temperature": s.attributes.get("current_temperature"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "zones": results}
+    'Check floor heating zones.'
+    return await _dao_collapsed_31(hass, 'climate', 'floor', 'underfloor', 'temperature', 'current_temperature', 'temperature', 'current_temperature', 'zones')
 
 
 async def _steam_shower_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check steam shower status."""
-    results = []
-    for s in hass.states.async_all("switch"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "steam" in name and ("shower" in name or "sauna" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check steam shower status.'
+    return await _dao_collapsed_53(hass, 'switch', 'steam', 'shower', 'sauna', 'devices')
 
 
 async def _smoke_alarm_last_triggered(hass: HomeAssistant) -> dict[str, Any]:
@@ -39656,15 +39156,8 @@ async def _rain_gauge_reading(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _lightning_strike_distance(hass: HomeAssistant) -> dict[str, Any]:
-    """Check lightning strike distance."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "lightning" in name or "thunder" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check lightning strike distance.'
+    return await _dao_collapsed_16(hass, 'sensor', 'lightning', 'thunder', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _power_failure_detection(hass: HomeAssistant) -> dict[str, Any]:
@@ -39684,31 +39177,13 @@ async def _power_failure_detection(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _solar_battery_charge_level(hass: HomeAssistant) -> dict[str, Any]:
-    """Check solar battery charge level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("solar", "powerwall", "enphase")) and \
-           s.attributes.get("device_class") == "battery":
-            try:
-                results.append({"entity_id": s.entity_id, "charge": float(s.state),
-                                "unit": s.attributes.get("unit_of_measurement"),
-                                "friendly_name": s.attributes.get("friendly_name")})
-            except (ValueError, TypeError):
-                pass
-    return {"ok": True, "count": len(results), "batteries": results}
+    'Check solar battery charge level.'
+    return await _dao_collapsed_50(hass, 'solar', 'powerwall', 'enphase', 'charge', 'batteries')
 
 
 async def _heat_pump_cop_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check heat pump COP (coefficient of performance)."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "heat_pump" in name or "heatpump" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check heat pump COP (coefficient of performance).'
+    return await _dao_collapsed_16(hass, 'sensor', 'heat_pump', 'heatpump', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _radiator_valve_position(hass: HomeAssistant) -> dict[str, Any]:
@@ -39773,26 +39248,13 @@ async def _astronomical_clock_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _do_not_disturb_mode_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check do-not-disturb mode settings."""
-    results = []
-    for s in hass.states.async_all("input_boolean"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("dnd", "do_not_disturb", "quiet", "sleep_mode")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "active": s.state == "on",
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "modes": results}
+    'Check do-not-disturb mode settings.'
+    return await _dao_collapsed_47(hass, 'input_boolean', 'dnd', 'do_not_disturb', 'quiet', 'sleep_mode', 'active', 'modes')
 
 
 async def _guest_network_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check guest network status."""
-    results = []
-    for s in hass.states.async_all("switch"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "guest" in name and ("wifi" in name or "network" in name or "ssid" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "networks": results}
+    'Check guest network status.'
+    return await _dao_collapsed_54(hass, 'switch', 'guest', 'wifi', 'network', 'ssid', 'networks')
 
 
 async def _home_health_score(hass: HomeAssistant) -> dict[str, Any]:
@@ -39918,29 +39380,13 @@ async def _natural_gas_detector(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _water_meter_reading(hass: HomeAssistant) -> dict[str, Any]:
-    """Check water meter reading."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        dc = s.attributes.get("device_class", "")
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if dc == "water" or ("water" in name and ("meter" in name or "consumption" in name)):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "meters": results}
+    'Check water meter reading.'
+    return await _dao_collapsed_55(hass, 'water', 'water')
 
 
 async def _gas_meter_reading(hass: HomeAssistant) -> dict[str, Any]:
-    """Check gas meter reading."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        dc = s.attributes.get("device_class", "")
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if dc == "gas" or ("gas" in name and ("meter" in name or "consumption" in name)):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "meters": results}
+    'Check gas meter reading.'
+    return await _dao_collapsed_55(hass, 'gas', 'gas')
 
 
 async def _electricity_phase_balance(hass: HomeAssistant) -> dict[str, Any]:
@@ -39958,16 +39404,8 @@ async def _electricity_phase_balance(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _network_bandwidth_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check network bandwidth."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("bandwidth", "download_speed", "upload_speed",
-                                      "speedtest", "throughput")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check network bandwidth.'
+    return await _dao_collapsed_39(hass, 'sensor', 'bandwidth', 'download_speed', 'upload_speed', 'speedtest', 'throughput', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _dns_server_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40000,15 +39438,8 @@ async def _nas_storage_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _printer_status_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check printer status."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "printer" in name or "ink" in name or "toner" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "printers": results}
+    'Check printer status.'
+    return await _dao_collapsed_56(hass, 'sensor', 'printer', 'ink', 'toner', 'unit', 'unit_of_measurement', 'printers')
 
 
 async def _projector_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40028,16 +39459,8 @@ async def _projector_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _soundbar_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check soundbar status."""
-    results = []
-    for s in hass.states.async_all("media_player"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "soundbar" in name or "sound_bar" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "volume": s.attributes.get("volume_level"),
-                            "source": s.attributes.get("source"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "soundbars": results}
+    'Check soundbar status.'
+    return await _dao_collapsed_31(hass, 'media_player', 'soundbar', 'sound_bar', 'volume', 'source', 'volume_level', 'source', 'soundbars')
 
 
 async def _smart_mirror_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40053,26 +39476,13 @@ async def _smart_mirror_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_scale_reading(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart scale readings."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("scale", "weight", "body_mass", "withings")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "readings": results}
+    'Check smart scale readings.'
+    return await _dao_collapsed_18(hass, 'sensor', 'scale', 'weight', 'body_mass', 'withings', 'unit', 'unit_of_measurement', 'readings')
 
 
 async def _air_freshener_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check air freshener status."""
-    results = []
-    for s in hass.states.async_all("switch"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("air_freshener", "diffuser", "aroma")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check air freshener status.'
+    return await _dao_collapsed_48(hass, 'switch', 'air_freshener', 'diffuser', 'aroma', 'devices')
 
 
 async def _coffee_maker_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40127,15 +39537,8 @@ async def _blood_pressure_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _heart_rate_monitor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check heart rate monitor readings."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "heart_rate" in name or "heartrate" in name or "bpm" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "readings": results}
+    'Check heart rate monitor readings.'
+    return await _dao_collapsed_56(hass, 'sensor', 'heart_rate', 'heartrate', 'bpm', 'unit', 'unit_of_measurement', 'readings')
 
 
 async def _sleep_tracker_summary(hass: HomeAssistant) -> dict[str, Any]:
@@ -40194,40 +39597,18 @@ async def _wine_cooler_temperature(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_bed_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart bed status."""
-    results = []
-    for domain in ("sensor", "switch", "number"):
-        for s in hass.states.async_all(domain):
-            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-            if any(kw in name for kw in ("sleep_number", "eight_sleep", "smart_bed")):
-                results.append({"entity_id": s.entity_id, "state": s.state,
-                                "domain": domain,
-                                "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check smart bed status.'
+    return await _dao_collapsed_57(hass, 'sensor', 'number', 'sleep_number', 'eight_sleep', 'smart_bed')
 
 
 async def _robot_window_cleaner_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check robot window cleaner status."""
-    results = []
-    for domain in ("switch", "sensor"):
-        for s in hass.states.async_all(domain):
-            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-            if "window" in name and ("clean" in name or "robot" in name):
-                results.append({"entity_id": s.entity_id, "state": s.state,
-                                "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "cleaners": results}
+    'Check robot window cleaner status.'
+    return await _dao_collapsed_58(hass, 'sensor', 'window', 'clean', 'robot', 'cleaners')
 
 
 async def _smart_fan_speed_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart fan speed settings."""
-    results = []
-    for s in hass.states.async_all("fan"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "percentage": s.attributes.get("percentage"),
-                        "preset_mode": s.attributes.get("preset_mode"),
-                        "oscillating": s.attributes.get("oscillating"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "fans": results}
+    'Check smart fan speed settings.'
+    return await _dao_collapsed_25(hass, 'fan', 'percentage', 'preset_mode', 'oscillating', 'percentage', 'preset_mode', 'oscillating', 'fans')
 
 
 async def _standing_desk_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40243,14 +39624,8 @@ async def _standing_desk_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _garbage_disposal_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check garbage disposal status."""
-    results = []
-    for s in hass.states.async_all("switch"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "garbage" in name or "disposal" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check garbage disposal status.'
+    return await _dao_collapsed_59(hass, 'switch', 'garbage', 'disposal', 'devices')
 
 
 async def _sprinkler_zone_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40268,15 +39643,8 @@ async def _sprinkler_zone_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _electric_fence_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check electric fence status."""
-    results = []
-    for domain in ("switch", "binary_sensor"):
-        for s in hass.states.async_all(domain):
-            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-            if "fence" in name and ("electric" in name or "perimeter" in name):
-                results.append({"entity_id": s.entity_id, "state": s.state,
-                                "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "fences": results}
+    'Check electric fence status.'
+    return await _dao_collapsed_58(hass, 'binary_sensor', 'fence', 'electric', 'perimeter', 'fences')
 
 
 async def _mailbox_notification(hass: HomeAssistant) -> dict[str, Any]:
@@ -40324,28 +39692,13 @@ async def _smart_vent_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _septic_tank_level(hass: HomeAssistant) -> dict[str, Any]:
-    """Check septic tank level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "septic" in name and ("level" in name or "tank" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check septic tank level.'
+    return await _dao_collapsed_60(hass, 'septic', 'level', 'tank', 'sensors')
 
 
 async def _water_softener_salt_level(hass: HomeAssistant) -> dict[str, Any]:
-    """Check water softener salt level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if ("softener" in name or "water_treatment" in name) and \
-           ("salt" in name or "level" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check water softener salt level.'
+    return await _dao_collapsed_61(hass, 'softener', 'water_treatment', 'salt', 'level', 'sensors')
 
 
 async def _sump_pump_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40424,15 +39777,8 @@ async def _smart_plug_schedule_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _water_flow_rate_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check water flow rate."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "water" in name and ("flow" in name or "rate" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check water flow rate.'
+    return await _dao_collapsed_60(hass, 'water', 'flow', 'rate', 'sensors')
 
 
 async def _electric_meter_peak_off_peak(hass: HomeAssistant) -> dict[str, Any]:
@@ -40463,15 +39809,8 @@ async def _solar_panel_efficiency(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _wind_turbine_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check wind turbine status."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "wind_turbine" in name or "turbine" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "turbines": results}
+    'Check wind turbine status.'
+    return await _dao_collapsed_16(hass, 'sensor', 'wind_turbine', 'turbine', 'unit', 'unit_of_measurement', 'turbines')
 
 
 async def _generator_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40488,15 +39827,8 @@ async def _generator_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _battery_inverter_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check battery inverter status."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "inverter" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "inverters": results}
+    'Check battery inverter status.'
+    return await _dao_collapsed_24(hass, 'inverter', 'inverters')
 
 
 async def _ev_precondition_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40513,15 +39845,8 @@ async def _ev_precondition_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _tire_pressure_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check tire pressure."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "tire" in name or "tyre" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "tires": results}
+    'Check tire pressure.'
+    return await _dao_collapsed_16(hass, 'sensor', 'tire', 'tyre', 'unit', 'unit_of_measurement', 'tires')
 
 
 async def _car_oil_life_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -40551,16 +39876,8 @@ async def _pet_tracker_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_tag_location(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart tag location."""
-    results = []
-    for s in hass.states.async_all("device_tracker"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("airtag", "smarttag", "tile", "chipolo")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "latitude": s.attributes.get("latitude"),
-                            "longitude": s.attributes.get("longitude"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "tags": results}
+    'Check smart tag location.'
+    return await _dao_collapsed_34(hass, 'device_tracker', 'airtag', 'smarttag', 'tile', 'chipolo', 'latitude', 'longitude', 'latitude', 'longitude', 'tags')
 
 
 async def _presence_room_detection(hass: HomeAssistant) -> dict[str, Any]:
@@ -40597,16 +39914,8 @@ async def _indoor_humidity_trend(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _noise_level_monitor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check noise level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        dc = s.attributes.get("device_class", "")
-        if dc == "sound_pressure" or "noise" in name or "decibel" in name or "db" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check noise level.'
+    return await _dao_collapsed_62(hass, 'noise', 'db')
 
 
 async def _smart_cooktop_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -40657,28 +39966,13 @@ async def _weather_station_health(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _water_heater_mode_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check water heater mode."""
-    results = []
-    for s in hass.states.async_all("water_heater"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "temperature": s.attributes.get("temperature"),
-                        "current_temperature": s.attributes.get("current_temperature"),
-                        "operation_mode": s.attributes.get("operation_mode"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "heaters": results}
+    'Check water heater mode.'
+    return await _dao_collapsed_25(hass, 'water_heater', 'temperature', 'current_temperature', 'operation_mode', 'temperature', 'current_temperature', 'operation_mode', 'heaters')
 
 
 async def _hot_tub_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check hot tub status."""
-    results = []
-    for domain in ("climate", "switch", "sensor"):
-        for s in hass.states.async_all(domain):
-            name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-            if any(kw in name for kw in ("hot_tub", "spa", "jacuzzi")):
-                results.append({"entity_id": s.entity_id, "state": s.state,
-                                "domain": domain,
-                                "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "devices": results}
+    'Check hot tub status.'
+    return await _dao_collapsed_57(hass, 'climate', 'sensor', 'hot_tub', 'spa', 'jacuzzi')
 
 
 async def _smart_shade_position(hass: HomeAssistant) -> dict[str, Any]:
@@ -40824,14 +40118,8 @@ async def _peak_power_demand(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _battery_cycle_count(hass: HomeAssistant) -> dict[str, Any]:
-    """Check battery cycle count."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "battery" in name and ("cycle" in name or "charge_count" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check battery cycle count.'
+    return await _dao_collapsed_53(hass, 'sensor', 'battery', 'cycle', 'charge_count', 'sensors')
 
 
 async def _smart_irrigation_soil_moisture(hass: HomeAssistant) -> dict[str, Any]:
@@ -40862,13 +40150,8 @@ async def _unifi_client_count(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _pihole_stats_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check Pi-hole stats."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if "pihole" in s.entity_id or "pi_hole" in s.entity_id:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check Pi-hole stats.'
+    return await _dao_collapsed_63(hass, 'pihole', 'pi_hole')
 
 
 async def _adguard_stats_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -40923,39 +40206,18 @@ async def _rain_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _snow_depth_sensor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check snow depth sensor."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "snow" in name and ("depth" in name or "accumulation" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check snow depth sensor.'
+    return await _dao_collapsed_60(hass, 'snow', 'depth', 'accumulation', 'sensors')
 
 
 async def _fog_detection_sensor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check fog detection sensor."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "fog" in name or "mist" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check fog detection sensor.'
+    return await _dao_collapsed_59(hass, 'sensor', 'fog', 'mist', 'sensors')
 
 
 async def _pollen_count_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check pollen count."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if any(kw in name for kw in ("pollen", "allergy", "ragweed", "grass_pollen",
-                                      "tree_pollen")):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check pollen count.'
+    return await _dao_collapsed_39(hass, 'sensor', 'pollen', 'allergy', 'ragweed', 'grass_pollen', 'tree_pollen', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _mold_risk_assessment(hass: HomeAssistant) -> dict[str, Any]:
@@ -40976,66 +40238,28 @@ async def _mold_risk_assessment(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _radon_level_monitor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check radon level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "radon" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check radon level.'
+    return await _dao_collapsed_24(hass, 'radon', 'sensors')
 
 
 async def _formaldehyde_detector(hass: HomeAssistant) -> dict[str, Any]:
-    """Check formaldehyde level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "formaldehyde" in name or "hcho" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check formaldehyde level.'
+    return await _dao_collapsed_16(hass, 'sensor', 'formaldehyde', 'hcho', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _tvoc_level_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check TVOC level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        dc = s.attributes.get("device_class", "")
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if dc == "volatile_organic_compounds" or "tvoc" in name or "voc" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check TVOC level.'
+    return await _dao_collapsed_64(hass, 'volatile_organic_compounds', 'tvoc', 'voc')
 
 
 async def _pm25_level_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check PM2.5 level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        dc = s.attributes.get("device_class", "")
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if dc == "pm25" or "pm2.5" in name or "pm25" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check PM2.5 level.'
+    return await _dao_collapsed_64(hass, 'pm25', 'pm2.5', 'pm25')
 
 
 async def _pm10_level_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check PM10 level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        dc = s.attributes.get("device_class", "")
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if dc == "pm10" or "pm10" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check PM10 level.'
+    return await _dao_collapsed_52(hass, 'pm10', 'pm10')
 
 
 async def _co2_history_trend(hass: HomeAssistant) -> dict[str, Any]:
@@ -41059,17 +40283,8 @@ async def _co2_history_trend(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _lux_level_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check lux level."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if s.attributes.get("device_class") == "illuminance":
-            try:
-                results.append({"entity_id": s.entity_id, "lux": float(s.state),
-                                "unit": s.attributes.get("unit_of_measurement"),
-                                "friendly_name": s.attributes.get("friendly_name")})
-            except (ValueError, TypeError):
-                pass
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check lux level.'
+    return await _dao_collapsed_65(hass, 'illuminance', 'lux')
 
 
 async def _moon_phase_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -41084,15 +40299,8 @@ async def _moon_phase_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _tide_info_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check tide information."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "tide" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check tide information.'
+    return await _dao_collapsed_24(hass, 'tide', 'sensors')
 
 
 async def _barometric_pressure_trend(hass: HomeAssistant) -> dict[str, Any]:
@@ -41114,39 +40322,18 @@ async def _barometric_pressure_trend(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _dew_point_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check dew point."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "dew_point" in name or "dewpoint" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check dew point.'
+    return await _dao_collapsed_16(hass, 'sensor', 'dew_point', 'dewpoint', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _wind_chill_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check wind chill."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "wind_chill" in name or "windchill" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check wind chill.'
+    return await _dao_collapsed_16(hass, 'sensor', 'wind_chill', 'windchill', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _heat_index_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check heat index."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "heat_index" in name or "heatindex" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check heat index.'
+    return await _dao_collapsed_16(hass, 'sensor', 'heat_index', 'heatindex', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _visibility_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -41162,15 +40349,8 @@ async def _visibility_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _feels_like_temperature(hass: HomeAssistant) -> dict[str, Any]:
-    """Check feels-like temperature."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "feels_like" in name or "apparent_temperature" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check feels-like temperature.'
+    return await _dao_collapsed_16(hass, 'sensor', 'feels_like', 'apparent_temperature', 'unit', 'unit_of_measurement', 'sensors')
 
 
 # ---------------------------------------------------------------------------
@@ -41180,14 +40360,8 @@ async def _feels_like_temperature(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_lock_pin_management(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart lock PIN management."""
-    results = []
-    for s in hass.states.async_all("lock"):
-        codes = s.attributes.get("code_format")
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "code_format": codes,
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "locks": results}
+    'Check smart lock PIN management.'
+    return await _dao_collapsed_45(hass)
 
 
 async def _zwave_node_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -41212,16 +40386,8 @@ async def _zwave_heal_network(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _zigbee_coordinator_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check Zigbee coordinator."""
-    entries = hass.config_entries.async_entries("zha")
-    devices = []
-    for s in hass.states.async_all():
-        if "zha" in s.entity_id:
-            devices.append({"entity_id": s.entity_id, "state": s.state,
-                            "available": s.state != "unavailable"})
-    unavail = sum(1 for d in devices if not d["available"])
-    return {"ok": True, "entries": len(entries), "devices": len(devices),
-            "unavailable": unavail}
+    'Check Zigbee coordinator.'
+    return await _dao_collapsed_66(hass, 'zha', 'zha')
 
 
 async def _matter_device_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -41255,16 +40421,8 @@ async def _ble_scanner_nearby(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _esphome_device_health(hass: HomeAssistant) -> dict[str, Any]:
-    """Check ESPHome device health."""
-    entries = hass.config_entries.async_entries("esphome")
-    devices = []
-    for s in hass.states.async_all():
-        if "esphome" in s.entity_id:
-            devices.append({"entity_id": s.entity_id, "state": s.state,
-                            "available": s.state != "unavailable"})
-    unavail = sum(1 for d in devices if not d["available"])
-    return {"ok": True, "entries": len(entries), "devices": len(devices),
-            "unavailable": unavail}
+    'Check ESPHome device health.'
+    return await _dao_collapsed_66(hass, 'esphome', 'esphome')
 
 
 async def _mqtt_broker_stats(hass: HomeAssistant) -> dict[str, Any]:
@@ -41386,16 +40544,8 @@ async def _supervisor_addon_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _supervisor_os_update(hass: HomeAssistant) -> dict[str, Any]:
-    """Check Supervisor OS update."""
-    results = []
-    for s in hass.states.async_all("update"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "operating_system" in name or "haos" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "installed_version": s.attributes.get("installed_version"),
-                            "latest_version": s.attributes.get("latest_version"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "updates": results}
+    'Check Supervisor OS update.'
+    return await _dao_collapsed_31(hass, 'update', 'operating_system', 'haos', 'installed_version', 'latest_version', 'installed_version', 'latest_version', 'updates')
 
 
 async def _supervisor_host_info(hass: HomeAssistant) -> dict[str, Any]:
@@ -41433,15 +40583,8 @@ async def _ha_core_analytics(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _scene_activation_history(hass: HomeAssistant) -> dict[str, Any]:
-    """Check scene activation history."""
-    now = datetime.now(timezone.utc)
-    results = []
-    for s in hass.states.async_all("scene"):
-        hours = (now - s.last_changed).total_seconds() / 3600
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "hours_since_activated": round(hours, 1),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "scenes": results}
+    'Check scene activation history.'
+    return await _dao_collapsed_43(hass, 'scene', 'state', 'hours_since_activated', 'scenes')
 
 
 async def _automation_trigger_count(hass: HomeAssistant) -> dict[str, Any]:
@@ -41460,13 +40603,8 @@ async def _automation_trigger_count(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _event_bus_stats(hass: HomeAssistant) -> dict[str, Any]:
-    """Check event bus stats."""
-    listeners = hass.bus.async_listeners()
-    total = sum(listeners.values()) if isinstance(listeners, dict) else 0
-    top = sorted(listeners.items(), key=lambda x: x[1], reverse=True)[:10] if isinstance(listeners, dict) else []
-    return {"ok": True, "total_listeners": total,
-            "event_types": len(listeners) if isinstance(listeners, dict) else 0,
-            "top_events": [{"event": e, "listeners": c} for e, c in top]}
+    'Check event bus stats.'
+    return await _dao_collapsed_30(hass, 10, 'event_types')
 
 
 async def _service_call_stats(hass: HomeAssistant) -> dict[str, Any]:
@@ -41549,15 +40687,8 @@ async def _zone_occupancy_count(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _calendar_next_event(hass: HomeAssistant) -> dict[str, Any]:
-    """Check calendar next event."""
-    results = []
-    for s in hass.states.async_all("calendar"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "message": s.attributes.get("message"),
-                        "start_time": s.attributes.get("start_time"),
-                        "end_time": s.attributes.get("end_time"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "calendars": results}
+    'Check calendar next event.'
+    return await _dao_collapsed_25(hass, 'calendar', 'message', 'start_time', 'end_time', 'message', 'start_time', 'end_time', 'calendars')
 
 
 async def _tod_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -41585,13 +40716,8 @@ async def _workday_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _season_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check season sensor."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if "season" in s.entity_id:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check season sensor.'
+    return await _dao_collapsed_67(hass, 'season')
 
 
 async def _uptime_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -41631,13 +40757,8 @@ async def _certificate_expiry_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _dns_ip_tracker_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check DNS IP tracker."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if "dnsip" in s.entity_id or "external_ip" in s.entity_id:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check DNS IP tracker.'
+    return await _dao_collapsed_63(hass, 'dnsip', 'external_ip')
 
 
 async def _system_resource_summary(hass: HomeAssistant) -> dict[str, Any]:
@@ -41759,15 +40880,8 @@ async def _light_schedule_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _climate_schedule_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check climate schedule status."""
-    results = []
-    for s in hass.states.async_all("climate"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "current_temperature": s.attributes.get("current_temperature"),
-                        "target_temperature": s.attributes.get("temperature"),
-                        "hvac_action": s.attributes.get("hvac_action"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "climates": results}
+    'Check climate schedule status.'
+    return await _dao_collapsed_25(hass, 'climate', 'current_temperature', 'target_temperature', 'hvac_action', 'current_temperature', 'temperature', 'hvac_action', 'climates')
 
 
 async def _energy_budget_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -41992,26 +41106,13 @@ async def _flood_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _earthquake_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check earthquake sensor."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "earthquake" in name or "seismic" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check earthquake sensor.'
+    return await _dao_collapsed_59(hass, 'sensor', 'earthquake', 'seismic', 'sensors')
 
 
 async def _lightning_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check lightning sensor."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "lightning" in name or "thunder" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check lightning sensor.'
+    return await _dao_collapsed_16(hass, 'sensor', 'lightning', 'thunder', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _solar_radiation_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -42041,15 +41142,8 @@ async def _wind_gust_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _wind_direction_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check wind direction."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "wind" in name and "direction" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check wind direction.'
+    return await _dao_collapsed_68(hass, 'sensor', 'wind', 'direction', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _precipitation_forecast(hass: HomeAssistant) -> dict[str, Any]:
@@ -42118,16 +41212,8 @@ async def _heat_warning_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _air_quality_forecast(hass: HomeAssistant) -> dict[str, Any]:
-    """Check air quality forecast."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        dc = s.attributes.get("device_class", "")
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if dc == "aqi" or "air_quality" in name or "aqi" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check air quality forecast.'
+    return await _dao_collapsed_64(hass, 'aqi', 'air_quality', 'aqi')
 
 
 async def _plant_growth_condition(hass: HomeAssistant) -> dict[str, Any]:
@@ -42156,80 +41242,38 @@ async def _soil_temperature_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _greenhouse_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check greenhouse status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "greenhouse" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check greenhouse status.'
+    return await _dao_collapsed_33(hass, 'greenhouse', 'entities')
 
 
 async def _bird_feeder_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check bird feeder status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "bird" in name and ("feeder" in name or "feed" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check bird feeder status.'
+    return await _dao_collapsed_32(hass, 'bird', 'feeder', 'feed', 'entities')
 
 
 async def _fish_tank_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check fish tank status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "fish" in name or "aquarium" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check fish tank status.'
+    return await _dao_collapsed_27(hass, 'fish', 'aquarium', 'entities')
 
 
 async def _reptile_room_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check reptile room status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "reptile" in name or "terrarium" in name or "vivarium" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check reptile room status.'
+    return await _dao_collapsed_69(hass, 'reptile', 'terrarium', 'vivarium', 'entities')
 
 
 async def _pet_door_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check pet door status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "pet" in name and "door" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check pet door status.'
+    return await _dao_collapsed_26(hass, 'pet', 'door', 'entities')
 
 
 async def _smart_kennel_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart kennel status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "kennel" in name or "doghouse" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart kennel status.'
+    return await _dao_collapsed_27(hass, 'kennel', 'doghouse', 'entities')
 
 
 async def _compost_bin_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check compost bin status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "compost" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check compost bin status.'
+    return await _dao_collapsed_33(hass, 'compost', 'entities')
 
 
 # ---------------------------------------------------------------------------
@@ -42241,226 +41285,103 @@ async def _compost_bin_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _dj_system_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check DJ system status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "dj" in name and ("system" in name or "booth" in name or "mixer" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check DJ system status.'
+    return await _dao_collapsed_21(hass, 'dj', 'system', 'booth', 'mixer', 'entities')
 
 
 async def _recording_studio_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check recording studio status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "studio" in name or "recording" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check recording studio status.'
+    return await _dao_collapsed_27(hass, 'studio', 'recording', 'entities')
 
 
 async def _smart_gaming_room(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart gaming room."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "gaming" in name or "game_room" in name or "game room" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart gaming room.'
+    return await _dao_collapsed_69(hass, 'gaming', 'game_room', 'game room', 'entities')
 
 
 async def _vr_room_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check VR room status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "vr" in name and ("room" in name or "space" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check VR room status.'
+    return await _dao_collapsed_32(hass, 'vr', 'room', 'space', 'entities')
 
 
 async def _home_gym_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check home gym status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "gym" in name or "workout" in name or "fitness" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check home gym status.'
+    return await _dao_collapsed_69(hass, 'gym', 'workout', 'fitness', 'entities')
 
 
 async def _meditation_room_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check meditation room status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "meditation" in name or "zen" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check meditation room status.'
+    return await _dao_collapsed_27(hass, 'meditation', 'zen', 'entities')
 
 
 async def _wine_cellar_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check wine cellar status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "wine" in name and ("cellar" in name or "cooler" in name or "fridge" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check wine cellar status.'
+    return await _dao_collapsed_21(hass, 'wine', 'cellar', 'cooler', 'fridge', 'entities')
 
 
 async def _cigar_humidor_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check cigar humidor status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "cigar" in name or "humidor" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check cigar humidor status.'
+    return await _dao_collapsed_27(hass, 'cigar', 'humidor', 'entities')
 
 
 async def _smart_bar_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart bar status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "bar" in name and ("smart" in name or "light" in name or "fridge" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart bar status.'
+    return await _dao_collapsed_21(hass, 'bar', 'smart', 'light', 'fridge', 'entities')
 
 
 async def _home_spa_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check home spa status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "spa" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check home spa status.'
+    return await _dao_collapsed_33(hass, 'spa', 'entities')
 
 
 async def _steam_room_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check steam room status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "steam" in name and "room" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check steam room status.'
+    return await _dao_collapsed_26(hass, 'steam', 'room', 'entities')
 
 
 async def _cold_plunge_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check cold plunge status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "cold_plunge" in name or "cold plunge" in name or "ice_bath" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check cold plunge status.'
+    return await _dao_collapsed_69(hass, 'cold_plunge', 'cold plunge', 'ice_bath', 'entities')
 
 
 async def _infrared_sauna_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check infrared sauna status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "sauna" in name and ("infrared" in name or "ir" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check infrared sauna status.'
+    return await _dao_collapsed_32(hass, 'sauna', 'infrared', 'ir', 'entities')
 
 
 async def _roof_deck_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check roof deck status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "roof" in name and ("deck" in name or "terrace" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check roof deck status.'
+    return await _dao_collapsed_32(hass, 'roof', 'deck', 'terrace', 'entities')
 
 
 async def _patio_string_lights(hass: HomeAssistant) -> dict[str, Any]:
-    """Check patio string lights."""
-    results = []
-    for s in hass.states.async_all("light"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "patio" in name or "string" in name or "festoon" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "brightness": s.attributes.get("brightness"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "lights": results}
+    'Check patio string lights.'
+    return await _dao_collapsed_56(hass, 'light', 'patio', 'string', 'festoon', 'brightness', 'brightness', 'lights')
 
 
 async def _landscape_lighting_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check landscape lighting status."""
-    results = []
-    for s in hass.states.async_all("light"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "landscape" in name or "garden_light" in name or "yard_light" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "brightness": s.attributes.get("brightness"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "lights": results}
+    'Check landscape lighting status.'
+    return await _dao_collapsed_56(hass, 'light', 'landscape', 'garden_light', 'yard_light', 'brightness', 'brightness', 'lights')
 
 
 async def _pathway_lighting_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check pathway lighting status."""
-    results = []
-    for s in hass.states.async_all("light"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "pathway" in name or "walkway" in name or "path_light" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "brightness": s.attributes.get("brightness"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "lights": results}
+    'Check pathway lighting status.'
+    return await _dao_collapsed_56(hass, 'light', 'pathway', 'walkway', 'path_light', 'brightness', 'brightness', 'lights')
 
 
 async def _fountain_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check fountain status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "fountain" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check fountain status.'
+    return await _dao_collapsed_33(hass, 'fountain', 'entities')
 
 
 async def _waterfall_feature_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check waterfall feature status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "waterfall" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check waterfall feature status.'
+    return await _dao_collapsed_33(hass, 'waterfall', 'entities')
 
 
 async def _koi_pond_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check koi pond status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "koi" in name or ("pond" in name and "fish" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check koi pond status.'
+    return await _dao_collapsed_70(hass, 'koi', 'pond', 'fish', 'entities')
 
 
 # ---------------------------------------------------------------------------
@@ -42488,14 +41409,8 @@ async def _electric_gate_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _driveway_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check driveway sensor."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "driveway" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check driveway sensor.'
+    return await _dao_collapsed_33(hass, 'driveway', 'sensors')
 
 
 async def _car_battery_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -42511,59 +41426,28 @@ async def _car_battery_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _snow_melt_system(hass: HomeAssistant) -> dict[str, Any]:
-    """Check snow melt system."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "snow_melt" in name or "snow melt" in name or "snowmelt" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check snow melt system.'
+    return await _dao_collapsed_69(hass, 'snow_melt', 'snow melt', 'snowmelt', 'entities')
 
 
 async def _gutter_heater_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check gutter heater status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "gutter" in name and ("heat" in name or "cable" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check gutter heater status.'
+    return await _dao_collapsed_32(hass, 'gutter', 'heat', 'cable', 'entities')
 
 
 async def _roof_snow_sensor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check roof snow sensor."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "roof" in name and ("snow" in name or "load" in name or "weight" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check roof snow sensor.'
+    return await _dao_collapsed_35(hass, 'roof', 'snow', 'load', 'weight', 'sensors')
 
 
 async def _attic_fan_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check attic fan status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "attic" in name and "fan" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check attic fan status.'
+    return await _dao_collapsed_26(hass, 'attic', 'fan', 'entities')
 
 
 async def _crawl_space_monitor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check crawl space monitor."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "crawl" in name and "space" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check crawl space monitor.'
+    return await _dao_collapsed_26(hass, 'crawl', 'space', 'entities')
 
 
 async def _basement_pump_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -42578,126 +41462,58 @@ async def _basement_pump_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _whole_house_fan(hass: HomeAssistant) -> dict[str, Any]:
-    """Check whole house fan."""
-    results = []
-    for s in hass.states.async_all("fan"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "whole" in name and "house" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "percentage": s.attributes.get("percentage"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "fans": results}
+    'Check whole house fan.'
+    return await _dao_collapsed_68(hass, 'fan', 'whole', 'house', 'percentage', 'percentage', 'fans')
 
 
 async def _hrv_erv_system_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check HRV/ERV system status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "hrv" in name or "erv" in name or "ventilat" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check HRV/ERV system status.'
+    return await _dao_collapsed_69(hass, 'hrv', 'erv', 'ventilat', 'entities')
 
 
 async def _duct_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check duct sensor."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "duct" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check duct sensor.'
+    return await _dao_collapsed_24(hass, 'duct', 'sensors')
 
 
 async def _air_filter_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check air filter status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "air" in name and "filter" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check air filter status.'
+    return await _dao_collapsed_26(hass, 'air', 'filter', 'entities')
 
 
 async def _radiant_floor_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check radiant floor status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "radiant" in name or "floor_heat" in name or "underfloor" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check radiant floor status.'
+    return await _dao_collapsed_69(hass, 'radiant', 'floor_heat', 'underfloor', 'entities')
 
 
 async def _boiler_status_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check boiler status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "boiler" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check boiler status.'
+    return await _dao_collapsed_33(hass, 'boiler', 'entities')
 
 
 async def _heat_pump_efficiency(hass: HomeAssistant) -> dict[str, Any]:
-    """Check heat pump efficiency."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "heat_pump" in name or "heat pump" in name or "heatpump" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check heat pump efficiency.'
+    return await _dao_collapsed_69(hass, 'heat_pump', 'heat pump', 'heatpump', 'entities')
 
 
 async def _geothermal_system_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check geothermal system status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "geothermal" in name or "ground_source" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check geothermal system status.'
+    return await _dao_collapsed_27(hass, 'geothermal', 'ground_source', 'entities')
 
 
 async def _mini_split_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check mini split status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "mini_split" in name or "mini split" in name or "minisplit" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check mini split status.'
+    return await _dao_collapsed_69(hass, 'mini_split', 'mini split', 'minisplit', 'entities')
 
 
 async def _portable_heater_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check portable heater."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "portable" in name and "heater" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check portable heater.'
+    return await _dao_collapsed_26(hass, 'portable', 'heater', 'entities')
 
 
 async def _dehumidifier_efficiency(hass: HomeAssistant) -> dict[str, Any]:
-    """Check dehumidifier efficiency."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "dehumidifier" in name or "dehumid" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check dehumidifier efficiency.'
+    return await _dao_collapsed_27(hass, 'dehumidifier', 'dehumid', 'entities')
 
 
 # ---------------------------------------------------------------------------
@@ -42709,91 +41525,43 @@ async def _dehumidifier_efficiency(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_frame_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart frame status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "frame" in name and ("smart" in name or "photo" in name or "art" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart frame status.'
+    return await _dao_collapsed_21(hass, 'frame', 'smart', 'photo', 'art', 'entities')
 
 
 async def _smart_desk_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart desk status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "desk" in name and ("standing" in name or "height" in name or "smart" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart desk status.'
+    return await _dao_collapsed_21(hass, 'desk', 'standing', 'height', 'smart', 'entities')
 
 
 async def _smart_toilet_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart toilet status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "toilet" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart toilet status.'
+    return await _dao_collapsed_33(hass, 'toilet', 'entities')
 
 
 async def _smart_shower_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart shower status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "shower" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart shower status.'
+    return await _dao_collapsed_33(hass, 'shower', 'entities')
 
 
 async def _smart_bathtub_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart bathtub status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "bathtub" in name or "bath_tub" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart bathtub status.'
+    return await _dao_collapsed_27(hass, 'bathtub', 'bath_tub', 'entities')
 
 
 async def _smart_oven_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart oven status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "oven" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart oven status.'
+    return await _dao_collapsed_33(hass, 'oven', 'entities')
 
 
 async def _smart_dishwasher_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart dishwasher status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "dishwasher" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart dishwasher status.'
+    return await _dao_collapsed_33(hass, 'dishwasher', 'entities')
 
 
 async def _smart_dryer_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart dryer status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "dryer" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart dryer status.'
+    return await _dao_collapsed_33(hass, 'dryer', 'entities')
 
 
 async def _smart_washer_monitor(hass: HomeAssistant) -> dict[str, Any]:
@@ -42808,69 +41576,33 @@ async def _smart_washer_monitor(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_refrigerator_deep(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart refrigerator deep status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "refrigerator" in name or "fridge" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart refrigerator deep status.'
+    return await _dao_collapsed_27(hass, 'refrigerator', 'fridge', 'entities')
 
 
 async def _smart_freezer_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart freezer status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "freezer" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart freezer status.'
+    return await _dao_collapsed_33(hass, 'freezer', 'entities')
 
 
 async def _smart_microwave_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart microwave status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "microwave" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart microwave status.'
+    return await _dao_collapsed_33(hass, 'microwave', 'entities')
 
 
 async def _robot_mop_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check robot mop status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "mop" in name and ("robot" in name or "auto" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check robot mop status.'
+    return await _dao_collapsed_32(hass, 'mop', 'robot', 'auto', 'entities')
 
 
 async def _window_cleaner_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check window cleaner status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "window" in name and ("clean" in name or "robot" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check window cleaner status.'
+    return await _dao_collapsed_32(hass, 'window', 'clean', 'robot', 'entities')
 
 
 async def _pool_auto_cover(hass: HomeAssistant) -> dict[str, Any]:
-    """Check pool auto cover."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "pool" in name and "cover" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check pool auto cover.'
+    return await _dao_collapsed_26(hass, 'pool', 'cover', 'entities')
 
 
 async def _hot_tub_chemistry(hass: HomeAssistant) -> dict[str, Any]:
@@ -42887,47 +41619,23 @@ async def _hot_tub_chemistry(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smart_irrigation_zone(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart irrigation zones."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "irrigation" in name and "zone" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "zones": results}
+    'Check smart irrigation zones.'
+    return await _dao_collapsed_26(hass, 'irrigation', 'zone', 'zones')
 
 
 async def _rainwater_harvest_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check rainwater harvest status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "rainwater" in name or "rain_barrel" in name or "cistern" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check rainwater harvest status.'
+    return await _dao_collapsed_69(hass, 'rainwater', 'rain_barrel', 'cistern', 'entities')
 
 
 async def _greywater_system_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check greywater system status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "greywater" in name or "gray_water" in name or "grey_water" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check greywater system status.'
+    return await _dao_collapsed_69(hass, 'greywater', 'gray_water', 'grey_water', 'entities')
 
 
 async def _water_softener_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check water softener status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "water" in name and "softener" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check water softener status.'
+    return await _dao_collapsed_26(hass, 'water', 'softener', 'entities')
 
 
 # ---------------------------------------------------------------------------
@@ -42955,58 +41663,28 @@ async def _access_control_history(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _video_phone_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check video phone status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "video" in name and ("phone" in name or "intercom" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check video phone status.'
+    return await _dao_collapsed_32(hass, 'video', 'phone', 'intercom', 'entities')
 
 
 async def _emergency_lighting_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check emergency lighting."""
-    results = []
-    for s in hass.states.async_all("light"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "emergency" in name or "exit" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "lights": results}
+    'Check emergency lighting.'
+    return await _dao_collapsed_59(hass, 'light', 'emergency', 'exit', 'lights')
 
 
 async def _fire_escape_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check fire escape status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "fire" in name and ("escape" in name or "exit" in name or "route" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check fire escape status.'
+    return await _dao_collapsed_21(hass, 'fire', 'escape', 'exit', 'route', 'entities')
 
 
 async def _panic_room_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check panic room status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "panic" in name and "room" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check panic room status.'
+    return await _dao_collapsed_26(hass, 'panic', 'room', 'entities')
 
 
 async def _safe_room_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check safe room status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "safe" in name and "room" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check safe room status.'
+    return await _dao_collapsed_26(hass, 'safe', 'room', 'entities')
 
 
 async def _cctv_coverage_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -43021,14 +41699,8 @@ async def _cctv_coverage_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _perimeter_fence_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check perimeter fence status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "perimeter" in name or ("fence" in name and "sensor" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check perimeter fence status.'
+    return await _dao_collapsed_70(hass, 'perimeter', 'fence', 'sensor', 'entities')
 
 
 async def _motion_detector_zones(hass: HomeAssistant) -> dict[str, Any]:
@@ -43082,36 +41754,18 @@ async def _siren_status_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _keypad_status_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check keypad status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "keypad" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "keypads": results}
+    'Check keypad status.'
+    return await _dao_collapsed_33(hass, 'keypad', 'keypads')
 
 
 async def _nfc_tag_reader_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check NFC tag reader status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "nfc" in name or "tag_reader" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "readers": results}
+    'Check NFC tag reader status.'
+    return await _dao_collapsed_27(hass, 'nfc', 'tag_reader', 'readers')
 
 
 async def _face_recognition_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check face recognition status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "face" in name and ("recogn" in name or "detect" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check face recognition status.'
+    return await _dao_collapsed_32(hass, 'face', 'recogn', 'detect', 'entities')
 
 
 async def _license_plate_reader(hass: HomeAssistant) -> dict[str, Any]:
@@ -43127,25 +41781,13 @@ async def _license_plate_reader(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _package_locker_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check package locker status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "package" in name and ("locker" in name or "box" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check package locker status.'
+    return await _dao_collapsed_32(hass, 'package', 'locker', 'box', 'entities')
 
 
 async def _smart_fence_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smart fence status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "fence" in name and ("smart" in name or "electric" in name or "sensor" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check smart fence status.'
+    return await _dao_collapsed_21(hass, 'fence', 'smart', 'electric', 'sensor', 'entities')
 
 
 async def _doorbell_event_history(hass: HomeAssistant) -> dict[str, Any]:
@@ -43161,14 +41803,8 @@ async def _doorbell_event_history(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _security_camera_analytics(hass: HomeAssistant) -> dict[str, Any]:
-    """Check security camera analytics."""
-    results = []
-    for s in hass.states.async_all("camera"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "is_recording": s.attributes.get("is_recording"),
-                        "motion_detection": s.attributes.get("motion_detection_enabled"),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "cameras": results}
+    'Check security camera analytics.'
+    return await _dao_collapsed_40(hass, 'camera', 'is_recording', 'motion_detection', 'is_recording', 'motion_detection_enabled', 'cameras')
 
 
 # ---------------------------------------------------------------------------
@@ -43209,39 +41845,18 @@ async def _electricity_meter_reading(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _battery_storage_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check battery storage status."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "battery" in name and ("storage" in name or "powerwall" in name or "home_battery" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "batteries": results}
+    'Check battery storage status.'
+    return await _dao_collapsed_35(hass, 'battery', 'storage', 'powerwall', 'home_battery', 'batteries')
 
 
 async def _grid_export_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check grid export."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "grid" in name and ("export" in name or "feed" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "exports": results}
+    'Check grid export.'
+    return await _dao_collapsed_60(hass, 'grid', 'export', 'feed', 'exports')
 
 
 async def _grid_import_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check grid import."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "grid" in name and ("import" in name or "consumption" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "imports": results}
+    'Check grid import.'
+    return await _dao_collapsed_60(hass, 'grid', 'import', 'consumption', 'imports')
 
 
 async def _ev_charge_session(hass: HomeAssistant) -> dict[str, Any]:
@@ -43258,28 +41873,13 @@ async def _ev_charge_session(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _voltage_monitor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check voltage monitor."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if s.attributes.get("device_class") == "voltage":
-            try:
-                results.append({"entity_id": s.entity_id, "voltage": float(s.state),
-                                "unit": s.attributes.get("unit_of_measurement"),
-                                "friendly_name": s.attributes.get("friendly_name")})
-            except (ValueError, TypeError):
-                pass
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check voltage monitor.'
+    return await _dao_collapsed_65(hass, 'voltage', 'voltage')
 
 
 async def _circuit_breaker_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check circuit breaker status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "circuit" in name and ("breaker" in name or "panel" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "breakers": results}
+    'Check circuit breaker status.'
+    return await _dao_collapsed_32(hass, 'circuit', 'breaker', 'panel', 'breakers')
 
 
 async def _whole_house_power(hass: HomeAssistant) -> dict[str, Any]:
@@ -43334,14 +41934,8 @@ async def _appliance_power_rank(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _energy_savings_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check energy savings."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "saving" in name or "efficiency" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check energy savings.'
+    return await _dao_collapsed_59(hass, 'sensor', 'saving', 'efficiency', 'sensors')
 
 
 async def _carbon_footprint_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -43370,15 +41964,8 @@ async def _tariff_rate_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _peak_demand_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check peak demand."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "peak" in name and ("demand" in name or "power" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check peak demand.'
+    return await _dao_collapsed_60(hass, 'peak', 'demand', 'power', 'sensors')
 
 
 async def _power_quality_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -43398,49 +41985,23 @@ async def _power_quality_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _net_metering_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check net metering."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "net" in name and ("meter" in name or "metering" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check net metering.'
+    return await _dao_collapsed_60(hass, 'net', 'meter', 'metering', 'sensors')
 
 
 async def _demand_response_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check demand response status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "demand" in name and "response" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check demand response status.'
+    return await _dao_collapsed_26(hass, 'demand', 'response', 'entities')
 
 
 async def _load_balancing_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check load balancing."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "load" in name and "balanc" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check load balancing.'
+    return await _dao_collapsed_49(hass, 'sensor', 'load', 'balanc', 'sensors')
 
 
 async def _energy_cost_forecast(hass: HomeAssistant) -> dict[str, Any]:
-    """Check energy cost forecast."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if ("energy" in name or "electric" in name) and ("cost" in name or "forecast" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "forecasts": results}
+    'Check energy cost forecast.'
+    return await _dao_collapsed_61(hass, 'energy', 'electric', 'cost', 'forecast', 'forecasts')
 
 
 # ---------------------------------------------------------------------------
@@ -43452,14 +42013,8 @@ async def _energy_cost_forecast(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _wifi_channel_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check WiFi channel."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "wifi" in name and "channel" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "channels": results}
+    'Check WiFi channel.'
+    return await _dao_collapsed_49(hass, 'sensor', 'wifi', 'channel', 'channels')
 
 
 async def _wifi_client_list(hass: HomeAssistant) -> dict[str, Any]:
@@ -43477,26 +42032,13 @@ async def _wifi_client_list(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _wifi_signal_quality(hass: HomeAssistant) -> dict[str, Any]:
-    """Check WiFi signal quality."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if ("wifi" in name or "wireless" in name) and ("signal" in name or "rssi" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "signals": results}
+    'Check WiFi signal quality.'
+    return await _dao_collapsed_61(hass, 'wifi', 'wireless', 'signal', 'rssi', 'signals')
 
 
 async def _vpn_connection_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check VPN connection status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "vpn" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "connections": results}
+    'Check VPN connection status.'
+    return await _dao_collapsed_33(hass, 'vpn', 'connections')
 
 
 async def _dhcp_lease_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -43512,58 +42054,28 @@ async def _dhcp_lease_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _port_forward_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check port forward."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "port" in name and "forward" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "rules": results}
+    'Check port forward.'
+    return await _dao_collapsed_26(hass, 'port', 'forward', 'rules')
 
 
 async def _firewall_status_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check firewall status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "firewall" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check firewall status.'
+    return await _dao_collapsed_33(hass, 'firewall', 'entities')
 
 
 async def _router_status_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check router status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "router" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check router status.'
+    return await _dao_collapsed_33(hass, 'router', 'entities')
 
 
 async def _switch_port_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check switch port status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "switch" in name and "port" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "ports": results}
+    'Check switch port status.'
+    return await _dao_collapsed_26(hass, 'switch', 'port', 'ports')
 
 
 async def _api_gateway_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check API gateway status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "api" in name and "gateway" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "gateways": results}
+    'Check API gateway status.'
+    return await _dao_collapsed_26(hass, 'api', 'gateway', 'gateways')
 
 
 async def _server_monitor_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -43579,100 +42091,48 @@ async def _server_monitor_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _container_status_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check container status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "container" in name or "docker" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "containers": results}
+    'Check container status.'
+    return await _dao_collapsed_27(hass, 'container', 'docker', 'containers')
 
 
 async def _vm_status_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check VM status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "vm" in name or "virtual_machine" in name or "proxmox" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "vms": results}
+    'Check VM status.'
+    return await _dao_collapsed_69(hass, 'vm', 'virtual_machine', 'proxmox', 'vms')
 
 
 async def _ip_camera_bandwidth(hass: HomeAssistant) -> dict[str, Any]:
-    """Check IP camera bandwidth."""
-    results = []
-    for s in hass.states.async_all("camera"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "cameras": results}
+    'Check IP camera bandwidth.'
+    return await _dao_collapsed_51(hass, 'camera', 'cameras')
 
 
 async def _mesh_node_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check mesh node status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "mesh" in name and ("node" in name or "satellite" in name or "point" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "nodes": results}
+    'Check mesh node status.'
+    return await _dao_collapsed_21(hass, 'mesh', 'node', 'satellite', 'point', 'nodes')
 
 
 async def _ssid_management(hass: HomeAssistant) -> dict[str, Any]:
-    """Check SSID management."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "ssid" in name or "wireless" in name and "network" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "ssids": results}
+    'Check SSID management.'
+    return await _dao_collapsed_70(hass, 'ssid', 'wireless', 'network', 'ssids')
 
 
 async def _network_vlan_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check network VLAN."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "vlan" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "vlans": results}
+    'Check network VLAN.'
+    return await _dao_collapsed_33(hass, 'vlan', 'vlans')
 
 
 async def _wan_failover_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check WAN failover status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "wan" in name and ("failover" in name or "backup" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check WAN failover status.'
+    return await _dao_collapsed_32(hass, 'wan', 'failover', 'backup', 'entities')
 
 
 async def _traffic_shaping_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check traffic shaping."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "traffic" in name and ("shaping" in name or "shape" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "rules": results}
+    'Check traffic shaping.'
+    return await _dao_collapsed_32(hass, 'traffic', 'shaping', 'shape', 'rules')
 
 
 async def _qos_priority_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check QoS priority."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "qos" in name or "quality_of_service" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "rules": results}
+    'Check QoS priority.'
+    return await _dao_collapsed_27(hass, 'qos', 'quality_of_service', 'rules')
 
 
 # ---------------------------------------------------------------------------
@@ -43684,16 +42144,8 @@ async def _qos_priority_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _acoustic_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check acoustic sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        dc = s.attributes.get("device_class", "")
-        if dc == "sound_pressure" or "acoustic" in name or "decibel" in name or "noise" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check acoustic sensors.'
+    return await _dao_collapsed_62(hass, 'acoustic', 'noise')
 
 
 async def _temperature_differential(hass: HomeAssistant) -> dict[str, Any]:
@@ -43756,15 +42208,8 @@ async def _pressure_differential(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _airflow_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check airflow sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "airflow" in name or "air_flow" in name or "cfm" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check airflow sensors.'
+    return await _dao_collapsed_56(hass, 'sensor', 'airflow', 'air_flow', 'cfm', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _dust_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -43782,15 +42227,8 @@ async def _dust_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _soil_moisture_deep(hass: HomeAssistant) -> dict[str, Any]:
-    """Check soil moisture sensors deep."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "soil" in name and ("moisture" in name or "humid" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check soil moisture sensors deep.'
+    return await _dao_collapsed_60(hass, 'soil', 'moisture', 'humid', 'sensors')
 
 
 async def _wind_speed_deep(hass: HomeAssistant) -> dict[str, Any]:
@@ -43809,40 +42247,18 @@ async def _wind_speed_deep(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _snow_depth_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check snow depth."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "snow" in name and ("depth" in name or "accum" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check snow depth.'
+    return await _dao_collapsed_60(hass, 'snow', 'depth', 'accum', 'sensors')
 
 
 async def _light_level_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check light level sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if s.attributes.get("device_class") == "illuminance":
-            try:
-                results.append({"entity_id": s.entity_id, "lux": float(s.state),
-                                "unit": s.attributes.get("unit_of_measurement"),
-                                "friendly_name": s.attributes.get("friendly_name")})
-            except (ValueError, TypeError):
-                pass
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check light level sensors.'
+    return await _dao_collapsed_65(hass, 'illuminance', 'lux')
 
 
 async def _infrared_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check infrared sensors."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "infrared" in name or "ir_sensor" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check infrared sensors.'
+    return await _dao_collapsed_27(hass, 'infrared', 'ir_sensor', 'sensors')
 
 
 async def _proximity_sensor_deep(hass: HomeAssistant) -> dict[str, Any]:
@@ -43887,15 +42303,8 @@ async def _water_leak_deep(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _smoke_density_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check smoke density."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "smoke" in name and ("density" in name or "level" in name or "obscur" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check smoke density.'
+    return await _dao_collapsed_35(hass, 'smoke', 'density', 'level', 'obscur', 'sensors')
 
 
 async def _gas_concentration_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -43926,39 +42335,18 @@ async def _magnetic_field_sensor(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _gyroscope_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check gyroscope sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "gyroscope" in name or "gyro" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check gyroscope sensors.'
+    return await _dao_collapsed_16(hass, 'sensor', 'gyroscope', 'gyro', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _acceleration_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check acceleration sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "acceleration" in name or "accelerometer" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check acceleration sensors.'
+    return await _dao_collapsed_16(hass, 'sensor', 'acceleration', 'accelerometer', 'unit', 'unit_of_measurement', 'sensors')
 
 
 async def _compass_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check compass sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "compass" in name or "heading" in name or "bearing" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check compass sensors.'
+    return await _dao_collapsed_56(hass, 'sensor', 'compass', 'heading', 'bearing', 'unit', 'unit_of_measurement', 'sensors')
 
 
 # ---------------------------------------------------------------------------
@@ -43983,13 +42371,8 @@ async def _automation_trigger_analysis(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _automation_action_analysis(hass: HomeAssistant) -> dict[str, Any]:
-    """Analyze automation actions."""
-    results = []
-    for s in hass.states.async_all("automation"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "last_triggered": str(s.attributes.get("last_triggered")),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "automations": results}
+    'Analyze automation actions.'
+    return await _dao_collapsed_71(hass, 'automations')
 
 
 async def _automation_condition_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -44046,13 +42429,8 @@ async def _script_execution_timeline(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _automation_performance(hass: HomeAssistant) -> dict[str, Any]:
-    """Check automation performance."""
-    results = []
-    for s in hass.states.async_all("automation"):
-        results.append({"entity_id": s.entity_id, "state": s.state,
-                        "last_triggered": str(s.attributes.get("last_triggered")),
-                        "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "performance": results}
+    'Check automation performance.'
+    return await _dao_collapsed_71(hass, 'performance')
 
 
 async def _automation_duplicate_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -44096,24 +42474,13 @@ async def _service_call_frequency(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _webhook_monitor(hass: HomeAssistant) -> dict[str, Any]:
-    """Monitor webhooks."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "webhook" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "webhooks": results}
+    'Monitor webhooks.'
+    return await _dao_collapsed_33(hass, 'webhook', 'webhooks')
 
 
 async def _template_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check template sensors."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        if "template" in s.entity_id:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check template sensors.'
+    return await _dao_collapsed_67(hass, 'template')
 
 
 async def _integration_list_deep(hass: HomeAssistant) -> dict[str, Any]:
@@ -44185,26 +42552,13 @@ async def _floor_registry_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _health_score_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check health score."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "health" in name and ("score" in name or "index" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check health score.'
+    return await _dao_collapsed_53(hass, 'sensor', 'health', 'score', 'index', 'sensors')
 
 
 async def _sleep_tracker_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check sleep tracker."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "sleep" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check sleep tracker.'
+    return await _dao_collapsed_24(hass, 'sleep', 'sensors')
 
 
 async def _weight_tracker_status(hass: HomeAssistant) -> dict[str, Any]:
@@ -44221,70 +42575,33 @@ async def _weight_tracker_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _activity_tracker_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check activity tracker."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "activity" in name or "workout" in name or "exercise" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check activity tracker.'
+    return await _dao_collapsed_23(hass, 'activity', 'workout', 'exercise')
 
 
 async def _step_counter_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check step counter."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "step" in name and ("count" in name or "total" in name or "daily" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check step counter.'
+    return await _dao_collapsed_54(hass, 'sensor', 'step', 'count', 'total', 'daily', 'sensors')
 
 
 async def _calories_burned_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check calories burned."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "calor" in name and ("burn" in name or "total" in name or "active" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check calories burned.'
+    return await _dao_collapsed_35(hass, 'calor', 'burn', 'total', 'active', 'sensors')
 
 
 async def _hydration_tracker(hass: HomeAssistant) -> dict[str, Any]:
-    """Check hydration tracker."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "hydration" in name or "water_intake" in name or "water intake" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check hydration tracker.'
+    return await _dao_collapsed_23(hass, 'hydration', 'water_intake', 'water intake')
 
 
 async def _medication_tracker(hass: HomeAssistant) -> dict[str, Any]:
-    """Check medication tracker."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "medication" in name or "medicine" in name or "pill" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check medication tracker.'
+    return await _dao_collapsed_69(hass, 'medication', 'medicine', 'pill', 'entities')
 
 
 async def _allergy_tracker(hass: HomeAssistant) -> dict[str, Any]:
-    """Check allergy tracker."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "allergy" in name or "allergen" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check allergy tracker.'
+    return await _dao_collapsed_59(hass, 'sensor', 'allergy', 'allergen', 'sensors')
 
 
 async def _indoor_air_quality_deep(hass: HomeAssistant) -> dict[str, Any]:
@@ -44301,47 +42618,23 @@ async def _indoor_air_quality_deep(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _uv_exposure_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check UV exposure."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "uv" in name and ("index" in name or "exposure" in name or "level" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check UV exposure.'
+    return await _dao_collapsed_54(hass, 'sensor', 'uv', 'index', 'exposure', 'level', 'sensors')
 
 
 async def _ergonomic_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check ergonomic status."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "ergonomic" in name or "ergo" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check ergonomic status.'
+    return await _dao_collapsed_27(hass, 'ergonomic', 'ergo', 'entities')
 
 
 async def _eye_strain_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check eye strain."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "eye" in name and ("strain" in name or "fatigue" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check eye strain.'
+    return await _dao_collapsed_53(hass, 'sensor', 'eye', 'strain', 'fatigue', 'sensors')
 
 
 async def _posture_monitor(hass: HomeAssistant) -> dict[str, Any]:
-    """Check posture monitor."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "posture" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check posture monitor.'
+    return await _dao_collapsed_33(hass, 'posture', 'entities')
 
 
 async def _stress_level_check(hass: HomeAssistant) -> dict[str, Any]:
@@ -44356,48 +42649,23 @@ async def _stress_level_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _mood_wellbeing_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check mood/wellbeing."""
-    results = []
-    for s in hass.states.async_all():
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "mood" in name or "wellbeing" in name or "well_being" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "entities": results}
+    'Check mood/wellbeing.'
+    return await _dao_collapsed_69(hass, 'mood', 'wellbeing', 'well_being', 'entities')
 
 
 async def _nutrition_tracker(hass: HomeAssistant) -> dict[str, Any]:
-    """Check nutrition tracker."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "nutrition" in name or "nutrient" in name or "diet" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check nutrition tracker.'
+    return await _dao_collapsed_23(hass, 'nutrition', 'nutrient', 'diet')
 
 
 async def _fitness_goal_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check fitness goals."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "fitness" in name and "goal" in name:
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check fitness goals.'
+    return await _dao_collapsed_49(hass, 'sensor', 'fitness', 'goal', 'sensors')
 
 
 async def _body_temperature_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check body temperature."""
-    results = []
-    for s in hass.states.async_all("sensor"):
-        name = (s.attributes.get("friendly_name") or s.entity_id).lower()
-        if "body" in name and ("temp" in name or "fever" in name):
-            results.append({"entity_id": s.entity_id, "state": s.state,
-                            "unit": s.attributes.get("unit_of_measurement"),
-                            "friendly_name": s.attributes.get("friendly_name")})
-    return {"ok": True, "count": len(results), "sensors": results}
+    'Check body temperature.'
+    return await _dao_collapsed_60(hass, 'body', 'temp', 'fever', 'sensors')
 
 
 async def _oxygen_saturation_check(hass: HomeAssistant) -> dict[str, Any]:
