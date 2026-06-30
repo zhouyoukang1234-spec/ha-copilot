@@ -259,6 +259,54 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
   http://<HA>/api/ha_copilot/run_tool
 ```
 
+### 组织复杂度 · 注册表是元数据的唯一真源
+
+区域 / 楼层 / 标签 / 设备归属**只存在于注册表里**，状态属性里不会有（HA 从不把
+`area_id`/`labels`/`floor_id` 写进 `state.attributes`）。要按房间或楼层组织上千实体，
+必须查注册表，而非读状态属性——否则会得到"全部未分配"的假象。归属解析遵循回退链：
+
+```
+实体.area_id  →（无则）实体.device_id → 设备.area_id  →  区域.floor_id
+```
+
+按此真源组织数字孪生的工作流（楼层 → 区域 → 实体，单请求内扇出）：
+
+```bash
+# 建楼层 → 建区域并挂到该楼层 → 把若干实体归入该区域（foreach 扇出）
+curl ... -d '{"tool":"run_tools","args":{"calls":[
+  {"tool":"floor_create","args":{"name":"二楼","level":2},"save_as":"F"},
+  {"tool":"area_create","args":{"name":"主卧","floor_id":"${vars.F.floor_id}"},"save_as":"A"},
+  {"tool":"assign_entity_area","foreach":"${vars.BEDROOM_LIGHTS}",
+    "args":{"entity_id":"${item}","area_id":"${vars.A.area_id}"}}
+]}}' ...
+```
+
+校验用只读工具直接读注册表：`area_registry_deep`、`floor_registry_check`、
+`label_registry_check`、`label_summary`、`floor_plan_entity_status`、`area_entity_count`。
+
+### 仪表盘组合 · 从注册表生成多视图 Lovelace
+
+仪表盘是组织结构的**投影**：先从注册表读出楼层/区域/实体，再机器生成视图，
+而非手工拼卡片。三类工具闭合"建 → 读 → 改 → 删"：
+
+- `create_dashboard`（`url_path` 唯一即可，支持单词名）：新建存储型仪表盘并注册侧边栏面板，可同时用 `config` 注入初始视图。
+- `get_dashboard_config` / `update_dashboard`：读回、整体改写某仪表盘的视图配置。
+- `list_dashboards` / `delete_dashboard`：枚举、按 `url_path` 删除（默认 `lovelace` 受保护）。
+
+```bash
+# 用注册表数据生成"每楼层一视图 + 每域一视图"的复杂仪表盘，一次建好
+curl ... -d '{"tool":"create_dashboard","args":{
+  "url_path":"dao-twin","title":"DAO Twin","icon":"mdi:sitemap",
+  "config":{"title":"DAO Twin","views":[
+    {"title":"二楼","path":"floor2","cards":[{"type":"entities","title":"主卧","entities":["light.zhu_wo_deng"]}]},
+    {"title":"灯光","path":"lighting","cards":[{"type":"entities","entities":["light.a","light.b"]}]}
+  ]}}}' ...
+```
+
+配方：①`floor_registry_check`/`area_registry_deep` 取骨架 → ②按 `floor_id` 把区域分组、
+每楼层一视图 → ③再按域（light./climate./lock. …）切若干 `entities` 卡做横向总览 →
+④`create_dashboard` 一次写入。改版只需重算 `config` 再 `update_dashboard`/重建。
+
 - MCP（需 HA 长效令牌），两种传输，同一工具层：
   - **HTTP（JSON-RPC）**：把 `/api/ha_copilot/mcp` 作为端点直接 POST。
 
