@@ -2120,19 +2120,24 @@ async def _set_state(hass: HomeAssistant, entity_id: str, state: str,
             "attributes": dict(new.attributes) if new else {}}
 
 
-async def _get_automation_config(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
-    """Return an automation's full definition (alias/trigger/condition/action/
-    mode) from automations.yaml, matched by id, alias, or entity_id. The
-    configuration behind the entity, complementing get_automation_trace."""
+async def _automation_config_for(hass: HomeAssistant, identifier: str) -> dict | None:
+    """Resolve an automation's config dict from automations.yaml by id, alias,
+    or entity_id (registry unique_id). Single source of truth for every tool
+    that needs the definition — actions/conditions/triggers live ONLY here, never
+    on the state attributes (一名一义)."""
     ereg = er.async_get(hass)
     target_id = identifier
     if identifier.startswith("automation."):
         ent = ereg.async_get(identifier)
         if ent and ent.unique_id:
             target_id = ent.unique_id
+        else:
+            st = hass.states.get(identifier)
+            if st and st.attributes.get("id"):
+                target_id = st.attributes["id"]
     path = _safe_path(hass, "automations.yaml")
     if not os.path.isfile(path):
-        return {"error": "automations.yaml not found"}
+        return None
 
     def _load() -> list:
         with open(path, encoding="utf-8") as fh:
@@ -2141,8 +2146,21 @@ async def _get_automation_config(hass: HomeAssistant, identifier: str) -> dict[s
     items = await hass.async_add_executor_job(_load)
     for item in items:
         if str(item.get("id")) == str(target_id) or item.get("alias") == identifier:
-            return {"found": True, "config": item}
-    return {"found": False, "error": f"automation '{identifier}' not found in automations.yaml"}
+            return item
+    return None
+
+
+async def _get_automation_config(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
+    """Return an automation's full definition (alias/trigger/condition/action/
+    mode) from automations.yaml, matched by id, alias, or entity_id. The
+    configuration behind the entity, complementing get_automation_trace."""
+    if not os.path.isfile(_safe_path(hass, "automations.yaml")):
+        return {"error": "automations.yaml not found"}
+    item = await _automation_config_for(hass, identifier)
+    if item is None:
+        return {"found": False,
+                "error": f"automation '{identifier}' not found in automations.yaml"}
+    return {"found": True, "config": item}
 
 
 async def _validate_automation_config(hass: HomeAssistant, config: dict) -> dict[str, Any]:
@@ -32504,12 +32522,13 @@ async def _automation_condition_list(
     state = hass.states.get(entity_id)
     if state is None:
         return {"error": f"Automation '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    conditions = attrs.get("condition", [])
+    # condition/action live in automations.yaml, never on state attributes.
+    config = await _automation_config_for(hass, entity_id)
+    conditions = _as_block_list((config or {}).get("condition"))
     return {"ok": True, "entity_id": entity_id,
-            "friendly_name": attrs.get("friendly_name"),
-            "condition_count": len(conditions) if isinstance(conditions, list) else 0,
-            "conditions": conditions if isinstance(conditions, list) else []}
+            "friendly_name": state.attributes.get("friendly_name"),
+            "condition_count": len(conditions),
+            "conditions": conditions}
 
 
 async def _automation_action_list(
@@ -32519,12 +32538,13 @@ async def _automation_action_list(
     state = hass.states.get(entity_id)
     if state is None:
         return {"error": f"Automation '{entity_id}' not found"}
-    attrs = dict(state.attributes)
-    actions = attrs.get("action", [])
+    # condition/action live in automations.yaml, never on state attributes.
+    config = await _automation_config_for(hass, entity_id)
+    actions = _as_block_list((config or {}).get("action"))
     return {"ok": True, "entity_id": entity_id,
-            "friendly_name": attrs.get("friendly_name"),
-            "action_count": len(actions) if isinstance(actions, list) else 0,
-            "actions": actions if isinstance(actions, list) else []}
+            "friendly_name": state.attributes.get("friendly_name"),
+            "action_count": len(actions),
+            "actions": actions}
 
 
 async def _device_supported_features(
