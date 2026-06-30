@@ -6098,7 +6098,7 @@ async def _set_text_value(
         )
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Set text failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value[:80]}
+    return {"ok": True, "entity_id": entity_id, "value": str(value)[:80]}
 
 
 async def _list_wake_words(hass: HomeAssistant) -> dict[str, Any]:
@@ -38939,10 +38939,22 @@ async def _alarm_panel_zone_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _area_entity_count(hass: HomeAssistant) -> dict[str, Any]:
-    """Count entities per area."""
+    """Count entities per area.
+
+    Area membership lives in the entity registry, not in state attributes:
+    an entity belongs to its own ``area_id`` when set, otherwise to its
+    device's area. Resolve through both registries so device-less entities
+    (template/helpers assigned directly) are counted correctly.
+    """
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    ereg = er.async_get(hass)
+    dreg = dr.async_get(hass)
+    dev_area = {d.id: d.area_id for d in dreg.devices.values()}
     areas: dict[str, int] = {}
-    for s in hass.states.async_all():
-        area = s.attributes.get("area_id") or "unassigned"
+    for e in ereg.entities.values():
+        area = e.area_id or dev_area.get(e.device_id or "") or "unassigned"
         areas[area] = areas.get(area, 0) + 1
     ranking = sorted(areas.items(), key=lambda x: x[1], reverse=True)
     return {"ok": True, "area_count": len(ranking),
