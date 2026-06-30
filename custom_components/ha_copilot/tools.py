@@ -2163,6 +2163,46 @@ async def _get_automation_config(hass: HomeAssistant, identifier: str) -> dict[s
     return {"found": True, "config": item}
 
 
+def _cfg_block(config: dict | None, name: str) -> list:
+    """Extract a trigger/condition/action block from an automation config.
+
+    HA 2024.10+ writes the plural key (triggers/conditions/actions); older
+    configs use the singular. Accept both and normalise to a list (一名一义).
+    ``name`` is the singular ("trigger"/"condition"/"action").
+    """
+    c = config or {}
+    return _as_block_list(c.get(f"{name}s") or c.get(name))
+
+
+async def _all_automation_configs(hass: HomeAssistant) -> dict[str, dict]:
+    """Map automation entity_id -> its automations.yaml config dict.
+
+    Single source of truth for tools that survey every automation's
+    trigger/condition/action — these live ONLY in the config, never on state
+    attributes. Resolves each live automation entity to its config by registry
+    unique_id (== config id), falling back to the state `id` attr or alias."""
+    path = _safe_path(hass, "automations.yaml")
+    if not os.path.isfile(path):
+        return {}
+
+    def _load() -> list:
+        with open(path, encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or []
+
+    items = await hass.async_add_executor_job(_load)
+    by_id = {str(it.get("id")): it for it in items if it.get("id") is not None}
+    by_alias = {it.get("alias"): it for it in items if it.get("alias")}
+    ereg = er.async_get(hass)
+    out: dict[str, dict] = {}
+    for st in hass.states.async_all("automation"):
+        ent = ereg.async_get(st.entity_id)
+        cid = ent.unique_id if ent and ent.unique_id else st.attributes.get("id")
+        cfg = by_id.get(str(cid)) or by_alias.get(st.attributes.get("friendly_name"))
+        if cfg:
+            out[st.entity_id] = cfg
+    return out
+
+
 async def _validate_automation_config(hass: HomeAssistant, config: dict) -> dict[str, Any]:
     """Validate an automation config against HA's schema WITHOUT saving it —
     returns ok or the precise validation error, so an agent can author a correct
@@ -29609,22 +29649,13 @@ async def _automation_get_condition_entities(
     state = hass.states.get(entity_id)
     if state is None:
         return {"error": f"Automation '{entity_id}' not found"}
-    attrs = dict(state.attributes)
+    config = await _automation_config_for(hass, entity_id)
     referenced = set()
-    triggers = attrs.get("trigger", [])
-    if isinstance(triggers, list):
-        for trig in triggers:
-            if isinstance(trig, dict):
-                eid = trig.get("entity_id")
-                if eid:
-                    referenced.add(eid) if isinstance(eid, str) else referenced.update(eid)
-    conditions = attrs.get("condition", [])
-    if isinstance(conditions, list):
-        for cond in conditions:
-            if isinstance(cond, dict):
-                eid = cond.get("entity_id")
-                if eid:
-                    referenced.add(eid) if isinstance(eid, str) else referenced.update(eid)
+    for block in (_cfg_block(config, "trigger") + _cfg_block(config, "condition")):
+        if isinstance(block, dict):
+            eid = block.get("entity_id")
+            if eid:
+                referenced.add(eid) if isinstance(eid, str) else referenced.update(eid)
     return {"ok": True, "entity_id": entity_id,
             "referenced_entities": sorted(referenced),
             "count": len(referenced)}
@@ -30069,13 +30100,14 @@ async def _automation_get_yaml(
     if state is None:
         return {"error": f"Automation '{entity_id}' not found"}
     attrs = dict(state.attributes)
+    config = await _automation_config_for(hass, entity_id)
     import yaml
     yaml_data = {
-        "alias": attrs.get("friendly_name", entity_id),
-        "trigger": attrs.get("trigger", []),
-        "condition": attrs.get("condition", []),
-        "action": attrs.get("action", []),
-        "mode": attrs.get("mode", "single"),
+        "alias": (config or {}).get("alias") or attrs.get("friendly_name", entity_id),
+        "trigger": _cfg_block(config, "trigger"),
+        "condition": _cfg_block(config, "condition"),
+        "action": _cfg_block(config, "action"),
+        "mode": (config or {}).get("mode") or attrs.get("mode", "single"),
     }
     try:
         yaml_str = yaml.safe_dump(yaml_data, default_flow_style=False, allow_unicode=True)
@@ -31274,20 +31306,20 @@ async def _trigger_list_entity_automations(
     hass: HomeAssistant, entity_id: str,
 ) -> dict[str, Any]:
     """List automations that directly trigger on an entity."""
+    configs = await _all_automation_configs(hass)
     results = []
-    for state in hass.states.async_all("automation"):
-        triggers = state.attributes.get("trigger", [])
-        if isinstance(triggers, list):
-            for trig in triggers:
-                if isinstance(trig, dict):
-                    trig_eid = trig.get("entity_id", "")
-                    if entity_id == trig_eid or (isinstance(trig_eid, list) and entity_id in trig_eid):
-                        results.append({
-                            "automation_id": state.entity_id,
-                            "friendly_name": state.attributes.get("friendly_name"),
-                            "trigger_platform": trig.get("platform", trig.get("trigger")),
-                        })
-                        break
+    for auto_eid, config in configs.items():
+        for trig in _cfg_block(config, "trigger"):
+            if isinstance(trig, dict):
+                trig_eid = trig.get("entity_id", "")
+                if entity_id == trig_eid or (isinstance(trig_eid, list) and entity_id in trig_eid):
+                    st = hass.states.get(auto_eid)
+                    results.append({
+                        "automation_id": auto_eid,
+                        "friendly_name": st.attributes.get("friendly_name") if st else None,
+                        "trigger_platform": trig.get("platform", trig.get("trigger")),
+                    })
+                    break
     return {"ok": True, "entity_id": entity_id, "count": len(results),
             "automations": results}
 
@@ -32524,7 +32556,7 @@ async def _automation_condition_list(
         return {"error": f"Automation '{entity_id}' not found"}
     # condition/action live in automations.yaml, never on state attributes.
     config = await _automation_config_for(hass, entity_id)
-    conditions = _as_block_list((config or {}).get("condition"))
+    conditions = _cfg_block(config, "condition")
     return {"ok": True, "entity_id": entity_id,
             "friendly_name": state.attributes.get("friendly_name"),
             "condition_count": len(conditions),
@@ -32540,7 +32572,7 @@ async def _automation_action_list(
         return {"error": f"Automation '{entity_id}' not found"}
     # condition/action live in automations.yaml, never on state attributes.
     config = await _automation_config_for(hass, entity_id)
-    actions = _as_block_list((config or {}).get("action"))
+    actions = _cfg_block(config, "action")
     return {"ok": True, "entity_id": entity_id,
             "friendly_name": state.attributes.get("friendly_name"),
             "action_count": len(actions),
@@ -34239,26 +34271,20 @@ async def _area_temperature_map(hass: HomeAssistant) -> dict[str, Any]:
 async def _automation_chain_analysis(hass: HomeAssistant) -> dict[str, Any]:
     """Analyze automation chains (automations triggering other automations)."""
     auto_entities = {a.entity_id for a in hass.states.async_all("automation")}
+    configs = await _all_automation_configs(hass)
     chains = []
-    for a in hass.states.async_all("automation"):
-        actions = a.attributes.get("action", [])
-        if not isinstance(actions, list):
-            continue
+    for auto_eid, config in configs.items():
         triggered = []
-        for action in actions:
+        for action in _cfg_block(config, "action"):
             if isinstance(action, dict):
                 svc = action.get("service", "")
                 if svc in ("automation.trigger", "automation.turn_on"):
                     target = action.get("target", {})
-                    if isinstance(target, dict):
-                        eid = target.get("entity_id", "")
-                        if eid in auto_entities:
-                            triggered.append(eid)
+                    eid = target.get("entity_id", "") if isinstance(target, dict) else ""
+                    eids = eid if isinstance(eid, list) else [eid]
+                    triggered.extend(e for e in eids if e in auto_entities)
         if triggered:
-            chains.append({
-                "source": a.entity_id,
-                "triggers": triggered,
-            })
+            chains.append({"source": auto_eid, "triggers": triggered})
     return {"ok": True, "chain_count": len(chains), "chains": chains}
 
 
@@ -35770,25 +35796,24 @@ async def _scene_usage_ranking(hass: HomeAssistant) -> dict[str, Any]:
 
 async def _automation_trigger_type_summary(hass: HomeAssistant) -> dict[str, Any]:
     """Summarize automation trigger types."""
+    configs = await _all_automation_configs(hass)
     trigger_types: dict[str, int] = {}
-    for a in hass.states.async_all("automation"):
-        triggers = a.attributes.get("trigger", [])
-        if isinstance(triggers, list):
-            for t in triggers:
-                if isinstance(t, dict):
-                    platform = t.get("platform", "unknown")
-                    trigger_types[platform] = trigger_types.get(platform, 0) + 1
+    for config in configs.values():
+        for t in _cfg_block(config, "trigger"):
+            if isinstance(t, dict):
+                platform = t.get("platform") or t.get("trigger") or "unknown"
+                trigger_types[platform] = trigger_types.get(platform, 0) + 1
     return {"ok": True, "type_count": len(trigger_types), "types": trigger_types}
 
 
 async def _automation_condition_complexity(hass: HomeAssistant) -> dict[str, Any]:
     """Analyze automation condition complexity."""
+    configs = await _all_automation_configs(hass)
     results = []
     for a in hass.states.async_all("automation"):
-        conditions = a.attributes.get("condition", [])
-        cond_count = len(conditions) if isinstance(conditions, list) else 0
-        actions = a.attributes.get("action", [])
-        action_count = len(actions) if isinstance(actions, list) else 0
+        config = configs.get(a.entity_id)
+        cond_count = len(_cfg_block(config, "condition"))
+        action_count = len(_cfg_block(config, "action"))
         results.append({"entity_id": a.entity_id,
                         "friendly_name": a.attributes.get("friendly_name"),
                         "conditions": cond_count, "actions": action_count,
@@ -41562,11 +41587,12 @@ async def _compass_sensor_check(hass: HomeAssistant) -> dict[str, Any]:
 
 async def _automation_trigger_analysis(hass: HomeAssistant) -> dict[str, Any]:
     """Analyze automation triggers."""
+    configs = await _all_automation_configs(hass)
     results = []
     for s in hass.states.async_all("automation"):
-        triggers = s.attributes.get("trigger", [])
+        config = configs.get(s.entity_id)
         results.append({"entity_id": s.entity_id, "state": s.state,
-                        "trigger_count": len(triggers) if isinstance(triggers, list) else 0,
+                        "trigger_count": len(_cfg_block(config, "trigger")),
                         "friendly_name": s.attributes.get("friendly_name")})
     enabled = sum(1 for r in results if r["state"] == "on")
     return {"ok": True, "count": len(results), "enabled": enabled,
