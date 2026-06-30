@@ -1588,6 +1588,95 @@ async def _update_dashboard(
     return {"ok": True, "url_path": url_path or "lovelace", "saved": True}
 
 
+def _lovelace_data(hass: HomeAssistant):
+    """Return (data, dashboards_collection, dashboards_map) for lovelace.
+
+    hass.data['lovelace'] is a plain dict in HA 2025.x and an object in older
+    releases; normalize access to the collection and the per-url storage map.
+    """
+    from homeassistant.components.lovelace.const import DOMAIN as LOVELACE_DOMAIN
+
+    data = hass.data.get(LOVELACE_DOMAIN)
+    if data is None:
+        return None, None, None
+    if isinstance(data, dict):
+        coll = data.get("dashboards_collection")
+        dmap = data.get("dashboards") or {}
+    else:
+        coll = getattr(data, "dashboards_collection", None)
+        dmap = getattr(data, "dashboards", {}) or {}
+    return data, coll, dmap
+
+
+async def _create_dashboard(
+    hass: HomeAssistant, url_path: str, title: str | None = None,
+    icon: str | None = None, show_in_sidebar: bool = True,
+    require_admin: bool = False, config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Create a new storage-mode Lovelace dashboard and optionally seed config.
+
+    Mirrors HA's own onboarding flow: create the collection item (which
+    registers the frontend panel via the change listener), then save an
+    initial view config into the freshly created LovelaceStorage object.
+    Single-word url_paths are allowed via allow_single_word (HA otherwise
+    requires a hyphen).
+    """
+    if not url_path:
+        return {"error": "missing required argument: url_path"}
+    _data, coll, _dmap = _lovelace_data(hass)
+    if coll is None:
+        return {"error": "lovelace dashboards_collection not available"}
+    create: dict[str, Any] = {
+        "url_path": url_path,
+        "title": title or url_path,
+        "show_in_sidebar": bool(show_in_sidebar),
+        "require_admin": bool(require_admin),
+        "mode": "storage",
+    }
+    if icon:
+        create["icon"] = icon
+    if "-" not in url_path:
+        create["allow_single_word"] = True
+    try:
+        await coll.async_create_item(create)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dashboard create failed: {exc}"}
+    saved = False
+    if config and isinstance(config, dict):
+        _data, _coll, dmap = _lovelace_data(hass)
+        store = dmap.get(url_path)
+        if store is not None:
+            try:
+                await store.async_save(config)
+                saved = True
+            except Exception as exc:  # noqa: BLE001
+                return {"ok": True, "url_path": url_path, "created": True,
+                        "config_saved": False, "save_error": str(exc)}
+    return {"ok": True, "url_path": url_path, "created": True,
+            "config_saved": saved}
+
+
+async def _delete_dashboard(hass: HomeAssistant, url_path: str) -> dict[str, Any]:
+    """Delete a storage-mode Lovelace dashboard by url_path."""
+    if not url_path or url_path == "lovelace":
+        return {"error": "cannot delete the default 'lovelace' dashboard"}
+    _data, coll, _dmap = _lovelace_data(hass)
+    if coll is None:
+        return {"error": "lovelace dashboards_collection not available"}
+    target = None
+    for item in coll.async_items():
+        if item.get("url_path") == url_path or item.get("id") == url_path:
+            target = item
+            break
+    if target is None:
+        return {"error": f"dashboard '{url_path}' not found"}
+    try:
+        await coll.async_delete_item(target["id"])
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dashboard delete failed: {exc}"}
+    return {"ok": True, "url_path": url_path, "deleted": True}
+
+
 
 async def _get_energy_prefs(hass: HomeAssistant) -> dict[str, Any]:
     """Return the Energy dashboard preferences, or configured=false."""
@@ -19679,6 +19768,20 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not cfg or not isinstance(cfg, dict):
                 return {"error": "missing required argument: config (dict with views/cards)"}
             return await _update_dashboard(hass, args.get("url_path"), cfg)
+        if name == "create_dashboard":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            if not args.get("url_path"):
+                return {"error": "missing required argument: url_path"}
+            return await _create_dashboard(
+                hass, args.get("url_path"), args.get("title"),
+                args.get("icon"), args.get("show_in_sidebar", True),
+                args.get("require_admin", False), args.get("config"),
+            )
+        if name == "delete_dashboard":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _delete_dashboard(hass, args.get("url_path", ""))
         if name == "get_energy_prefs":
             return await _get_energy_prefs(hass)
         if name == "conversation_process":
@@ -53726,6 +53829,31 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "url_path": {"type": "string", "description": "dashboard url_path (omit or 'lovelace' for default)."},
                 "config": {"type": "object", "description": "full dashboard config: {\"title\": \"...\", \"views\": [{\"title\": \"...\", \"cards\": [...]}]}."},
             }, "required": ["config"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_dashboard",
+            "description": "Create a new storage-mode Lovelace dashboard (registers a sidebar panel) and optionally seed it with an initial views config. Single-word url_paths are allowed. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "url_path": {"type": "string", "description": "unique dashboard url_path, e.g. 'dao-twin' or 'twin'."},
+                "title": {"type": "string", "description": "sidebar title (defaults to url_path)."},
+                "icon": {"type": "string", "description": "mdi icon, e.g. 'mdi:home'."},
+                "show_in_sidebar": {"type": "boolean", "description": "show in the sidebar (default true)."},
+                "require_admin": {"type": "boolean", "description": "restrict to admins (default false)."},
+                "config": {"type": "object", "description": "optional initial config: {\"title\":..,\"views\":[..]}."},
+            }, "required": ["url_path"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_dashboard",
+            "description": "Delete a storage-mode Lovelace dashboard by url_path (cannot delete the default 'lovelace'). Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "url_path": {"type": "string", "description": "url_path of the dashboard to delete."},
+            }, "required": ["url_path"]},
         },
     },
     {
