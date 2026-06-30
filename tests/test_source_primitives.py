@@ -480,6 +480,18 @@ async def main():
     finally:
         toolsmod.er = saved_er2
 
+    # 40) entity_id narrows the shared selection core for every primitive
+    #     (live-practice: query_history ignored entity_id -> returned ALL
+    #     entities' history; the fix lives once in _select_entities).
+    q = await dispatch(hass, store, "query_entities",
+                       {"entity_id": "switch.fan"})
+    a = await dispatch(hass, store, "aggregate_entities",
+                       {"entity_id": "switch.fan"})
+    check(q.get("ok") and q["count"] == 1
+          and q["entities"][0]["entity_id"] == "switch.fan"
+          and a.get("ok") and a["count"] == 1,
+          "entity_id narrows query/aggregate to exactly that entity", (q, a))
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 

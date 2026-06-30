@@ -14810,21 +14810,24 @@ def _select_entities(
     state: Any = None,
     attributes: Any = None,
     match: str = "any",
+    entity_id: Any = None,
 ) -> list:
     """Shared selection core — return the state objects matching the criteria.
 
     ``name_contains`` matches a substring against ``entity_id`` OR friendly
     name; ``device_class`` matches the entity's device_class. These two compose
-    via ``match`` ("any" = OR, "all" = AND). ``state`` and ``attributes`` are
-    always applied as additional AND filters (``attributes`` value ``None``
-    means "key present"). With no filters (optionally just ``domain``) it
-    returns every entity in scope. Both query_entities (觀/陰) and
-    control_entities (動/陽) draw from this one source.
+    via ``match`` ("any" = OR, "all" = AND). ``entity_id`` (scalar or list),
+    ``state`` and ``attributes`` are always applied as additional AND filters
+    (``attributes`` value ``None`` means "key present"). With no filters
+    (optionally just ``domain``) it returns every entity in scope. All
+    selection primitives (query/control/aggregate/history) draw from this one
+    source, so an explicit ``entity_id`` narrows every one of them identically.
     """
     domains = _as_str_list(domain)
     names = [n.lower() for n in _as_str_list(name_contains)]
     dcs = [d.lower() for d in _as_str_list(device_class)]
     states_f = [s.lower() for s in _as_str_list(state)]
+    ids_f = {e.lower() for e in _as_str_list(entity_id)}
     attrs = attributes if isinstance(attributes, dict) else {}
     match_all = str(match).lower() == "all"
 
@@ -14837,6 +14840,8 @@ def _select_entities(
 
     matched = []
     for s in pool:
+        if ids_f and s.entity_id.lower() not in ids_f:
+            continue
         friendly = s.attributes.get("friendly_name") or ""
         haystack = f"{s.entity_id} {friendly}".lower()
         sdc = str(s.attributes.get("device_class") or "").lower()
@@ -14880,6 +14885,7 @@ async def _query_entities(
     attributes: Any = None,
     match: str = "any",
     limit: Any = 200,
+    entity_id: Any = None,
 ) -> dict[str, Any]:
     """Universal entity query — the one primitive that derives the many.
 
@@ -14889,7 +14895,7 @@ async def _query_entities(
     """
     matched = _select_entities(
         hass, domain=domain, name_contains=name_contains, device_class=device_class,
-        state=state, attributes=attributes, match=match,
+        state=state, attributes=attributes, match=match, entity_id=entity_id,
     )
     results = [
         {
@@ -14921,6 +14927,7 @@ async def _control_entities(
     data: Any = None,
     dry_run: bool = False,
     limit: Any = 500,
+    entity_id: Any = None,
 ) -> dict[str, Any]:
     """Universal action — select by criteria, then act. The 陽 to query's 陰.
 
@@ -14935,7 +14942,7 @@ async def _control_entities(
 
     matched = _select_entities(
         hass, domain=domain, name_contains=name_contains, device_class=device_class,
-        state=state, attributes=attributes, match=match,
+        state=state, attributes=attributes, match=match, entity_id=entity_id,
     )
     try:
         lim = int(limit)
@@ -15037,6 +15044,7 @@ async def _apply_actions(
             data=pick("data"),
             dry_run=dry_run,
             limit=pick("limit") or 500,
+            entity_id=pick("entity_id", "entity"),
         )
         results.append({"step": i, **res})
         if not res.get("ok") and "error" in res:
@@ -15067,6 +15075,7 @@ async def _aggregate_entities(
     attributes: Any = None,
     match: str = "any",
     attribute: Any = None,
+    entity_id: Any = None,
 ) -> dict[str, Any]:
     """Universal aggregation — reduce a selection to numbers. The 量 to 观/动.
 
@@ -15077,7 +15086,7 @@ async def _aggregate_entities(
     """
     matched = _select_entities(
         hass, domain=domain, name_contains=name_contains, device_class=device_class,
-        state=state, attributes=attributes, match=match,
+        state=state, attributes=attributes, match=match, entity_id=entity_id,
     )
     attr = str(attribute) if attribute is not None else None
     # "state" (or empty) means the entity state itself, not a literal attribute
@@ -15128,6 +15137,7 @@ async def _query_history(
     hours: Any = 24,
     limit: Any = 50,
     samples: Any = 0,
+    entity_id: Any = None,
 ) -> dict[str, Any]:
     """Universal temporal query — the 時 (time) to query's 觀 (now). Read-only.
 
@@ -15144,7 +15154,7 @@ async def _query_history(
 
     matched = _select_entities(
         hass, domain=domain, name_contains=name_contains, device_class=device_class,
-        state=state, attributes=attributes, match=match,
+        state=state, attributes=attributes, match=match, entity_id=entity_id,
     )
     try:
         hrs = int(hours)
@@ -16536,6 +16546,7 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 attributes=args.get("attributes"),
                 match=args.get("match", "any"),
                 limit=args.get("limit", 200),
+                entity_id=args.get("entity_id") or args.get("entity"),
             )
         if name == "search_tools":
             return await _search_tools(
@@ -16559,6 +16570,7 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 attributes=args.get("attributes"),
                 match=args.get("match", "any"),
                 attribute=args.get("attribute"),
+                entity_id=args.get("entity_id") or args.get("entity"),
             )
         if name == "query_history":
             return await _query_history(
@@ -16576,6 +16588,7 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 hours=args.get("hours", 24),
                 limit=args.get("limit", 50),
                 samples=args.get("samples", 0),
+                entity_id=args.get("entity_id") or args.get("entity"),
             )
         if name == "describe_entity":
             return await _describe_entity(
@@ -16606,6 +16619,7 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 data=args.get("data"),
                 dry_run=bool(args.get("dry_run", False)),
                 limit=args.get("limit", 500),
+                entity_id=args.get("entity_id") or args.get("entity"),
             )
         if name == "apply_actions":
             if not store.get(CONF_ALLOW_WRITE, True) and not args.get("dry_run"):
