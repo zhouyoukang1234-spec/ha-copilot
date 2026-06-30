@@ -4,6 +4,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "custom_components"))
+import ha_copilot.tools as toolsmod  # noqa: E402
 from ha_copilot.tools import dispatch  # noqa: E402
 
 NOW = datetime.datetime.now(datetime.timezone.utc)
@@ -27,6 +28,7 @@ class FH:
     class config:
         config_dir = "/tmp/ha"
         version = "2024.12.0"
+        components = set()
     class states:
         _s = {}
         @classmethod
@@ -128,7 +130,7 @@ async def main():
     # 8) search_tools finds the energy tools by intent
     r = await dispatch(hass, store, "search_tools", {"query": "energy usage", "limit": 10})
     names = [t["name"] for t in r["tools"]]
-    check(r["ok"] and r["total_catalog"] == 2118 and any("energy" in n for n in names),
+    check(r["ok"] and r["total_catalog"] == 2119 and any("energy" in n for n in names),
           "search_tools 'energy usage' returns energy tools", names[:5])
 
     # 9) search_tools finds query_entities itself
@@ -147,7 +149,7 @@ async def main():
 
     # 12) tool_catalog overview
     r = await dispatch(hass, store, "tool_catalog", {})
-    check(r["ok"] and r["total"] == 2118 and r["read_only"] + r["write"] == 2118 and isinstance(r["groups"], dict),
+    check(r["ok"] and r["total"] == 2119 and r["read_only"] + r["write"] == 2119 and isinstance(r["groups"], dict),
           "tool_catalog overview totals consistent", r)
 
     # 13) tool_catalog prefix listing
@@ -222,6 +224,50 @@ async def main():
                        {"domain": "light", "attribute": "brightness"})
     check(r["ok"] and r["over"] == "brightness" and r["numeric_count"] >= 1,
           "aggregate_entities aggregates over an attribute", r)
+
+    # 24) query_history without the recorder integration -> graceful error
+    FH.config.components = set()
+    r = await dispatch(hass, store, "query_history", {"domain": "sensor"})
+    check("error" in r and "recorder" in r["error"],
+          "query_history without recorder -> error", r)
+
+    # 25) query_history happy path (recorder monkeypatched): per-entity numeric summary
+    class FakeHist:
+        @staticmethod
+        def state_changes_during_period(h, start, end, eid):
+            return {eid: [FS(eid, "10"), FS(eid, "20"), FS(eid, "30")]}
+
+    class FakeInst:
+        @staticmethod
+        async def async_add_executor_job(fn, *a):
+            return fn(*a)
+
+    saved_hist, saved_inst = toolsmod._recorder_history, toolsmod._recorder_get_instance
+    toolsmod._recorder_history = FakeHist
+    toolsmod._recorder_get_instance = lambda h: FakeInst()
+    FH.config.components = {"recorder"}
+    try:
+        r = await dispatch(hass, store, "query_history",
+                           {"domain": "sensor", "device_class": "temperature", "hours": 6})
+        ent = r["entities"][0] if r.get("entities") else {}
+        num = ent.get("numeric", {})
+        check(r.get("ok") and r["hours"] == 6 and ent.get("changes") == 3
+              and num.get("first") == 10.0 and num.get("last") == 30.0
+              and num.get("min") == 10.0 and num.get("max") == 30.0
+              and num.get("delta") == 20.0,
+              "query_history summarises recorder history (numeric stats)", r)
+
+        # 26) samples returns recent raw points; same selection core as query_entities
+        r = await dispatch(hass, store, "query_history",
+                           {"domain": "sensor", "name_contains": "sleep", "samples": 2})
+        ids = sorted(e["entity_id"] for e in r["entities"])
+        check(r.get("ok") and ids == ["sensor.bedroom_sleep_score", "sensor.deep_sleep_hours"]
+              and len(r["entities"][0].get("samples", [])) == 2,
+              "query_history reuses selection core + returns samples", r)
+    finally:
+        toolsmod._recorder_history = saved_hist
+        toolsmod._recorder_get_instance = saved_inst
+        FH.config.components = set()
 
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0

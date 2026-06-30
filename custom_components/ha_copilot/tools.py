@@ -16275,6 +16275,102 @@ async def _aggregate_entities(
     return out
 
 
+async def _query_history(
+    hass: HomeAssistant,
+    domain: Any = None,
+    name_contains: Any = None,
+    device_class: Any = None,
+    state: Any = None,
+    attributes: Any = None,
+    match: str = "any",
+    hours: Any = 24,
+    limit: Any = 50,
+    samples: Any = 0,
+) -> dict[str, Any]:
+    """Universal temporal query — the 時 (time) to query's 觀 (now). Read-only.
+
+    Selects entities via the same selection core, then reads recorder history
+    over the last ``hours`` and reduces each entity to a compact summary:
+    number of state changes, first/last state, span, and (for numeric states)
+    min/max/avg/first/last over the period. Optionally returns up to
+    ``samples`` recent raw points per entity. One primitive subsumes the many
+    ``*_history`` / ``*_trend`` wrappers; draws from the same 選 (selection)
+    core as query/control/aggregate.
+    """
+    if "recorder" not in hass.config.components:
+        return {"error": "the recorder integration is not enabled, so no history is available"}
+
+    matched = _select_entities(
+        hass, domain=domain, name_contains=name_contains, device_class=device_class,
+        state=state, attributes=attributes, match=match,
+    )
+    try:
+        hrs = int(hours)
+    except (TypeError, ValueError):
+        hrs = 24
+    hrs = max(1, min(hrs, 8760))
+    try:
+        lim = int(limit)
+    except (TypeError, ValueError):
+        lim = 50
+    lim = max(1, min(lim, 500))
+    try:
+        smp = int(samples)
+    except (TypeError, ValueError):
+        smp = 0
+    smp = max(0, min(smp, 200))
+
+    matched = matched[:lim]
+    fname = {s.entity_id: s.attributes.get("friendly_name") for s in matched}
+    ids = [s.entity_id for s in matched]
+    if not ids:
+        return {"ok": True, "count": 0, "hours": hrs, "entities": []}
+
+    start = dt_util.utcnow() - timedelta(hours=hrs)
+
+    def _query() -> dict:
+        out: dict[str, list] = {}
+        for eid in ids:
+            data = _recorder_history.state_changes_during_period(hass, start, None, eid)
+            out[eid] = data.get(eid, [])
+        return out
+
+    series_map = await _recorder_get_instance(hass).async_add_executor_job(_query)
+
+    entities = []
+    for eid in ids:
+        series = series_map.get(eid, [])
+        nums: list[float] = []
+        for s in series:
+            try:
+                nums.append(float(s.state))
+            except (TypeError, ValueError):
+                pass
+        summary: dict[str, Any] = {
+            "entity_id": eid,
+            "friendly_name": fname.get(eid),
+            "changes": len(series),
+            "first": series[0].state if series else None,
+            "last": series[-1].state if series else None,
+        }
+        if nums:
+            summary["numeric"] = {
+                "first": nums[0],
+                "last": nums[-1],
+                "min": min(nums),
+                "max": max(nums),
+                "avg": round(sum(nums) / len(nums), 6),
+                "delta": round(nums[-1] - nums[0], 6),
+            }
+        if smp:
+            summary["samples"] = [
+                {"state": s.state, "when": s.last_changed.isoformat()}
+                for s in series[-smp:]
+            ]
+        entities.append(summary)
+
+    return {"ok": True, "count": len(entities), "hours": hrs, "entities": entities}
+
 
 # === 為道日損 · collapsed duplicate-wrapper helpers (generated; each subsumes a class of wrappers differing only in constants) ===
 
@@ -17121,6 +17217,23 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 attributes=args.get("attributes"),
                 match=args.get("match", "any"),
                 attribute=args.get("attribute"),
+            )
+        if name == "query_history":
+            return await _query_history(
+                hass,
+                domain=args.get("domain"),
+                name_contains=(
+                    args.get("name_contains")
+                    or args.get("name")
+                    or args.get("keywords")
+                ),
+                device_class=args.get("device_class"),
+                state=args.get("state"),
+                attributes=args.get("attributes"),
+                match=args.get("match", "any"),
+                hours=args.get("hours", 24),
+                limit=args.get("limit", 50),
+                samples=args.get("samples", 0),
             )
         if name == "control_entities":
             if not store.get(CONF_ALLOW_WRITE, True) and not args.get("dry_run"):
@@ -42691,6 +42804,7 @@ _READ_ONLY_PREFIXES = (
 _READ_ONLY_TOOLS = frozenset({
     "query_entities",
     "aggregate_entities",
+    "query_history",
     "search_tools",
     "tool_catalog",
     "check_config",
@@ -42834,6 +42948,52 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "attributes": {"type": "object", "description": "Attribute filters {key: value}; null means 'key present'."},
                     "match": {"type": "string", "enum": ["any", "all"], "description": "Compose name_contains/device_class with OR (any) or AND (all). Default any."},
                     "attribute": {"type": "string", "description": "Aggregate over this attribute instead of the entity state (e.g. 'battery_level')."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_history",
+            "description": (
+                "Universal temporal query (read-only) — select entities (same "
+                "filters as query_entities) then summarise their recorder "
+                "history over the last 'hours': per-entity change count, "
+                "first/last state, and for numeric states min/max/avg/first/"
+                "last/delta. Set 'samples' to also return recent raw points. "
+                "Subsumes many fixed *_history / *_trend tools — e.g. "
+                "'temperature trend today', 'how often did the door open'. "
+                "Requires the recorder integration."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Domain(s) to scope to. Omit to scan all.",
+                    },
+                    "name_contains": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Substring(s) matched against entity_id or friendly name.",
+                    },
+                    "device_class": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "device_class value(s) to match.",
+                    },
+                    "state": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Restrict to entities currently in this state.",
+                    },
+                    "attributes": {"type": "object", "description": "Attribute filters {key: value}; null means 'key present'."},
+                    "match": {"type": "string", "enum": ["any", "all"], "description": "Compose name_contains/device_class with OR (any) or AND (all). Default any."},
+                    "hours": {"type": "integer", "description": "Look-back window in hours (default 24, cap 8760)."},
+                    "limit": {"type": "integer", "description": "Max entities to summarise (default 50, cap 500)."},
+                    "samples": {"type": "integer", "description": "Recent raw points to include per entity (default 0, cap 200)."},
                 },
             },
         },
