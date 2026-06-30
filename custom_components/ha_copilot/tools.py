@@ -32709,23 +32709,23 @@ async def _script_dependency_map(hass: HomeAssistant) -> dict[str, Any]:
     """Map script dependencies by referenced entities."""
     results = []
     for s in hass.states.async_all("script"):
-        sequence = s.attributes.get("sequence", [])
+        # A script's sequence lives in scripts.yaml, never on state attributes.
+        cfg = await _get_script_config(hass, s.entity_id)
+        sequence = _as_block_list((cfg.get("config") or {}).get("sequence")) \
+            if cfg.get("found") else []
         referenced = []
-        if isinstance(sequence, list):
-            for step in sequence:
-                if isinstance(step, dict):
-                    target = step.get("target", {})
-                    if isinstance(target, dict):
-                        eid = target.get("entity_id")
-                        if eid:
-                            if isinstance(eid, list):
-                                referenced.extend(eid)
-                            else:
-                                referenced.append(eid)
+        for step in sequence:
+            if isinstance(step, dict):
+                target = step.get("target", {})
+                eid = target.get("entity_id") if isinstance(target, dict) else None
+                if not eid:
+                    eid = step.get("entity_id")
+                if eid:
+                    referenced.extend(eid if isinstance(eid, list) else [eid])
         results.append({
             "entity_id": s.entity_id,
             "friendly_name": s.attributes.get("friendly_name"),
-            "step_count": len(sequence) if isinstance(sequence, list) else 0,
+            "step_count": len(sequence),
             "referenced_entities": referenced,
         })
     return {"ok": True, "count": len(results), "scripts": results}
