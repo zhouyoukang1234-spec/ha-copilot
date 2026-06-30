@@ -16635,6 +16635,62 @@ async def _control_entities(
     return {"ok": errors == 0, "count": len(ids), "errors": errors, "results": results}
 
 
+async def _aggregate_entities(
+    hass: HomeAssistant,
+    domain: Any = None,
+    name_contains: Any = None,
+    device_class: Any = None,
+    state: Any = None,
+    attributes: Any = None,
+    match: str = "any",
+    attribute: Any = None,
+) -> dict[str, Any]:
+    """Universal aggregation — reduce a selection to numbers. The 量 to 观/动.
+
+    Counts the matched entities and, over those whose ``state`` (or the given
+    ``attribute``) is numeric, returns sum/avg/min/max. Also reports
+    ``on_count`` (entities whose state is a truthy/"on"-like value) and a
+    ``states`` tally. Draws from the same selection core as query/control.
+    """
+    matched = _select_entities(
+        hass, domain=domain, name_contains=name_contains, device_class=device_class,
+        state=state, attributes=attributes, match=match,
+    )
+    attr = str(attribute) if attribute is not None else None
+    on_like = {"on", "true", "open", "home", "active", "playing", "heat", "cool"}
+
+    nums: list[float] = []
+    state_tally: dict[str, int] = {}
+    on_count = 0
+    for s in matched:
+        sv = s.state.lower()
+        state_tally[s.state] = state_tally.get(s.state, 0) + 1
+        if sv in on_like:
+            on_count += 1
+        raw = s.attributes.get(attr) if attr else s.state
+        try:
+            nums.append(float(raw))
+        except (TypeError, ValueError):
+            pass
+
+    out: dict[str, Any] = {
+        "ok": True,
+        "count": len(matched),
+        "numeric_count": len(nums),
+        "on_count": on_count,
+        "states": dict(sorted(state_tally.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "over": attr or "state",
+    }
+    if nums:
+        out.update({
+            "sum": round(sum(nums), 6),
+            "avg": round(sum(nums) / len(nums), 6),
+            "min": min(nums),
+            "max": max(nums),
+        })
+    return out
+
+
 async def _search_tools(hass: HomeAssistant, query: str, limit: Any = 20) -> dict[str, Any]:
     """Rank the whole tool catalog by relevance to ``query`` (deterministic).
 
@@ -16734,6 +16790,21 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             return await _describe_tool(hass, args.get("name") or args.get("tool") or "")
         if name == "tool_catalog":
             return await _tool_catalog(hass, args.get("prefix"))
+        if name == "aggregate_entities":
+            return await _aggregate_entities(
+                hass,
+                domain=args.get("domain"),
+                name_contains=(
+                    args.get("name_contains")
+                    or args.get("name")
+                    or args.get("keywords")
+                ),
+                device_class=args.get("device_class"),
+                state=args.get("state"),
+                attributes=args.get("attributes"),
+                match=args.get("match", "any"),
+                attribute=args.get("attribute"),
+            )
         if name == "control_entities":
             if not store.get(CONF_ALLOW_WRITE, True) and not args.get("dry_run"):
                 return {"error": "writes are disabled (allow_write: false)"}
@@ -44351,6 +44422,7 @@ _READ_ONLY_PREFIXES = (
 )
 _READ_ONLY_TOOLS = frozenset({
     "query_entities",
+    "aggregate_entities",
     "search_tools",
     "tool_catalog",
     "check_config",
@@ -44452,6 +44524,48 @@ TOOL_SPECS: list[dict[str, Any]] = [
                         "description": "Compose name_contains/device_class with OR (any) or AND (all). Default any.",
                     },
                     "limit": {"type": "integer", "description": "Max entities to return (default 200)."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "aggregate_entities",
+            "description": (
+                "Universal aggregation — select entities (same filters as "
+                "query_entities) and reduce them to numbers: total count, "
+                "numeric sum/avg/min/max (over the state, or over 'attribute' if "
+                "given), on_count (how many are on/open/home/etc.), and a state "
+                "tally. Subsumes many fixed count/total/summary tools — e.g. "
+                "'how many lights are on', 'total power', 'average temperature'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Domain(s) to scope to. Omit to scan all.",
+                    },
+                    "name_contains": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Substring(s) matched against entity_id or friendly name.",
+                    },
+                    "device_class": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "device_class value(s) to match.",
+                    },
+                    "state": {
+                        "type": ["string", "array"],
+                        "items": {"type": "string"},
+                        "description": "Restrict to entities currently in this state.",
+                    },
+                    "attributes": {"type": "object", "description": "Attribute filters {key: value}; null means 'key present'."},
+                    "match": {"type": "string", "enum": ["any", "all"], "description": "Compose name_contains/device_class with OR (any) or AND (all). Default any."},
+                    "attribute": {"type": "string", "description": "Aggregate over this attribute instead of the entity state (e.g. 'battery_level')."},
                 },
             },
         },
