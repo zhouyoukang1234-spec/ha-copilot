@@ -377,6 +377,30 @@ async def main():
     check(r.get("ok") and r["entity_id"] == "switch.fan" and "error" in miss,
           "describe_entity fuzzy-resolves by name; unknown -> error", (r, miss))
 
+    # 33) aggregate_entities: explicit attribute="state" means the state value
+    #     (live-practice refinement — an agent naturally passes attribute="state")
+    over_state = await dispatch(hass, store, "aggregate_entities",
+                                {"domain": "sensor", "device_class": "temperature",
+                                 "attribute": "state"})
+    over_none = await dispatch(hass, store, "aggregate_entities",
+                               {"domain": "sensor", "device_class": "temperature"})
+    check(over_state["ok"] and over_state["numeric_count"] >= 1
+          and "avg" in over_state and over_state["avg"] == over_none["avg"],
+          "aggregate_entities treats attribute='state' as the state value", over_state)
+
+    # 34) apply_actions: selection may nest under select{} (flat keys still win)
+    FH.services.calls.clear()
+    r = await dispatch(hass, store, "apply_actions", {
+        "steps": [
+            {"select": {"domain": "light", "state": "on"}, "service": "turn_off"},
+            {"select": {"name_contains": "fan", "domain": "switch"}, "service": "turn_off"},
+        ],
+    })
+    called = set((d, s) for d, s, _ in FH.services.calls)
+    check(r["ok"] and r["failed"] == 0 and r["results"][0]["count"] == 1
+          and ("light", "turn_off") in called and ("switch", "turn_off") in called,
+          "apply_actions honors nested select{} selection", (r, FH.services.calls))
+
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
 

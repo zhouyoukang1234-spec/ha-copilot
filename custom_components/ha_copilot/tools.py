@@ -14962,7 +14962,9 @@ async def _apply_actions(
 
     A declarative scene/routine expressed as ``steps``: a list where each item
     is ``{service, domain?, name_contains?, device_class?, state?, attributes?,
-    match?, data?, limit?}``. Each step selects via the same core and acts via
+    match?, data?, limit?}``. The selection criteria may also be grouped under a
+    nested ``select`` object (the natural declarative shape) — flat keys, if
+    present, take precedence. Each step selects via the same core and acts via
     ``control_entities`` (動/陽). One template subsumes bespoke multi-step
     scene-apply / routine tools — know the few, derive the many.
 
@@ -14983,20 +14985,25 @@ async def _apply_actions(
                 break
             continue
         svc = step.get("service") or step.get("action") or ""
+        # Selection may be nested under "select" (declarative shape) or given as
+        # flat step keys; flat keys win when both are present.
+        sel = step.get("select") if isinstance(step.get("select"), dict) else {}
+        pick = lambda *keys: next(  # noqa: E731 - terse first-present getter
+            (v for k in keys for v in (step.get(k), sel.get(k)) if v is not None),
+            None,
+        )
         res = await _control_entities(
             hass,
             service=svc,
-            domain=step.get("domain"),
-            name_contains=(
-                step.get("name_contains") or step.get("name") or step.get("keywords")
-            ),
-            device_class=step.get("device_class"),
-            state=step.get("state"),
-            attributes=step.get("attributes"),
-            match=step.get("match", "any"),
-            data=step.get("data"),
+            domain=pick("domain"),
+            name_contains=pick("name_contains", "name", "keywords"),
+            device_class=pick("device_class"),
+            state=pick("state"),
+            attributes=pick("attributes"),
+            match=pick("match") or "any",
+            data=pick("data"),
             dry_run=dry_run,
-            limit=step.get("limit", 500),
+            limit=pick("limit") or 500,
         )
         results.append({"step": i, **res})
         if not res.get("ok") and "error" in res:
@@ -15040,6 +15047,9 @@ async def _aggregate_entities(
         state=state, attributes=attributes, match=match,
     )
     attr = str(attribute) if attribute is not None else None
+    # "state" (or empty) means the entity state itself, not a literal attribute
+    # named "state" — an external agent naturally passes attribute="state".
+    over_state = attr is None or attr.lower() in ("", "state")
     on_like = {"on", "true", "open", "home", "active", "playing", "heat", "cool"}
 
     nums: list[float] = []
@@ -15050,7 +15060,7 @@ async def _aggregate_entities(
         state_tally[s.state] = state_tally.get(s.state, 0) + 1
         if sv in on_like:
             on_count += 1
-        raw = s.attributes.get(attr) if attr else s.state
+        raw = s.state if over_state else s.attributes.get(attr)
         try:
             nums.append(float(raw))
         except (TypeError, ValueError):
