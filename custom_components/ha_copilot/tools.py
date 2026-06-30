@@ -1945,47 +1945,64 @@ async def _evaluate_condition(hass: HomeAssistant, condition: Any,
     return {"result": bool(res), "raw": res}
 
 
+def _resolve_traces(hass: HomeAssistant, domain: str, identifier: str) -> tuple[str, list]:
+    """Resolve stored execution traces for an automation/script.
+
+    The trace store (hass.data[DATA_TRACE]) is flat, keyed by f"{domain}.{item_id}"
+    where item_id is the config `id` (== the entity's registry unique_id). Accepts
+    an entity_id, the bare item id, or a friendly-name alias. Single source of
+    truth for every trace tool (一名一义). Returns (resolved_key, ordered_traces).
+    """
+    from homeassistant.components.trace import DATA_TRACE
+    ereg = er.async_get(hass)
+    store = hass.data.get(DATA_TRACE, {})
+    prefix = f"{domain}."
+    item_id = identifier
+    if identifier.startswith(prefix):
+        ent = ereg.async_get(identifier)
+        if ent and ent.unique_id:
+            item_id = ent.unique_id
+        else:
+            # No registry unique_id (common for YAML items): the store is keyed
+            # by the config `id`, exposed as the state attribute `id`. Fall back
+            # to it, else the bare object_id — never keep the full entity_id,
+            # which would double the prefix into a key that can never match.
+            st = hass.states.get(identifier)
+            item_id = (st.attributes.get("id") if st else None) \
+                or identifier[len(prefix):]
+    key = f"{domain}.{item_id}"
+    traces = store.get(key)
+    if not traces:
+        # fall back to resolving by friendly-name alias
+        for s in hass.states.async_all(domain):
+            if s.attributes.get("friendly_name") == identifier:
+                ent = ereg.async_get(s.entity_id)
+                cand = f"{domain}.{ent.unique_id}" if ent and ent.unique_id else None
+                if cand and cand in store:
+                    key = cand
+                    traces = store.get(key)
+                    break
+    return key, (list(traces.values()) if traces else [])
+
+
+def _trace_short(t: Any) -> dict[str, Any]:
+    """Best-effort short dict for a stored trace object."""
+    try:
+        return t.as_short_dict()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 async def _get_automation_trace(hass: HomeAssistant, identifier: str) -> dict[str, Any]:
     """Return the most recent execution trace of an automation (step-by-step
     path through triggers/conditions/actions) — the automation debug surface.
     Accepts an automation entity_id, numeric id, or alias.
     """
-    from homeassistant.components.trace import DATA_TRACE
-    ereg = er.async_get(hass)
-    # The trace store is flat, keyed by f"{domain}.{item_id}" where item_id is
-    # the automation's config `id` (== the entity's registry unique_id).
-    store = hass.data.get(DATA_TRACE, {})
-    item_id = identifier
-    if identifier.startswith("automation."):
-        ent = ereg.async_get(identifier)
-        if ent and ent.unique_id:
-            item_id = ent.unique_id
-        else:
-            # No registry unique_id (common for YAML automations): the trace
-            # store is keyed by the config `id`, exposed as the state attribute
-            # `id`. Fall back to it, else to the bare object_id — never keep the
-            # full entity_id, which would double the prefix into a key that can
-            # never match (automation.automation.<x>).
-            st = hass.states.get(identifier)
-            item_id = (st.attributes.get("id") if st else None) \
-                or identifier[len("automation."):]
-    key = f"automation.{item_id}"
-    traces = store.get(key)
-    if not traces:
-        # fall back to resolving by friendly-name alias
-        for s in hass.states.async_all("automation"):
-            if s.attributes.get("friendly_name") == identifier:
-                ent = ereg.async_get(s.entity_id)
-                cand = f"automation.{ent.unique_id}" if ent and ent.unique_id else None
-                if cand and cand in store:
-                    key = cand
-                    traces = store.get(key)
-                    break
-    if not traces:
+    key, ordered = _resolve_traces(hass, "automation", identifier)
+    if not ordered:
         return {"automation": identifier, "resolved_key": key,
                 "count": 0, "traces": [],
                 "note": "no stored traces yet (automation may not have run)"}
-    ordered = list(traces.values())
     return {
         "automation": identifier,
         "resolved_key": key,
@@ -6266,13 +6283,13 @@ async def _list_automation_traces(
 ) -> dict[str, Any]:
     """List automation execution traces (debug runs)."""
     try:
-        from homeassistant.components.automation import async_get_trace
+        items = []
         if automation_id:
-            traces = await async_get_trace(hass, automation_id)
-            items = [{"run_id": t.get("run_id"), "state": t.get("state"),
-                      "timestamp": t.get("timestamp")} for t in (traces or [])]
-        else:
-            items = []
+            _key, ordered = _resolve_traces(hass, "automation", automation_id)
+            for t in ordered:
+                d = _trace_short(t)
+                items.append({"run_id": d.get("run_id"), "state": d.get("state"),
+                              "timestamp": (d.get("timestamp") or {}).get("start")})
         return {"ok": True, "count": len(items), "traces": items}
     except Exception as exc:  # noqa: BLE001
         return {"ok": True, "note": f"Automation traces unavailable ({exc})", "traces": []}
@@ -8548,17 +8565,15 @@ async def _automation_trace_list(
 ) -> dict[str, Any]:
     """List automation traces."""
     try:
-        from homeassistant.components.automation import async_get_trace
-        traces = await async_get_trace(hass, entity_id)
-        result = [
-            {"run_id": t.get("run_id", ""),
-             "state": t.get("state", ""),
-             "timestamp": str(t.get("timestamp", {}).get("start", ""))}
-            for t in (traces or [])[:20]
-        ]
-        return {"ok": True, "entity_id": entity_id, "traces": result}
-    except (ImportError, AttributeError):
-        return {"error": "automation trace not available"}
+        key, ordered = _resolve_traces(hass, "automation", entity_id)
+        result = []
+        for t in ordered[:20]:
+            d = _trace_short(t)
+            result.append({"run_id": d.get("run_id", ""),
+                           "state": d.get("state", ""),
+                           "timestamp": str((d.get("timestamp") or {}).get("start", ""))})
+        return {"ok": True, "entity_id": entity_id, "resolved_key": key,
+                "count": len(ordered), "traces": result}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Automation trace list failed: {exc}"}
 
@@ -8568,15 +8583,14 @@ async def _automation_trace_get(
 ) -> dict[str, Any]:
     """Get a specific automation trace."""
     try:
-        from homeassistant.components.automation import async_get_trace
-        traces = await async_get_trace(hass, entity_id)
-        for t in (traces or []):
-            if t.get("run_id") == run_id:
+        _key, ordered = _resolve_traces(hass, "automation", entity_id)
+        for t in ordered:
+            d = _trace_short(t)
+            if d.get("run_id") == run_id:
+                full = t.as_dict() if hasattr(t, "as_dict") else d
                 return {"ok": True, "entity_id": entity_id, "run_id": run_id,
-                        "trace": t}
+                        "trace": full}
         return {"error": f"Trace {run_id} not found for {entity_id}"}
-    except (ImportError, AttributeError):
-        return {"error": "automation trace not available"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Automation trace get failed: {exc}"}
 
@@ -8586,17 +8600,15 @@ async def _script_trace_list(
 ) -> dict[str, Any]:
     """List script traces."""
     try:
-        from homeassistant.components.script import async_get_trace
-        traces = await async_get_trace(hass, entity_id)
-        result = [
-            {"run_id": t.get("run_id", ""),
-             "state": t.get("state", ""),
-             "timestamp": str(t.get("timestamp", {}).get("start", ""))}
-            for t in (traces or [])[:20]
-        ]
-        return {"ok": True, "entity_id": entity_id, "traces": result}
-    except (ImportError, AttributeError):
-        return {"error": "script trace not available"}
+        key, ordered = _resolve_traces(hass, "script", entity_id)
+        result = []
+        for t in ordered[:20]:
+            d = _trace_short(t)
+            result.append({"run_id": d.get("run_id", ""),
+                           "state": d.get("state", ""),
+                           "timestamp": str((d.get("timestamp") or {}).get("start", ""))})
+        return {"ok": True, "entity_id": entity_id, "resolved_key": key,
+                "count": len(ordered), "traces": result}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Script trace list failed: {exc}"}
 
@@ -8606,15 +8618,14 @@ async def _script_trace_get(
 ) -> dict[str, Any]:
     """Get a specific script trace."""
     try:
-        from homeassistant.components.script import async_get_trace
-        traces = await async_get_trace(hass, entity_id)
-        for t in (traces or []):
-            if t.get("run_id") == run_id:
+        _key, ordered = _resolve_traces(hass, "script", entity_id)
+        for t in ordered:
+            d = _trace_short(t)
+            if d.get("run_id") == run_id:
+                full = t.as_dict() if hasattr(t, "as_dict") else d
                 return {"ok": True, "entity_id": entity_id, "run_id": run_id,
-                        "trace": t}
+                        "trace": full}
         return {"error": f"Trace {run_id} not found for {entity_id}"}
-    except (ImportError, AttributeError):
-        return {"error": "script trace not available"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Script trace get failed: {exc}"}
 
@@ -11329,11 +11340,13 @@ async def _trace_get(
 ) -> dict[str, Any]:
     """Get a specific automation/script trace."""
     try:
-        from homeassistant.components.trace import async_get_trace
-        trace = await async_get_trace(hass, domain, item_id, run_id)
-        return {"ok": True, "trace": str(trace)[:2000]}
-    except ImportError:
-        return {"error": "trace component not available"}
+        _key, ordered = _resolve_traces(hass, domain, item_id)
+        for t in ordered:
+            d = _trace_short(t)
+            if d.get("run_id") == run_id:
+                full = t.as_dict() if hasattr(t, "as_dict") else d
+                return {"ok": True, "trace": full}
+        return {"error": f"Trace {run_id} not found for {domain}.{item_id}"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Trace get failed: {exc}"}
 
@@ -11343,11 +11356,16 @@ async def _trace_list(
 ) -> dict[str, Any]:
     """List traces for automation/script."""
     try:
-        from homeassistant.components.trace import async_list_traces
-        traces = await async_list_traces(hass, domain, item_id)
-        return {"ok": True, "traces": traces[:50] if traces else []}
-    except ImportError:
-        return {"error": "trace component not available"}
+        if not item_id:
+            return {"error": "item_id is required"}
+        key, ordered = _resolve_traces(hass, domain, item_id)
+        traces = []
+        for t in ordered[:50]:
+            d = _trace_short(t)
+            traces.append({"run_id": d.get("run_id"), "state": d.get("state"),
+                           "timestamp": (d.get("timestamp") or {}).get("start")})
+        return {"ok": True, "resolved_key": key, "count": len(ordered),
+                "traces": traces}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Trace list failed: {exc}"}
 
@@ -11357,11 +11375,14 @@ async def _trace_contexts(
 ) -> dict[str, Any]:
     """Get trace contexts."""
     try:
-        from homeassistant.components.trace import async_list_contexts
-        contexts = await async_list_contexts(hass, domain, item_id)
-        return {"ok": True, "contexts": contexts[:50] if contexts else []}
-    except ImportError:
-        return {"error": "trace component not available"}
+        key, ordered = _resolve_traces(hass, domain, item_id)
+        items = []
+        for t in ordered[:50]:
+            d = _trace_short(t)
+            ctx = getattr(t, "context", None)
+            items.append({"run_id": d.get("run_id"),
+                          "context_id": getattr(ctx, "id", None)})
+        return {"ok": True, "resolved_key": key, "contexts": items}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Trace contexts failed: {exc}"}
 
@@ -23429,20 +23450,18 @@ async def _automation_trace_contexts(
 ) -> dict[str, Any]:
     """Get automation trace context IDs for recent runs."""
     try:
-        from homeassistant.components.trace import async_list_contexts
-        contexts = await async_list_contexts(hass, {"automation": entity_id})
+        key, ordered = _resolve_traces(hass, "automation", entity_id)
         items = []
-        for ctx in contexts:
+        for t in ordered[:100]:
+            d = _trace_short(t)
+            ctx = getattr(t, "context", None)
             items.append({
-                "run_id": ctx.get("run_id"),
-                "domain": ctx.get("domain"),
-                "item_id": ctx.get("item_id"),
-                "context_id": ctx.get("context", {}).get("id"),
+                "run_id": d.get("run_id"),
+                "context_id": getattr(ctx, "id", None),
+                "timestamp": (d.get("timestamp") or {}).get("start"),
             })
-        return {"ok": True, "entity_id": entity_id, "count": len(items),
-                "contexts": items[:100]}
-    except ImportError:
-        return {"error": "trace component not available"}
+        return {"ok": True, "entity_id": entity_id, "resolved_key": key,
+                "count": len(items), "contexts": items}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Trace contexts failed: {exc}"}
 
@@ -25109,21 +25128,23 @@ async def _automation_trace_detail(
 ) -> dict[str, Any]:
     """Get detailed trace data for a specific automation run."""
     try:
-        from homeassistant.components.trace import async_get_trace
-        trace = await async_get_trace(hass, "automation", entity_id, run_id)
-        return {
-            "ok": True,
-            "entity_id": entity_id,
-            "run_id": run_id,
-            "trace": {
-                "state": trace.get("state"),
-                "script_execution": trace.get("script_execution"),
-                "timestamp": trace.get("timestamp", {}).get("start"),
-                "trace_steps": len(trace.get("trace", {})),
-            },
-        }
-    except ImportError:
-        return {"error": "trace component not available"}
+        _key, ordered = _resolve_traces(hass, "automation", entity_id)
+        for t in ordered:
+            d = _trace_short(t)
+            if d.get("run_id") == run_id:
+                full = t.as_dict() if hasattr(t, "as_dict") else d
+                return {
+                    "ok": True,
+                    "entity_id": entity_id,
+                    "run_id": run_id,
+                    "trace": {
+                        "state": d.get("state"),
+                        "script_execution": d.get("script_execution"),
+                        "timestamp": (d.get("timestamp") or {}).get("start"),
+                        "trace_steps": len((full.get("trace") or {})),
+                    },
+                }
+        return {"error": f"Trace {run_id} not found for {entity_id}"}
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Automation trace detail failed: {exc}"}
 
