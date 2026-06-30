@@ -16438,6 +16438,95 @@ async def _query_history(
     return {"ok": True, "count": len(entities), "hours": hrs, "entities": entities}
 
 
+async def _describe_entity(
+    hass: HomeAssistant,
+    entity_id: Any = None,
+    name_contains: Any = None,
+) -> dict[str, Any]:
+    """Universal deep observation of one entity — the 觀 at full depth.
+
+    Where query_entities surveys breadth (many entities, shallow), this dives
+    into one: live state + every attribute, plus its entity-registry entry,
+    owning device, area, and the sibling entities on the same device. Resolve by
+    exact ``entity_id`` or, failing that, by ``name_contains`` (first match via
+    the shared selection core). Read-only. One术 subsumes the many bespoke
+    ``*_detail`` / ``*_info`` inspectors.
+    """
+    eid = entity_id if isinstance(entity_id, str) and entity_id else None
+    st = hass.states.get(eid) if eid else None
+    if st is None:
+        matched = _select_entities(hass, name_contains=(name_contains or entity_id))
+        if not matched:
+            return {"error": f"no entity matched '{entity_id or name_contains}'"}
+        st = matched[0]
+        eid = st.entity_id
+
+    result: dict[str, Any] = {
+        "ok": True,
+        "entity_id": eid,
+        "domain": eid.split(".")[0],
+        "state": st.state,
+        "friendly_name": st.attributes.get("friendly_name"),
+        "attributes": dict(st.attributes),
+        "last_changed": st.last_changed.isoformat() if st.last_changed else None,
+        "last_updated": st.last_updated.isoformat() if st.last_updated else None,
+    }
+
+    # Registry/device/area enrichment is best-effort: the live-state observation
+    # above is the essence and must never fail because registry plumbing is
+    # unavailable (e.g. during early startup).
+    try:
+        ent_reg = er.async_get(hass)
+        entry = ent_reg.async_get(eid)
+        device_id = None
+        area_id = None
+        if entry is not None:
+            device_id = entry.device_id
+            area_id = entry.area_id
+            result["registry"] = {
+                "unique_id": entry.unique_id,
+                "platform": entry.platform,
+                "device_id": entry.device_id,
+                "area_id": entry.area_id,
+                "entity_category": (
+                    str(entry.entity_category) if entry.entity_category else None
+                ),
+                "disabled_by": str(entry.disabled_by) if entry.disabled_by else None,
+                "hidden_by": str(entry.hidden_by) if entry.hidden_by else None,
+                "original_name": entry.original_name,
+            }
+
+        if device_id is not None:
+            dev = dr.async_get(hass).async_get(device_id)
+            if dev is not None:
+                if dev.area_id and not area_id:
+                    area_id = dev.area_id
+                result["device"] = {
+                    "id": dev.id,
+                    "name": dev.name_by_user or dev.name,
+                    "manufacturer": dev.manufacturer,
+                    "model": dev.model,
+                    "sw_version": dev.sw_version,
+                    "area_id": dev.area_id,
+                }
+                siblings = sorted(
+                    e.entity_id
+                    for e in ent_reg.entities.values()
+                    if e.device_id == device_id and e.entity_id != eid
+                )
+                if siblings:
+                    result["related"] = siblings
+
+        if area_id is not None:
+            area = ar.async_get(hass).async_get_area(area_id)
+            if area is not None:
+                result["area"] = {"id": area.id, "name": area.name}
+    except Exception:  # noqa: BLE001 - enrichment is best-effort
+        pass
+
+    return result
+
+
 # === 為道日損 · collapsed duplicate-wrapper helpers (generated; each subsumes a class of wrappers differing only in constants) ===
 
 async def _dao_collapsed_0(hass, __slot0__, __slot1__, __slot2__, __slot3__):
@@ -17300,6 +17389,16 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
                 hours=args.get("hours", 24),
                 limit=args.get("limit", 50),
                 samples=args.get("samples", 0),
+            )
+        if name == "describe_entity":
+            return await _describe_entity(
+                hass,
+                entity_id=args.get("entity_id") or args.get("entity"),
+                name_contains=(
+                    args.get("name_contains")
+                    or args.get("name")
+                    or args.get("keywords")
+                ),
             )
         if name == "control_entities":
             if not store.get(CONF_ALLOW_WRITE, True) and not args.get("dry_run"):
@@ -42880,6 +42979,7 @@ _READ_ONLY_TOOLS = frozenset({
     "query_entities",
     "aggregate_entities",
     "query_history",
+    "describe_entity",
     "search_tools",
     "tool_catalog",
     "check_config",
@@ -43069,6 +43169,36 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     "hours": {"type": "integer", "description": "Look-back window in hours (default 24, cap 8760)."},
                     "limit": {"type": "integer", "description": "Max entities to summarise (default 50, cap 500)."},
                     "samples": {"type": "integer", "description": "Recent raw points to include per entity (default 0, cap 200)."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "describe_entity",
+            "description": (
+                "Universal deep inspection of ONE entity (read-only) — the depth "
+                "complement to query_entities' breadth. Returns live state, every "
+                "attribute, last_changed/last_updated, plus the entity-registry "
+                "entry (unique_id, platform, entity_category, disabled/hidden), "
+                "the owning device (manufacturer/model/sw_version), its area, and "
+                "sibling entities on the same device. Resolve by exact 'entity_id' "
+                "or by 'name_contains' (first match). Subsumes many fixed "
+                "*_detail / *_info inspectors — e.g. 'tell me everything about the "
+                "living room thermostat'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_id": {
+                        "type": "string",
+                        "description": "Exact entity_id, e.g. 'climate.living_room'. From list_states.",
+                    },
+                    "name_contains": {
+                        "type": "string",
+                        "description": "Fallback fuzzy match (substring of entity_id or friendly name) when entity_id is unknown.",
+                    },
                 },
             },
         },

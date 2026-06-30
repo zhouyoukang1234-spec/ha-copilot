@@ -130,7 +130,7 @@ async def main():
     # 8) search_tools finds the energy tools by intent
     r = await dispatch(hass, store, "search_tools", {"query": "energy usage", "limit": 10})
     names = [t["name"] for t in r["tools"]]
-    check(r["ok"] and r["total_catalog"] == 2120 and any("energy" in n for n in names),
+    check(r["ok"] and r["total_catalog"] == 2121 and any("energy" in n for n in names),
           "search_tools 'energy usage' returns energy tools", names[:5])
 
     # 9) search_tools finds query_entities itself
@@ -149,7 +149,7 @@ async def main():
 
     # 12) tool_catalog overview
     r = await dispatch(hass, store, "tool_catalog", {})
-    check(r["ok"] and r["total"] == 2120 and r["read_only"] + r["write"] == 2120 and isinstance(r["groups"], dict),
+    check(r["ok"] and r["total"] == 2121 and r["read_only"] + r["write"] == 2121 and isinstance(r["groups"], dict),
           "tool_catalog overview totals consistent", r)
 
     # 13) tool_catalog prefix listing
@@ -302,6 +302,80 @@ async def main():
     empty = await dispatch(hass, store, "apply_actions", {"steps": []})
     check("error" in blocked and len(FH.services.calls) == 0 and "error" in empty,
           "apply_actions write-gated + empty-steps error", (blocked, empty))
+
+    # 30) describe_entity: deep single-entity view (state + every attribute) by exact id
+    r = await dispatch(hass, store, "describe_entity", {"entity_id": "light.kitchen"})
+    check(r.get("ok") and r["entity_id"] == "light.kitchen" and r["domain"] == "light"
+          and r["state"] == "on" and r["attributes"].get("brightness") == 200
+          and r["friendly_name"] == "Kitchen Light",
+          "describe_entity returns state + all attributes for exact id", r)
+
+    # 31) describe_entity enriches with registry/device/area/related (registries patched)
+    class FakeEntry:
+        unique_id = "uid-kitchen"
+        platform = "hue"
+        device_id = "dev1"
+        area_id = None
+        entity_category = None
+        disabled_by = None
+        hidden_by = None
+        original_name = "Kitchen"
+
+    class FakeSelf:
+        entity_id = "light.kitchen"
+        device_id = "dev1"
+
+    class FakeSibling:
+        entity_id = "sensor.kitchen_power"
+        device_id = "dev1"
+
+    class FakeER:
+        entities = {"light.kitchen": FakeSelf, "sensor.kitchen_power": FakeSibling}
+        @staticmethod
+        def async_get(eid): return FakeEntry
+
+    class FakeDev:
+        id = "dev1"
+        name = "Kitchen Bulb"
+        name_by_user = None
+        manufacturer = "Signify"
+        model = "LCT001"
+        sw_version = "1.2"
+        area_id = "area1"
+
+    class FakeDR:
+        @staticmethod
+        def async_get(dev_id): return FakeDev
+
+    class FakeArea:
+        id = "area1"
+        name = "Kitchen"
+
+    class FakeAR:
+        @staticmethod
+        def async_get_area(aid): return FakeArea
+
+    class _RegMod:
+        def __init__(self, reg): self._reg = reg
+        def async_get(self, h): return self._reg
+
+    saved_er, saved_dr, saved_ar = toolsmod.er, toolsmod.dr, toolsmod.ar
+    toolsmod.er, toolsmod.dr, toolsmod.ar = _RegMod(FakeER), _RegMod(FakeDR), _RegMod(FakeAR)
+    try:
+        r = await dispatch(hass, store, "describe_entity", {"entity_id": "light.kitchen"})
+        check(r.get("ok") and r["registry"]["unique_id"] == "uid-kitchen"
+              and r["device"]["manufacturer"] == "Signify"
+              and r["area"]["name"] == "Kitchen"
+              and r.get("related") == ["sensor.kitchen_power"],
+              "describe_entity enriches with registry/device/area/related", r)
+    finally:
+        toolsmod.er, toolsmod.dr, toolsmod.ar = saved_er, saved_dr, saved_ar
+
+    # 32) describe_entity fuzzy-resolves by name; unknown -> error
+    r = await dispatch(hass, store, "describe_entity", {"name_contains": "fan"})
+    miss = await dispatch(hass, store, "describe_entity", {"entity_id": "nope.nothere"})
+    check(r.get("ok") and r["entity_id"] == "switch.fan" and "error" in miss,
+          "describe_entity fuzzy-resolves by name; unknown -> error", (r, miss))
 
     print(f"\n=== RESULTS: {p}/{p+f} passed ===")
     return f == 0
