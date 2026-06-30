@@ -3965,8 +3965,9 @@ async def _check_updates(hass: HomeAssistant) -> dict[str, Any]:
 
 async def _get_system_health(hass: HomeAssistant) -> dict[str, Any]:
     """Get system health information (HA version, OS, arch, DB size, etc.)."""
+    from homeassistant.const import __version__ as _ha_version
     info: dict[str, Any] = {
-        "version": hass.config.version if hasattr(hass.config, "version") else "unknown",
+        "version": _ha_version,
         "location_name": getattr(hass.config, "location_name", ""),
         "time_zone": str(getattr(hass.config, "time_zone", "")),
         "elevation": getattr(hass.config, "elevation", None),
@@ -8230,14 +8231,14 @@ async def _storage_info(hass: HomeAssistant) -> dict[str, Any]:
 async def _core_info(hass: HomeAssistant) -> dict[str, Any]:
     """Get HA core information."""
     try:
+        from homeassistant.const import __version__ as _ha_version
         return {
             "ok": True,
-            "version": hass.config.version,
+            "version": _ha_version,
             "config_dir": hass.config.config_dir,
             "time_zone": str(hass.config.time_zone)
             if hasattr(hass.config, "time_zone") else "unknown",
-            "unit_system": str(hass.config.units.name)
-            if hasattr(hass.config, "units") else "unknown",
+            "unit_system": str(getattr(hass.config, "units", "unknown")),
             "location_name": getattr(hass.config, "location_name", ""),
             "latitude": getattr(hass.config, "latitude", 0),
             "longitude": getattr(hass.config, "longitude", 0),
@@ -8729,7 +8730,7 @@ async def _usb_list_devices(hass: HomeAssistant) -> dict[str, Any]:
     """List USB devices."""
     try:
         from homeassistant.components.usb import async_get_usb
-        usb_list = async_get_usb(hass)
+        usb_list = await async_get_usb(hass)
         result = [
             {"vid": u.get("vid", ""), "pid": u.get("pid", ""),
              "serial_number": u.get("serial_number", ""),
@@ -8748,7 +8749,7 @@ async def _dhcp_list_discoveries(hass: HomeAssistant) -> dict[str, Any]:
     """List DHCP discoveries."""
     try:
         from homeassistant.components.dhcp import async_get_dhcp
-        dhcp_list = async_get_dhcp(hass)
+        dhcp_list = await async_get_dhcp(hass)
         result = [
             {"domain": d.get("domain", ""), "hostname": d.get("hostname", ""),
              "macaddress": d.get("macaddress", "")}
@@ -8765,7 +8766,7 @@ async def _ssdp_list_discoveries(hass: HomeAssistant) -> dict[str, Any]:
     """List SSDP discoveries."""
     try:
         from homeassistant.components.ssdp import async_get_ssdp
-        ssdp_list = async_get_ssdp(hass)
+        ssdp_list = await async_get_ssdp(hass)
         result = []
         for domain, matchers in ssdp_list.items():
             for m in matchers:
@@ -8781,7 +8782,7 @@ async def _zeroconf_list_discoveries(hass: HomeAssistant) -> dict[str, Any]:
     """List Zeroconf discoveries."""
     try:
         from homeassistant.components.zeroconf import async_get_zeroconf
-        zc_list = async_get_zeroconf(hass)
+        zc_list = await async_get_zeroconf(hass)
         result = []
         for stype, matchers in zc_list.items():
             for m in matchers:
@@ -8999,11 +9000,16 @@ async def _system_log_list(hass: HomeAssistant) -> dict[str, Any]:
         handler = hass.data.get(SL_DOMAIN)
         if handler is None:
             return {"error": "system_log not available"}
-        entries = list(handler.records)[-20:]
+        # handler.records is an OrderedDict keyed by a (tuple) key whose values
+        # are LogEntry objects; iterating the store yields the tuple keys, not
+        # the entries. Use the entry dicts (to_list) and map to our contract.
+        entries = handler.records.to_list()[:20]
         result = [
-            {"level": r.levelname, "message": str(r.message)[:200],
-             "source": getattr(r, "source", ("",))}
-            for r in entries
+            {"level": e.get("level", ""),
+             "message": (e.get("message") or [""])[0][:200]
+             if isinstance(e.get("message"), list) else str(e.get("message"))[:200],
+             "source": e.get("source", "")}
+            for e in entries
         ]
         return {"ok": True, "entries": result}
     except ImportError:
@@ -10100,7 +10106,7 @@ async def _bluetooth_device_list(hass: HomeAssistant) -> dict[str, Any]:
     """List discovered Bluetooth devices."""
     try:
         from homeassistant.components.bluetooth import async_discovered_service_info
-        devices = async_discovered_service_info(hass)
+        devices = list(async_discovered_service_info(hass))
         result = [
             {"name": d.name, "address": d.address,
              "rssi": d.rssi}
@@ -10117,10 +10123,12 @@ async def _usb_device_list(hass: HomeAssistant) -> dict[str, Any]:
     """List USB devices."""
     try:
         from homeassistant.components.usb import async_get_usb
-        usb_info = async_get_usb(hass)
+        usb_info = await async_get_usb(hass)
         result = [
-            {"vid": u.vid, "pid": u.pid, "serial_number": u.serial_number,
-             "manufacturer": u.manufacturer, "description": u.description}
+            {"vid": u.get("vid", ""), "pid": u.get("pid", ""),
+             "serial_number": u.get("serial_number", ""),
+             "manufacturer": u.get("manufacturer", ""),
+             "description": u.get("description", "")}
             for u in usb_info[:20]
         ]
         return {"ok": True, "devices": result}
@@ -10741,9 +10749,10 @@ async def _supervisor_addon_stop(
 async def _core_state_info(hass: HomeAssistant) -> dict[str, Any]:
     """Get core HA state information."""
     try:
+        from homeassistant.const import __version__ as _ha_version
         return {
             "ok": True,
-            "version": hass.config.version,
+            "version": _ha_version,
             "config_dir": hass.config.config_dir,
             "time_zone": str(hass.config.time_zone)
             if hasattr(hass.config, "time_zone") else "unknown",
@@ -12164,8 +12173,9 @@ async def _webhook_trigger(
 async def _system_health_info(hass: HomeAssistant) -> dict[str, Any]:
     """Get system health information."""
     try:
+        from homeassistant.const import __version__ as _ha_version
         info: dict[str, Any] = {
-            "version": hass.config.version,
+            "version": _ha_version,
             "config_dir": hass.config.config_dir,
         }
         return {"ok": True, "health": info}
