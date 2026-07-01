@@ -284,6 +284,36 @@ curl ... -d '{"tool":"run_tools","args":{"calls":[
 校验用只读工具直接读注册表：`area_registry_deep`、`floor_registry_check`、
 `label_registry_check`、`label_summary`、`floor_plan_entity_status`、`area_entity_count`。
 
+**三条正交组织轴**：楼层/区域答"在哪"（层级、单一归属）；标签答"是什么"
+（功能性、横切——不同房间里的一盏灯和一个人体传感器可共享 `lighting`/`security`
+标签）。区域用 `assign_entity_area`，标签用 `label_assign_entity`（配 `label_create` /
+`label_list_entities` / `label_delete`）。归属真源始终在注册表，故组织上千实体只是
+"解析每个实体的归属键 → foreach 扇出赋值"。删标签只认 `label_delete`（`manage_label`
+的动作是 `list/create/delete`，无 `remove`）。
+
+### 编排 × 组织的合流 · 按归属发现再扇出
+
+四原语（序 / 引用 / 绑定 / 扇出）与三组织轴合流出一个域无关的宏范式——
+**"按归属发现集合 → 逐个扇出正确服务 → 回读校验"**，整串在一次 `run_tools` 内闭合。
+无论"离开房间"（按区域）还是"全屋关灯"（按标签），骨架同构：
+
+```bash
+# 按区域离场宏：查该区域的灯/窗帘/风扇 → 分别扇出关灯/关帘/停扇 → 回读一个
+curl ... -d '{"tool":"run_tools","args":{"steps":[
+  {"tool":"entity_list_by_area_domain","args":{"area_id":"u1_f1_living","domain":"light"},"save_as":"L"},
+  {"tool":"call_service","foreach":"${vars.L.entities}",
+    "args":{"domain":"light","service":"turn_off","data":{"entity_id":"${item.entity_id}"}}},
+  {"tool":"get_state","args":{"entity_id":"${vars.L.entities[0].entity_id}"}}
+]}}' ...
+
+# 按标签宏：查 lighting 标签全部实体 → homeassistant.turn_off 逐个扇出
+#   {"tool":"label_list_entities","args":{"label_id":"lighting"},"save_as":"LI"}
+#   {"tool":"call_service","foreach":"${vars.LI.entities}", ...}
+```
+
+此范式在 96 区域 × 数千实体上逐元素错误隔离、零崩溃：组织提供"集合真源"，
+编排提供"无回路的映射"，二者相乘即覆盖绝大多数真实场景（闻道者日损）。
+
 ### 仪表盘组合 · 从注册表生成多视图 Lovelace
 
 仪表盘是组织结构的**投影**：先从注册表读出楼层/区域/实体，再机器生成视图，
