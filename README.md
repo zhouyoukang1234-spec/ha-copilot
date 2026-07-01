@@ -374,7 +374,10 @@ curl ... -d '{"tool":"create_dashboard","args":{
 制造 motion → 对应吊灯亮/灭 3/3。且跑完一次自愈后，`automations.yaml` 里的垃圾被清、
 `dao_canon.yaml` 的本尊**原样存活**——沙盒与本尊分离让自治层与边界扫描各行其道。
 
-- MCP（需 HA 长效令牌），两种传输，同一工具层：
+- MCP（需 HA 长效令牌），两种传输，同一工具层。两条链路均已端到端实测：`initialize`
+  回 `protocolVersion 2024-11-05` + capabilities，`tools/list` 出全部 2115 个工具，
+  `tools/call` 既能调单工具、也能跑带 `save_as`/`${vars...}` 数据流的 `run_tools` 组合
+  （`isError:false`）；SSE 首帧即 `event: endpoint` 带会话作用域回投 URL。
   - **HTTP（JSON-RPC）**：把 `/api/ha_copilot/mcp` 作为端点直接 POST。
 
 ```bash
