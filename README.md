@@ -349,6 +349,18 @@ curl ... -d '{"tool":"create_dashboard","args":{
 每楼层一视图 → ③再按域（light./climate./lock. …）切若干 `entities` 卡做横向总览 →
 ④`create_dashboard` 一次写入。改版只需重算 `config` 再 `update_dashboard`/重建。
 
+### 自治层 · 沙盒与本尊分离（自愈不误伤真内容）
+
+大规模扫描给写类工具灌探针参数，会把垃圾条目写进 `automations.yaml` / `scenes.yaml`，
+所以自愈循环把这些默认文件**整体清空**——但这也会连真自动化一起抹掉。根因解法（道法自然）：
+**把探针沙盒与规范本尊分离**。真实自治内容（场景 / 脚本 / 自动化）写进一个自愈从不触碰的
+独立包 `packages/dao_canon.yaml`；默认文件只留给探针，随清随建。
+
+自治层是组织结构的**行为投影**：从注册表发现每楼层的灯/锁/帘，机器生成"每层全关"场景、
+一个"离家"脚本（多域扇出关灯/关帘/上锁）、以及一个仅由 `input_boolean` 显式触发的自动化
+（不在数千实体上乱触发）。实测闭环：拨动 helper → 自动化触发 → 脚本扇出 → 灯全灭、门全锁；
+且跑完一次自愈后，`automations.yaml` 里的垃圾被清、`dao_canon.yaml` 的本尊**原样存活**。
+
 - MCP（需 HA 长效令牌），两种传输，同一工具层：
   - **HTTP（JSON-RPC）**：把 `/api/ha_copilot/mcp` 作为端点直接 POST。
 
