@@ -1677,6 +1677,28 @@ async def _delete_dashboard(hass: HomeAssistant, url_path: str) -> dict[str, Any
     return {"ok": True, "url_path": url_path, "deleted": True}
 
 
+async def _remove_entity(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Remove an entity from the entity registry.
+
+    Frees an orphaned/stale registry entry (e.g. an entity whose backing
+    config was deleted but which lingers as 'unavailable'). Only registry-backed
+    entities can be removed; entities provided purely by a running integration
+    will simply be re-created on the next update.
+    """
+    if not entity_id:
+        return {"error": "missing required argument: entity_id"}
+    from homeassistant.helpers import entity_registry as er
+
+    ereg = er.async_get(hass)
+    if ereg.async_get(entity_id) is None:
+        return {"error": f"entity '{entity_id}' not in the entity registry"}
+    try:
+        ereg.async_remove(entity_id)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity remove failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "removed": True}
+
+
 
 async def _get_energy_prefs(hass: HomeAssistant) -> dict[str, Any]:
     """Return the Energy dashboard preferences, or configured=false."""
@@ -19782,6 +19804,10 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not store.get(CONF_ALLOW_WRITE, True):
                 return {"error": "writes are disabled (allow_write: false)"}
             return await _delete_dashboard(hass, args.get("url_path", ""))
+        if name == "remove_entity":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remove_entity(hass, args.get("entity_id", ""))
         if name == "get_energy_prefs":
             return await _get_energy_prefs(hass)
         if name == "conversation_process":
@@ -44100,7 +44126,7 @@ _READ_ONLY_TOOLS = frozenset({
     "recall_memory",
 })
 # Irreversible / disruptive operations (removal, data purge, full restart).
-_DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics", "restore_backup"})
+_DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics", "restore_backup", "remove_entity"})
 
 
 def _is_read_only(name: str) -> bool:
@@ -53854,6 +53880,16 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "parameters": {"type": "object", "properties": {
                 "url_path": {"type": "string", "description": "url_path of the dashboard to delete."},
             }, "required": ["url_path"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_entity",
+            "description": "Remove an entity from the entity registry \u2014 frees an orphaned/stale entry (e.g. an 'unavailable' entity whose backing config was deleted). Entities still provided by a running integration get re-created on next update. Destructive write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "entity_id to remove from the registry, e.g. 'scene.old_scene'."},
+            }, "required": ["entity_id"]},
         },
     },
     {
