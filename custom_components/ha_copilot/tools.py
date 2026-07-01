@@ -3320,7 +3320,18 @@ def _ref_tokens(expr: str) -> list[str]:
 def _resolve_one(context: dict[str, Any], expr: str) -> Any:
     """Navigate ``context`` along a dotted/indexed reference path."""
     cur: Any = context
-    for tok in _ref_tokens(expr):
+    toks = _ref_tokens(expr)
+    # bare ${NAME...} is shorthand for ${vars.NAME...} when NAME isn't a
+    # top-level key (steps/last/vars/item/index) but was bound via save_as.
+    if (
+        toks
+        and isinstance(context, dict)
+        and toks[0] not in context
+        and isinstance(context.get("vars"), dict)
+        and toks[0] in context["vars"]
+    ):
+        cur = context["vars"]
+    for tok in toks:
         if isinstance(cur, (list, tuple)):
             cur = cur[int(tok)]
         elif isinstance(cur, dict):
@@ -3392,7 +3403,8 @@ async def _run_tools(
 
     * ``${steps[0].entities[0].entity_id}`` — value from the Nth result.
     * ``${last.state}`` — value from the immediately preceding result.
-    * ``${vars.lamp}`` — value a prior step bound via its ``save_as`` field.
+    * ``${vars.lamp}`` — value a prior step bound via its ``save_as`` field
+      (``${lamp}`` is accepted as shorthand when the name is unambiguous).
 
     A whole-string ``${...}`` keeps the referenced object's type (lists/dicts);
     inline ``${...}`` inside text is stringified. Unresolvable references fail

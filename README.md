@@ -230,7 +230,7 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
 
 - `${steps[i].path}`：第 `i` 步结果中的值（如 `${steps[0].entities[0].entity_id}`）。
 - `${last.path}`：上一步结果中的值。
-- `${vars.NAME.path}`：某步通过 `save_as` 绑定的结果中的值。
+- `${vars.NAME.path}`：某步通过 `save_as` 绑定的结果中的值；名字不与 `steps/last/vars/item/index` 撞名时可简写为 `${NAME.path}`（少写一层前缀，降认知负荷）。
 
 整串 `${...}` 保留被引用对象的原类型（列表/字典）；文本内联 `${...}` 转为字符串。引用失败只让该步优雅报错、不拖垮整批（除非 `stop_on_error`）。
 
