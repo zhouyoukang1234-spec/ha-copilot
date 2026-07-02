@@ -1579,6 +1579,117 @@ async def _update_dashboard(
     return {"ok": True, "url_path": url_path or "lovelace", "saved": True}
 
 
+def _lovelace_data(hass: HomeAssistant):
+    """Return (data, dashboards_collection, dashboards_map) for lovelace.
+
+    hass.data['lovelace'] is a plain dict in HA 2025.x and an object in older
+    releases; normalize access to the collection and the per-url storage map.
+    """
+    from homeassistant.components.lovelace.const import DOMAIN as LOVELACE_DOMAIN
+
+    data = hass.data.get(LOVELACE_DOMAIN)
+    if data is None:
+        return None, None, None
+    if isinstance(data, dict):
+        coll = data.get("dashboards_collection")
+        dmap = data.get("dashboards") or {}
+    else:
+        coll = getattr(data, "dashboards_collection", None)
+        dmap = getattr(data, "dashboards", {}) or {}
+    return data, coll, dmap
+
+
+async def _create_dashboard(
+    hass: HomeAssistant, url_path: str, title: str | None = None,
+    icon: str | None = None, show_in_sidebar: bool = True,
+    require_admin: bool = False, config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Create a new storage-mode Lovelace dashboard and optionally seed config.
+
+    Mirrors HA's own onboarding flow: create the collection item (which
+    registers the frontend panel via the change listener), then save an
+    initial view config into the freshly created LovelaceStorage object.
+    Single-word url_paths are allowed via allow_single_word (HA otherwise
+    requires a hyphen).
+    """
+    if not url_path:
+        return {"error": "missing required argument: url_path"}
+    _data, coll, _dmap = _lovelace_data(hass)
+    if coll is None:
+        return {"error": "lovelace dashboards_collection not available"}
+    create: dict[str, Any] = {
+        "url_path": url_path,
+        "title": title or url_path,
+        "show_in_sidebar": bool(show_in_sidebar),
+        "require_admin": bool(require_admin),
+        "mode": "storage",
+    }
+    if icon:
+        create["icon"] = icon
+    if "-" not in url_path:
+        create["allow_single_word"] = True
+    try:
+        await coll.async_create_item(create)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dashboard create failed: {exc}"}
+    saved = False
+    if config and isinstance(config, dict):
+        _data, _coll, dmap = _lovelace_data(hass)
+        store = dmap.get(url_path)
+        if store is not None:
+            try:
+                await store.async_save(config)
+                saved = True
+            except Exception as exc:  # noqa: BLE001
+                return {"ok": True, "url_path": url_path, "created": True,
+                        "config_saved": False, "save_error": str(exc)}
+    return {"ok": True, "url_path": url_path, "created": True,
+            "config_saved": saved}
+
+
+async def _delete_dashboard(hass: HomeAssistant, url_path: str) -> dict[str, Any]:
+    """Delete a storage-mode Lovelace dashboard by url_path."""
+    if not url_path or url_path == "lovelace":
+        return {"error": "cannot delete the default 'lovelace' dashboard"}
+    _data, coll, _dmap = _lovelace_data(hass)
+    if coll is None:
+        return {"error": "lovelace dashboards_collection not available"}
+    target = None
+    for item in coll.async_items():
+        if item.get("url_path") == url_path or item.get("id") == url_path:
+            target = item
+            break
+    if target is None:
+        return {"error": f"dashboard '{url_path}' not found"}
+    try:
+        await coll.async_delete_item(target["id"])
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Dashboard delete failed: {exc}"}
+    return {"ok": True, "url_path": url_path, "deleted": True}
+
+
+async def _remove_entity(hass: HomeAssistant, entity_id: str) -> dict[str, Any]:
+    """Remove an entity from the entity registry.
+
+    Frees an orphaned/stale registry entry (e.g. an entity whose backing
+    config was deleted but which lingers as 'unavailable'). Only registry-backed
+    entities can be removed; entities provided purely by a running integration
+    will simply be re-created on the next update.
+    """
+    if not entity_id:
+        return {"error": "missing required argument: entity_id"}
+    from homeassistant.helpers import entity_registry as er
+
+    ereg = er.async_get(hass)
+    if ereg.async_get(entity_id) is None:
+        return {"error": f"entity '{entity_id}' not in the entity registry"}
+    try:
+        ereg.async_remove(entity_id)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Entity remove failed: {exc}"}
+    return {"ok": True, "entity_id": entity_id, "removed": True}
+
+
 
 async def _get_energy_prefs(hass: HomeAssistant) -> dict[str, Any]:
     """Return the Energy dashboard preferences, or configured=false."""
@@ -3294,6 +3405,99 @@ async def _manage_hacs(
     return {"error": f"unknown action '{action}' — use list/install/download/remove"}
 
 
+_REF_WHOLE = re.compile(r"^\$\{([^}]+)\}$")
+_REF_INLINE = re.compile(r"\$\{([^}]+)\}")
+_REF_TOKEN = re.compile(
+    r"""[A-Za-z_][A-Za-z0-9_]*       # leading / dotted identifier
+        |\[\s*"([^"]*)"\s*\]          # ["key"]
+        |\[\s*'([^']*)'\s*\]          # ['key']
+        |\[\s*(-?\d+)\s*\]            # [0] / [-1]
+        |\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*\]  # [key]
+        |\.([A-Za-z_][A-Za-z0-9_]*)   # .key
+    """,
+    re.VERBOSE,
+)
+
+
+def _ref_tokens(expr: str) -> list[str]:
+    """Tokenize a reference path like ``steps[0].entities[2].entity_id``."""
+    toks: list[str] = []
+    for m in _REF_TOKEN.finditer(expr.strip()):
+        groups = [g for g in m.groups() if g is not None]
+        toks.append(groups[0] if groups else m.group(0).lstrip("."))
+    return toks
+
+
+def _resolve_one(context: dict[str, Any], expr: str) -> Any:
+    """Navigate ``context`` along a dotted/indexed reference path."""
+    cur: Any = context
+    toks = _ref_tokens(expr)
+    # bare ${NAME...} is shorthand for ${vars.NAME...} when NAME isn't a
+    # top-level key (steps/last/vars/item/index) but was bound via save_as.
+    if (
+        toks
+        and isinstance(context, dict)
+        and toks[0] not in context
+        and isinstance(context.get("vars"), dict)
+        and toks[0] in context["vars"]
+    ):
+        cur = context["vars"]
+    for tok in toks:
+        if isinstance(cur, (list, tuple)):
+            cur = cur[int(tok)]
+        elif isinstance(cur, dict):
+            if tok in cur:
+                cur = cur[tok]
+            elif tok.lstrip("-").isdigit() and int(tok) in cur:
+                cur = cur[int(tok)]
+            else:
+                raise KeyError(tok)
+        else:
+            raise KeyError(tok)
+    return cur
+
+
+def _resolve_refs(value: Any, context: dict[str, Any]) -> Any:
+    """Recursively resolve ``${...}`` references in a value against ``context``.
+
+    A whole-string ``${expr}`` is replaced by the referenced object (type
+    preserved); inline ``${expr}`` inside a larger string is stringified.
+    """
+    if isinstance(value, str):
+        whole = _REF_WHOLE.match(value.strip())
+        if whole:
+            return _resolve_one(context, whole.group(1))
+        if "${" in value:
+            return _REF_INLINE.sub(
+                lambda m: str(_resolve_one(context, m.group(1))), value
+            )
+        return value
+    if isinstance(value, list):
+        return [_resolve_refs(v, context) for v in value]
+    if isinstance(value, dict):
+        return {k: _resolve_refs(v, context) for k, v in value.items()}
+    return value
+
+
+async def _exec_one(
+    hass: HomeAssistant,
+    store: dict,
+    sub: Any,
+    sub_args: dict[str, Any],
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve ``${...}`` in ``sub_args`` against ``context`` and dispatch ``sub``."""
+    if sub == "run_tools":
+        return {"error": "run_tools cannot be nested"}
+    if not sub or not isinstance(sub, str):
+        return {"error": "missing 'tool' name"}
+    try:
+        resolved = _resolve_refs(sub_args, context)
+    except Exception as exc:  # noqa: BLE001 - surface bad references
+        return {"error": f"reference resolution failed: {exc}"}
+    return await dispatch(hass, store, sub, resolved)
+
+
 async def _run_tools(
     hass: HomeAssistant, store: dict, args: dict[str, Any]
 ) -> dict[str, Any]:
@@ -3304,32 +3508,79 @@ async def _run_tools(
     ``{"tool": <name>, "args": {...}}``; results are returned in order. With
     ``stop_on_error`` the batch halts at the first failing call. ``run_tools``
     cannot be nested (guarded) so a batch can never recurse into itself.
+
+    Steps compose via ``${...}`` references so a later step can consume an
+    earlier result without a round-trip — the heart of tool composition:
+
+    * ``${steps[0].entities[0].entity_id}`` — value from the Nth result.
+    * ``${last.state}`` — value from the immediately preceding result.
+    * ``${vars.lamp}`` — value a prior step bound via its ``save_as`` field
+      (``${lamp}`` is accepted as shorthand when the name is unambiguous).
+
+    A whole-string ``${...}`` keeps the referenced object's type (lists/dicts);
+    inline ``${...}`` inside text is stringified. Unresolvable references fail
+    that single step with a clear error rather than crashing the batch.
+
+    A step may carry ``foreach`` — a list (or a ``${...}`` reference to one).
+    The step's ``tool`` then runs once per element with ``${item}`` (and
+    ``${index}``) bound to that element, fanning a single plan step out over a
+    discovered collection (e.g. act on every entity a prior step listed). The
+    step result is ``{"foreach": true, "count", "errors", "results": [...]}``.
     """
     calls = args.get("calls") or args.get("tools") or args.get("steps")
     if not isinstance(calls, list):
         return {"error": "'calls' must be a list of {tool, args} objects"}
     stop_on_error = bool(args.get("stop_on_error", False))
     results: list[dict[str, Any]] = []
+    context: dict[str, Any] = {"steps": [], "vars": {}, "last": None}
     errors = 0
     for i, call in enumerate(calls):
+        save_as = None
         if not isinstance(call, dict):
             res: dict[str, Any] = {"error": "each call must be an object {tool, args}"}
             sub = None
         else:
             sub = call.get("tool")
+            save_as = call.get("save_as")
             sub_args = call.get("args")
             if not isinstance(sub_args, dict):
                 sub_args = {}
-            if sub == "run_tools":
-                res = {"error": "run_tools cannot be nested"}
-            elif not sub or not isinstance(sub, str):
-                res = {"error": "missing 'tool' name"}
+            if "foreach" in call:
+                spec = call.get("foreach")
+                try:
+                    items = _resolve_refs(spec, context) if isinstance(spec, str) else spec
+                except Exception as exc:  # noqa: BLE001 - surface bad references
+                    res = {"error": f"foreach resolution failed: {exc}"}
+                else:
+                    if not isinstance(items, (list, tuple)):
+                        res = {"error": "'foreach' must be a list or a ${...} reference to one"}
+                    else:
+                        item_results: list[dict[str, Any]] = []
+                        item_errors = 0
+                        for j, item in enumerate(items):
+                            item_ctx = dict(context)
+                            item_ctx["item"] = item
+                            item_ctx["index"] = j
+                            r = await _exec_one(hass, store, sub, sub_args, item_ctx)
+                            if isinstance(r, dict) and "error" in r:
+                                item_errors += 1
+                            item_results.append({"index": j, "item": item, "result": r})
+                        res = {
+                            "foreach": True,
+                            "count": len(item_results),
+                            "errors": item_errors,
+                            "results": item_results,
+                        }
             else:
-                res = await dispatch(hass, store, sub, sub_args)
+                res = await _exec_one(hass, store, sub, sub_args, context)
         is_err = isinstance(res, dict) and "error" in res
         if is_err:
             errors += 1
         results.append({"index": i, "tool": sub, "result": res})
+        context["steps"].append(res)
+        context["last"] = res
+        if save_as and isinstance(save_as, str):
+            context["vars"][save_as] = res
         if is_err and stop_on_error:
             break
     return {
@@ -6012,7 +6263,7 @@ async def _set_text_value(
         )
     except Exception as exc:  # noqa: BLE001
         return {"error": f"Set text failed: {exc}"}
-    return {"ok": True, "entity_id": entity_id, "value": value[:80]}
+    return {"ok": True, "entity_id": entity_id, "value": str(value)[:80]}
 
 
 async def _list_wake_words(hass: HomeAssistant) -> dict[str, Any]:
@@ -6438,9 +6689,11 @@ async def _batch_reload_integrations(
     hass: HomeAssistant, domains: list[str] | None = None,
 ) -> dict[str, Any]:
     """Reload multiple integration domains at once."""
+    if not domains or not isinstance(domains, list):
+        return {"error": "'domains' must be a non-empty list of integration "
+                         "domains (reloading every entry would take HA offline)"}
     entries = hass.config_entries.async_entries()
-    if domains:
-        entries = [e for e in entries if e.domain in domains]
+    entries = [e for e in entries if e.domain in domains]
     reloaded = []
     errors = []
     for entry in entries[:50]:
@@ -12406,12 +12659,29 @@ async def _area_create(
     hass: HomeAssistant, name: str,
     icon: str | None = None, floor_id: str | None = None,
 ) -> dict[str, Any]:
-    """Create an area in the area registry."""
+    """Create an area in the area registry.
+
+    Honors the optional ``icon`` and ``floor_id`` so callers can place the
+    area on a floor at creation time. ``async_create`` only accepts the name
+    positionally; the rest are keyword-only and vary by HA version, so we
+    pass them defensively and fall back to a follow-up update.
+    """
     try:
         from homeassistant.helpers.area_registry import async_get
         registry = async_get(hass)
-        entry = registry.async_create(name)
-        return {"ok": True, "area_id": entry.id, "name": entry.name}
+        kwargs: dict[str, Any] = {}
+        if icon:
+            kwargs["icon"] = icon
+        if floor_id:
+            kwargs["floor_id"] = floor_id
+        try:
+            entry = registry.async_create(name, **kwargs)
+        except TypeError:
+            entry = registry.async_create(name)
+            if kwargs:
+                entry = registry.async_update(entry.id, **kwargs)
+        return {"ok": True, "area_id": entry.id, "name": entry.name,
+                "floor_id": entry.floor_id, "icon": entry.icon}
     except ImportError:
         return {"error": "area_registry not available"}
     except Exception as exc:  # noqa: BLE001
@@ -20005,6 +20275,24 @@ async def dispatch(hass: HomeAssistant, store: dict, name: str, args: dict) -> d
             if not cfg or not isinstance(cfg, dict):
                 return {"error": "missing required argument: config (dict with views/cards)"}
             return await _update_dashboard(hass, args.get("url_path"), cfg)
+        if name == "create_dashboard":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            if not args.get("url_path"):
+                return {"error": "missing required argument: url_path"}
+            return await _create_dashboard(
+                hass, args.get("url_path"), args.get("title"),
+                args.get("icon"), args.get("show_in_sidebar", True),
+                args.get("require_admin", False), args.get("config"),
+            )
+        if name == "delete_dashboard":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _delete_dashboard(hass, args.get("url_path", ""))
+        if name == "remove_entity":
+            if not store.get(CONF_ALLOW_WRITE, True):
+                return {"error": "writes are disabled (allow_write: false)"}
+            return await _remove_entity(hass, args.get("entity_id", ""))
         if name == "get_energy_prefs":
             return await _get_energy_prefs(hass)
         if name == "conversation_process":
@@ -31839,6 +32127,13 @@ async def _schedule_create_weekly(
     time_from: str, time_to: str,
 ) -> dict[str, Any]:
     """Create a weekly schedule helper."""
+    if isinstance(days, str):
+        days = [d.strip() for d in days.split(",") if d.strip()]
+    if not isinstance(days, (list, tuple)) or not days:
+        return {"error": "days must be a non-empty list of weekday names "
+                         "(e.g. ['monday','tuesday'])"}
+    if not name:
+        return {"error": "name is required"}
     try:
         await hass.services.async_call("schedule", "reload", {})
     except Exception:  # noqa: BLE001
@@ -38200,10 +38495,22 @@ async def _alarm_panel_zone_status(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _area_entity_count(hass: HomeAssistant) -> dict[str, Any]:
-    """Count entities per area."""
+    """Count entities per area.
+
+    Area membership lives in the entity registry, not in state attributes:
+    an entity belongs to its own ``area_id`` when set, otherwise to its
+    device's area. Resolve through both registries so device-less entities
+    (template/helpers assigned directly) are counted correctly.
+    """
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    ereg = er.async_get(hass)
+    dreg = dr.async_get(hass)
+    dev_area = {d.id: d.area_id for d in dreg.devices.values()}
     areas: dict[str, int] = {}
-    for s in hass.states.async_all():
-        area = s.attributes.get("area_id") or "unassigned"
+    for e in ereg.entities.values():
+        area = e.area_id or dev_area.get(e.device_id or "") or "unassigned"
         areas[area] = areas.get(area, 0) + 1
     ranking = sorted(areas.items(), key=lambda x: x[1], reverse=True)
     return {"ok": True, "area_count": len(ranking),
@@ -39280,23 +39587,49 @@ async def _group_size_check(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _label_summary(hass: HomeAssistant) -> dict[str, Any]:
-    """Summarize entity labels."""
+    """Summarize entity labels.
+
+    Labels live in the entity registry, not in state attributes. Count from
+    the registry and resolve label_id -> human name via the label registry.
+    """
+    from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers import label_registry as lr
+
+    ereg = er.async_get(hass)
+    lreg = lr.async_get(hass)
+    names = {lab.label_id: lab.name for lab in lreg.async_list_labels()}
     labels: dict[str, int] = {}
-    for s in hass.states.async_all():
-        for label in (s.attributes.get("labels") or []):
+    for e in ereg.entities.values():
+        for label in (e.labels or ()):
             labels[label] = labels.get(label, 0) + 1
     ranking = sorted(labels.items(), key=lambda x: x[1], reverse=True)
     return {"ok": True, "label_count": len(ranking),
-            "labels": [{"label": lb, "count": c} for lb, c in ranking]}
+            "labels": [{"label": names.get(lb, lb), "label_id": lb, "count": c}
+                       for lb, c in ranking]}
 
 
 async def _floor_plan_entity_status(hass: HomeAssistant) -> dict[str, Any]:
-    """Check floor plan entity status."""
+    """Check status of entities that resolve to a floor via their area.
+
+    Floor membership is derived through the registry chain entity -> area ->
+    floor (or entity -> device -> area -> floor), never from state attributes.
+    """
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    ereg = er.async_get(hass)
+    dreg = dr.async_get(hass)
+    areg = ar.async_get(hass)
+    dev_area = {d.id: d.area_id for d in dreg.devices.values()}
+    area_floor = {a.id: a.floor_id for a in areg.async_list_areas()}
     total = unavail = 0
-    for s in hass.states.async_all():
-        if s.attributes.get("floor_id"):
+    for e in ereg.entities.values():
+        area = e.area_id or dev_area.get(e.device_id or "")
+        if area and area_floor.get(area):
             total += 1
-            if s.state == "unavailable":
+            st = hass.states.get(e.entity_id)
+            if st is not None and st.state == "unavailable":
                 unavail += 1
     return {"ok": True, "floor_entities": total, "unavailable": unavail}
 
@@ -41756,32 +42089,33 @@ async def _device_registry_deep(hass: HomeAssistant) -> dict[str, Any]:
 
 
 async def _area_registry_deep(hass: HomeAssistant) -> dict[str, Any]:
-    """Check area registry deep."""
-    areas = set()
-    for s in hass.states.async_all():
-        area = s.attributes.get("area_id")
-        if area:
-            areas.add(area)
-    return {"ok": True, "area_count": len(areas), "areas": list(areas)}
+    """Check area registry deep (source of truth: the area registry)."""
+    from homeassistant.helpers import area_registry as ar
+
+    areg = ar.async_get(hass)
+    areas = [{"area_id": a.id, "name": a.name, "floor_id": a.floor_id}
+             for a in areg.async_list_areas()]
+    return {"ok": True, "area_count": len(areas), "areas": areas}
 
 
 async def _label_registry_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check label registry."""
-    labels = set()
-    for s in hass.states.async_all():
-        for lbl in s.attributes.get("labels", []):
-            labels.add(lbl)
-    return {"ok": True, "label_count": len(labels), "labels": list(labels)}
+    """Check label registry (source of truth: the label registry)."""
+    from homeassistant.helpers import label_registry as lr
+
+    lreg = lr.async_get(hass)
+    labels = [{"label_id": lab.label_id, "name": lab.name}
+              for lab in lreg.async_list_labels()]
+    return {"ok": True, "label_count": len(labels), "labels": labels}
 
 
 async def _floor_registry_check(hass: HomeAssistant) -> dict[str, Any]:
-    """Check floor registry."""
-    floors = set()
-    for s in hass.states.async_all():
-        floor = s.attributes.get("floor_id")
-        if floor:
-            floors.add(floor)
-    return {"ok": True, "floor_count": len(floors), "floors": list(floors)}
+    """Check floor registry (source of truth: the floor registry)."""
+    from homeassistant.helpers import floor_registry as fr
+
+    freg = fr.async_get(hass)
+    floors = [{"floor_id": f.floor_id, "name": f.name, "level": f.level}
+              for f in freg.async_list_floors()]
+    return {"ok": True, "floor_count": len(floors), "floors": floors}
 
 
 # ---------------------------------------------------------------------------
@@ -41956,7 +42290,7 @@ _READ_ONLY_TOOLS = frozenset({
     "recall_memory",
 })
 # Irreversible / disruptive operations (removal, data purge, full restart).
-_DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics", "restore_backup"})
+_DESTRUCTIVE_TOOLS = frozenset({"restart", "purge_recorder", "clear_statistics", "restore_backup", "remove_entity"})
 
 
 def _is_read_only(name: str) -> bool:
@@ -42295,7 +42629,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "run_tools",
-            "description": "Run several tools in one call, in order, to batch a plan (e.g. read a state, act, then read back) without a round-trip per step. 'calls' is a list of {tool, args}. Returns each result in order with an error count. Set stop_on_error=true to halt at the first failure. Cannot be nested.",
+            "description": "Run several tools in one call, in order, to batch a plan (e.g. read a state, act, then read back) without a round-trip per step. 'calls' is a list of {tool, args, save_as?, foreach?}. Steps compose: any arg value may reference an earlier result with ${...} — ${steps[0].entities[0].entity_id} (Nth result), ${last.state} (previous result), or ${vars.NAME} (a result a prior step bound via save_as). A whole-string ${...} keeps the referenced type; inline ${...} is stringified. A step with 'foreach' (a list or ${...} reference to one) runs its tool once per element with ${item} and ${index} bound — fanning one step out over a discovered collection. Returns each result in order with an error count. Set stop_on_error=true to halt at the first failure. Cannot be nested.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -42306,7 +42640,9 @@ TOOL_SPECS: list[dict[str, Any]] = [
                             "type": "object",
                             "properties": {
                                 "tool": {"type": "string", "description": "Tool name, e.g. 'call_service'."},
-                                "args": {"type": "object", "description": "Arguments for that tool."},
+                                "args": {"type": "object", "description": "Arguments for that tool. Values may contain ${...} references to earlier results."},
+                                "save_as": {"type": "string", "description": "Bind this step's result to a name, referenceable later as ${vars.NAME}."},
+                                "foreach": {"description": "A list (or ${...} reference to one) to map this step's tool over; each element is bound as ${item} (and its position as ${index})."},
                             },
                             "required": ["tool"],
                         },
@@ -44536,12 +44872,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "batch_reload_integrations",
-            "description": "Reload multiple integration domains at once.",
+            "description": "Reload the config entries of specific integration domains.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "domains": {"type": "array", "items": {"type": "string"}, "description": "Filter by specific domains (optional, reloads all if omitted)"},
+                    "domains": {"type": "array", "items": {"type": "string"}, "description": "Integration domains whose entries to reload."},
                 },
+                "required": ["domains"],
             },
         },
     },
@@ -51987,6 +52324,41 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "url_path": {"type": "string", "description": "dashboard url_path (omit or 'lovelace' for default)."},
                 "config": {"type": "object", "description": "full dashboard config: {\"title\": \"...\", \"views\": [{\"title\": \"...\", \"cards\": [...]}]}."},
             }, "required": ["config"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_dashboard",
+            "description": "Create a new storage-mode Lovelace dashboard (registers a sidebar panel) and optionally seed it with an initial views config. Single-word url_paths are allowed. Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "url_path": {"type": "string", "description": "unique dashboard url_path, e.g. 'dao-twin' or 'twin'."},
+                "title": {"type": "string", "description": "sidebar title (defaults to url_path)."},
+                "icon": {"type": "string", "description": "mdi icon, e.g. 'mdi:home'."},
+                "show_in_sidebar": {"type": "boolean", "description": "show in the sidebar (default true)."},
+                "require_admin": {"type": "boolean", "description": "restrict to admins (default false)."},
+                "config": {"type": "object", "description": "optional initial config: {\"title\":..,\"views\":[..]}."},
+            }, "required": ["url_path"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_dashboard",
+            "description": "Delete a storage-mode Lovelace dashboard by url_path (cannot delete the default 'lovelace'). Write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "url_path": {"type": "string", "description": "url_path of the dashboard to delete."},
+            }, "required": ["url_path"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_entity",
+            "description": "Remove an entity from the entity registry \u2014 frees an orphaned/stale entry (e.g. an 'unavailable' entity whose backing config was deleted). Entities still provided by a running integration get re-created on next update. Destructive write op \u2014 gated by allow_write.",
+            "parameters": {"type": "object", "properties": {
+                "entity_id": {"type": "string", "description": "entity_id to remove from the registry, e.g. 'scene.old_scene'."},
+            }, "required": ["entity_id"]},
         },
     },
     {

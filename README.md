@@ -237,7 +237,160 @@ curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
   http://<HA>/api/ha_copilot/run_tool
 ```
 
-- MCP（需 HA 长效令牌），两种传输，同一工具层：
+### 工具组合 · `run_tools` 步骤间数据流
+
+操作的本源是**搭配**而非堆叠：读取 → 取值 → 执行 → 回读，应在一次请求内闭合，无需每步一轮推理。`run_tools` 顺序执行一批 `{tool, args}`，并让**后一步直接引用前一步的结果**——这是工具组合的核心原语：
+
+- `${steps[i].path}`：第 `i` 步结果中的值（如 `${steps[0].entities[0].entity_id}`）。
+- `${last.path}`：上一步结果中的值。
+- `${vars.NAME.path}`：某步通过 `save_as` 绑定的结果中的值；名字不与 `steps/last/vars/item/index` 撞名时可简写为 `${NAME.path}`（少写一层前缀，降认知负荷）。
+
+整串 `${...}` 保留被引用对象的原类型（列表/字典）；文本内联 `${...}` 转为字符串。引用失败只让该步优雅报错、不拖垮整批（除非 `stop_on_error`）。
+
+某一步还可带 `foreach`（一个列表，或指向列表的 `${...}` 引用）：该步的 `tool` 会**对每个元素各执行一次**，元素以 `${item}`、其序号以 `${index}` 注入——把"先发现集合、再逐个操作"收敛成单步扇出（如对上一步列出的每个实体执行操作）。每个元素的错误相互隔离，步骤结果为 `{"foreach": true, "count", "errors", "results": [...]}`。
+
+```bash
+# 列出所有灯 → 单步 foreach 逐个关灯（引用 ${item.entity_id}）
+curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"tool":"run_tools","args":{"calls":[
+        {"tool":"list_states","args":{"domain":"light"},"save_as":"L"},
+        {"tool":"call_service","foreach":"${vars.L.entities}",
+          "args":{"domain":"light","service":"turn_off","data":{"entity_id":"${item.entity_id}"}}}
+      ]}}' \
+  http://<HA>/api/ha_copilot/run_tool
+```
+
+```bash
+# 读客厅灯状态 → 引用其 entity_id 开灯 → 回读状态，一次请求内完成
+curl -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" \
+  -d '{"tool":"run_tools","args":{"calls":[
+        {"tool":"get_state","args":{"entity_id":"light.ke_ting_deng"},"save_as":"L"},
+        {"tool":"call_service","args":{"domain":"light","service":"turn_on",
+          "data":{"entity_id":"${vars.L.entity_id}"}}},
+        {"tool":"get_state","args":{"entity_id":"${steps[0].entity_id}"}}
+      ]}}' \
+  http://<HA>/api/ha_copilot/run_tool
+```
+
+### 组织复杂度 · 注册表是元数据的唯一真源
+
+区域 / 楼层 / 标签 / 设备归属**只存在于注册表里**，状态属性里不会有（HA 从不把
+`area_id`/`labels`/`floor_id` 写进 `state.attributes`）。要按房间或楼层组织上千实体，
+必须查注册表，而非读状态属性——否则会得到"全部未分配"的假象。归属解析遵循回退链：
+
+```
+实体.area_id  →（无则）实体.device_id → 设备.area_id  →  区域.floor_id
+```
+
+按此真源组织数字孪生的工作流（楼层 → 区域 → 实体，单请求内扇出）：
+
+```bash
+# 建楼层 → 建区域并挂到该楼层 → 把若干实体归入该区域（foreach 扇出）
+curl ... -d '{"tool":"run_tools","args":{"calls":[
+  {"tool":"floor_create","args":{"name":"二楼","level":2},"save_as":"F"},
+  {"tool":"area_create","args":{"name":"主卧","floor_id":"${vars.F.floor_id}"},"save_as":"A"},
+  {"tool":"assign_entity_area","foreach":"${vars.BEDROOM_LIGHTS}",
+    "args":{"entity_id":"${item}","area_id":"${vars.A.area_id}"}}
+]}}' ...
+```
+
+校验用只读工具直接读注册表：`area_registry_deep`、`floor_registry_check`、
+`label_registry_check`、`label_summary`、`floor_plan_entity_status`、`area_entity_count`。
+
+**三条正交组织轴**：楼层/区域答"在哪"（层级、单一归属）；标签答"是什么"
+（功能性、横切——不同房间里的一盏灯和一个人体传感器可共享 `lighting`/`security`
+标签）。区域用 `assign_entity_area`，标签用 `label_assign_entity`（配 `label_create` /
+`label_list_entities` / `label_delete`）。归属真源始终在注册表，故组织上千实体只是
+"解析每个实体的归属键 → foreach 扇出赋值"。删标签只认 `label_delete`（`manage_label`
+的动作是 `list/create/delete`，无 `remove`）。
+
+### 编排 × 组织的合流 · 按归属发现再扇出
+
+四原语（序 / 引用 / 绑定 / 扇出）与三组织轴合流出一个域无关的宏范式——
+**"按归属发现集合 → 逐个扇出正确服务 → 回读校验"**，整串在一次 `run_tools` 内闭合。
+无论"离开房间"（按区域）还是"全屋关灯"（按标签），骨架同构：
+
+```bash
+# 按区域离场宏：查该区域的灯/窗帘/风扇 → 分别扇出关灯/关帘/停扇 → 回读一个
+curl ... -d '{"tool":"run_tools","args":{"steps":[
+  {"tool":"entity_list_by_area_domain","args":{"area_id":"u1_f1_living","domain":"light"},"save_as":"L"},
+  {"tool":"call_service","foreach":"${vars.L.entities}",
+    "args":{"domain":"light","service":"turn_off","data":{"entity_id":"${item.entity_id}"}}},
+  {"tool":"get_state","args":{"entity_id":"${vars.L.entities[0].entity_id}"}}
+]}}' ...
+
+# 按标签宏：查 lighting 标签全部实体 → homeassistant.turn_off 逐个扇出
+#   {"tool":"label_list_entities","args":{"label_id":"lighting"},"save_as":"LI"}
+#   {"tool":"call_service","foreach":"${vars.LI.entities}", ...}
+```
+
+此范式在数百区域 × 数千实体上逐元素错误隔离、零崩溃：组织提供"集合真源"，
+编排提供"无回路的映射"，二者相乘即覆盖绝大多数真实场景（闻道者日损）。
+
+**尺度不变**：同一套工具层 / 组织轴 / 编排原语 / 自治层，在 150 → 2911 → 3841 →
+4767 实体逐级放大中指标恒定——全量扫描 0 crash / 0 http、数百步单请求超长链 0 崩溃、
+48 线程并发混合读写 0 竞态、注册表零空区域。放大只增数量、不增缺陷（道恒无为而无不为）。
+
+### 验证纪律 · 反者道之动，三个易被忽略的边界
+
+大规模扫描给工具灌通用参数，写类服务永远只是"被优雅拒绝"、从未真正跑通；顺序扫描
+也照不出并发下的竞态；正常输入更照不出解析器在畸形输入下会不会崩。把"看起来没问题"
+的地方回头再验，才是 `反者道之动`：
+
+- **happy-path 回验**：对每个可控域取一个**能力匹配**的真实实体，灌**有效**参数跑
+  "改 → 回读 → 校验属性确实动了"（灯亮/帘到位/温度到点/锁上/音量变）。14 个域全部
+  端到端跑通、零崩溃——把"honest-on-junk"升级为"verified-on-valid"。
+- **并发边界**：48 线程 × 1200 请求混合读写、对同一批灯/标签/区域制造争用，之后回查
+  注册表完整性（区域数不变、零空区域、标签仍为规范集）。0 crash / 0 http / 0 竞态，
+  证明工具层写路径线程安全。
+- **对抗性边界**：向 `run_tools` 灌 26 类畸形/退化/敌意输入——`foreach` 喂整数/字典/
+  空表、越界索引、未闭合与空 `${}`、深路径缺字段、20 万字符长串、Unicode 与注入片段、
+  非字典步骤、2000 步大批、200 元素错误风暴。全部**逐个优雅隔离、0 崩溃**；且保留字
+  与命名空间隔离——`save_as:"last"` 只写进 `vars`，不污染内建 `${last}`；`run_tools`
+  显式拒绝嵌套（`cannot be nested`）而非崩溃。健壮性来自"错误隔离"这一条原语横切全链。
+
+### 仪表盘组合 · 从注册表生成多视图 Lovelace
+
+仪表盘是组织结构的**投影**：先从注册表读出楼层/区域/实体，再机器生成视图，
+而非手工拼卡片。三类工具闭合"建 → 读 → 改 → 删"：
+
+- `create_dashboard`（`url_path` 唯一即可，支持单词名）：新建存储型仪表盘并注册侧边栏面板，可同时用 `config` 注入初始视图。
+- `get_dashboard_config` / `update_dashboard`：读回、整体改写某仪表盘的视图配置。
+- `list_dashboards` / `delete_dashboard`：枚举、按 `url_path` 删除（默认 `lovelace` 受保护）。
+
+```bash
+# 用注册表数据生成"每楼层一视图 + 每域一视图"的复杂仪表盘，一次建好
+curl ... -d '{"tool":"create_dashboard","args":{
+  "url_path":"dao-twin","title":"DAO Twin","icon":"mdi:sitemap",
+  "config":{"title":"DAO Twin","views":[
+    {"title":"二楼","path":"floor2","cards":[{"type":"entities","title":"主卧","entities":["light.zhu_wo_deng"]}]},
+    {"title":"灯光","path":"lighting","cards":[{"type":"entities","entities":["light.a","light.b"]}]}
+  ]}}}' ...
+```
+
+配方：①`floor_registry_check`/`area_registry_deep` 取骨架 → ②按 `floor_id` 把区域分组、
+每楼层一视图 → ③再按域（light./climate./lock. …）切若干 `entities` 卡做横向总览 →
+④`create_dashboard` 一次写入。改版只需重算 `config` 再 `update_dashboard`/重建。
+
+### 自治层 · 沙盒与本尊分离（自愈不误伤真内容）
+
+大规模扫描给写类工具灌探针参数，会把垃圾条目写进 `automations.yaml` / `scenes.yaml`，
+所以自愈循环把这些默认文件**整体清空**——但这也会连真自动化一起抹掉。根因解法（道法自然）：
+**把探针沙盒与规范本尊分离**。真实自治内容（场景 / 脚本 / 自动化）写进一个自愈从不触碰的
+独立包 `packages/dao_canon.yaml`；默认文件只留给探针，随清随建。
+
+自治层是组织结构的**行为投影**，四种形态齐备：**声明式**（每层全关场景）、**过程式**
+（离家脚本多域扇出关灯/关帘/上锁）、**手动触发**（拨 helper → 自动化 → 脚本）、以及
+**事件驱动/反应式**——一条模板化自动化监听一批 `binary_sensor.*_motion`，用
+`trigger.to_state.entity_id` 现推出同房间的 `light.*_ceiling`，有人则亮、无人则灭
+（`mode: queued`，不在数千实体上乱触发）。实测两条闭环都通：拨 helper → 灯全灭门全锁；
+制造 motion → 对应吊灯亮/灭 3/3。且跑完一次自愈后，`automations.yaml` 里的垃圾被清、
+`dao_canon.yaml` 的本尊**原样存活**——沙盒与本尊分离让自治层与边界扫描各行其道。
+
+- MCP（需 HA 长效令牌），两种传输，同一工具层。两条链路均已端到端实测：`initialize`
+  回 `protocolVersion 2024-11-05` + capabilities，`tools/list` 出全部 2115 个工具，
+  `tools/call` 既能调单工具、也能跑带 `save_as`/`${vars...}` 数据流的 `run_tools` 组合
+  （`isError:false`）；SSE 首帧即 `event: endpoint` 带会话作用域回投 URL。
   - **HTTP（JSON-RPC）**：把 `/api/ha_copilot/mcp` 作为端点直接 POST。
 
 ```bash
