@@ -49,6 +49,19 @@ response_variable: zwave_results
 
 ## 工具层（操作者可调用的底层能力）
 
+### 本源原语 · 为道日损（知其雄，守其雌）
+
+工具数量在「为学日益」的累加下已逾两千；下面这一小撮**通用原语**反其道而行——让操作者守住极少的核心即可推演万法，无需把全部工具规格塞进上下文。
+
+| 原语 | 作用 |
+|---|---|
+| `query_entities` | **一术演万法（阴/观）**：通用实体查询，按 `domain` + 名字子串（匹配 entity_id 或友好名）+ `device_class` + 精确 `state` + `attributes` 过滤，`match` 控制 名字/类别 取 OR(any) 还是 AND(all)；无任何过滤则返回域内全部。**等价于数百个固定的 `*_check`/`*_status`/`*_monitor` 扫描-过滤工具**——优先用它而非具体的特化工具 |
+| `control_entities` | **一术演万法（阳/动）**：与 `query_entities` 同一套筛选条件选中实体后，一次性对其调用服务。`service` 可裸写（`turn_off`，按各实体所属域分别调用）或带域（`light.turn_on`）；`data` 传额外服务参数；`dry_run` 仅预览目标不动作。与查询共用同一选择内核(`_select_entities`)——「先找后动」一气呵成；受 `allow_write` 约束（dry_run 恒可用） |
+| `aggregate_entities` | **一术演万法（量/数）**：与 `query_entities` 同一套筛选条件选中实体后归约为数字——总数、数值 `sum`/`avg`/`min`/`max`（对 state，或指定 `attribute`）、`on_count`（多少处于 on/open/home…）、状态分布 `states`。等价于众多固定的计数/合计/汇总工具（多少灯开着、总功率、平均温度） |
+| `search_tools` | 按意图在整个工具目录里检索最相关的少数工具（名字、描述、参数）。先检索、再调用，不必持有全部规格 |
+| `describe_tool` | 取单个工具的完整 schema（参数）与 MCP 安全标注 |
+| `tool_catalog` | 工具目录全景：总数、只读/写入占比、按前缀分组；传 `prefix` 则列出该前缀下的工具名 |
+
 | 工具 | 作用 |
 |---|---|
 | `list_states` / `get_state` | 列出/读取实体状态与属性 |
