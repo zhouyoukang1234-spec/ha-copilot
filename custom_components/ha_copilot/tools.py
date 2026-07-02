@@ -6698,9 +6698,11 @@ async def _batch_reload_integrations(
     hass: HomeAssistant, domains: list[str] | None = None,
 ) -> dict[str, Any]:
     """Reload multiple integration domains at once."""
+    if not domains or not isinstance(domains, list):
+        return {"error": "'domains' must be a non-empty list of integration "
+                         "domains (reloading every entry would take HA offline)"}
     entries = hass.config_entries.async_entries()
-    if domains:
-        entries = [e for e in entries if e.domain in domains]
+    entries = [e for e in entries if e.domain in domains]
     reloaded = []
     errors = []
     for entry in entries[:50]:
@@ -46416,12 +46418,13 @@ TOOL_SPECS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "batch_reload_integrations",
-            "description": "Reload multiple integration domains at once.",
+            "description": "Reload the config entries of specific integration domains.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "domains": {"type": "array", "items": {"type": "string"}, "description": "Filter by specific domains (optional, reloads all if omitted)"},
+                    "domains": {"type": "array", "items": {"type": "string"}, "description": "Integration domains whose entries to reload."},
                 },
+                "required": ["domains"],
             },
         },
     },
